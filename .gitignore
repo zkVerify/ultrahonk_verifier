@@ -1,0 +1,9 @@
+target
+target/*
+Cargo.lock
+lcov.info
+vk
+zkvk
+proof
+zkproof
+hex_dump.py
