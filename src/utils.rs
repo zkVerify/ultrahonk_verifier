@@ -31,35 +31,37 @@
 // limitations under the License.
 
 use crate::{
-    errors::{FieldError, GroupError},
+    // errors::{FieldError, GroupError},
     types::G1,
-    Fq, Fr, U256,
+    Fq,
+    Fr,
+    U256,
 };
 use ark_bn254_ext::CurveHooks;
 use ark_ff::PrimeField;
 
-pub(crate) trait IntoFq {
-    fn into_fq(self) -> Fq;
-}
+// pub(crate) trait IntoFq {
+//     fn into_fq(self) -> Fq;
+// }
 
-impl IntoFq for U256 {
-    fn into_fq(self) -> Fq {
-        Fq::from(self)
-    }
-}
+// impl IntoFq for U256 {
+//     fn into_fq(self) -> Fq {
+//         Fq::from(self)
+//     }
+// }
 
-impl IntoFq for u64 {
-    fn into_fq(self) -> Fq {
-        Fq::new(U256::from(self))
-    }
-}
+// impl IntoFq for u64 {
+//     fn into_fq(self) -> Fq {
+//         Fq::new(U256::from(self))
+//     }
+// }
 
-impl IntoFq for Fr {
-    fn into_fq(self) -> Fq {
-        let big_int = self.into_bigint();
-        Fq::from_bigint(big_int).expect("Fr value is always a valid Fq element")
-    }
-}
+// impl IntoFq for Fr {
+//     fn into_fq(self) -> Fq {
+//         let big_int = self.into_bigint();
+//         Fq::from_bigint(big_int).expect("Fr value is always a valid Fq element")
+//     }
+// }
 
 pub(crate) trait IntoFr {
     fn into_fr(self) -> Fr;
@@ -83,27 +85,27 @@ impl IntoFr for U256 {
     }
 }
 
-impl IntoFr for u64 {
-    fn into_fr(self) -> Fr {
-        Fr::new(U256::from(self))
-    }
-}
+// impl IntoFr for u64 {
+//     fn into_fr(self) -> Fr {
+//         Fr::new(U256::from(self))
+//     }
+// }
 
-impl IntoFr for Fq {
-    fn into_fr(self) -> Fr {
-        Fr::from(self.into_bigint())
-    }
-}
+// impl IntoFr for Fq {
+//     fn into_fr(self) -> Fr {
+//         Fr::from(self.into_bigint())
+//     }
+// }
 
 pub(crate) trait IntoU256 {
     fn into_u256(self) -> U256;
 }
 
-impl IntoU256 for u32 {
-    fn into_u256(self) -> U256 {
-        U256::from(self)
-    }
-}
+// impl IntoU256 for u32 {
+//     fn into_u256(self) -> U256 {
+//         U256::from(self)
+//     }
+// }
 
 impl IntoU256 for &[u8; 32] {
     fn into_u256(self) -> U256 {
@@ -133,12 +135,13 @@ impl IntoU256 for [u8; 32] {
     }
 }
 
-pub(crate) trait IntoBytes {
-    fn into_bytes(self) -> [u8; 32];
+/// Trait for returning a big-endian representation of some object as a `[u8; 32]`.
+pub(crate) trait IntoBEBytes32 {
+    fn into_be_bytes32(self) -> [u8; 32];
 }
 
-impl IntoBytes for U256 {
-    fn into_bytes(self) -> [u8; 32] {
+impl IntoBEBytes32 for U256 {
+    fn into_be_bytes32(self) -> [u8; 32] {
         let mut bytes = [0u8; 32];
         for (i, limb) in self.0.iter().rev().enumerate() {
             // Convert each limb to big-endian bytes
@@ -150,67 +153,76 @@ impl IntoBytes for U256 {
     }
 }
 
-impl IntoBytes for Fr {
-    fn into_bytes(self) -> [u8; 32] {
-        self.into_bigint().into_bytes()
+impl IntoBEBytes32 for Fr {
+    fn into_be_bytes32(self) -> [u8; 32] {
+        self.into_bigint().into_be_bytes32()
     }
 }
 
-impl IntoBytes for Fq {
-    fn into_bytes(self) -> [u8; 32] {
-        self.into_bigint().into_bytes()
+impl IntoBEBytes32 for Fq {
+    fn into_be_bytes32(self) -> [u8; 32] {
+        self.into_bigint().into_be_bytes32()
     }
 }
 
-// Parsing utility for points in G1
-pub(crate) fn read_g1_util<H: CurveHooks>(data: &[u8], reverse: bool) -> Result<G1<H>, GroupError> {
-    if data.len() != 64 {
-        return Err(GroupError::InvalidSliceLength {
-            expected_length: 64,
-            actual_length: data.len(),
-        });
+impl IntoBEBytes32 for u64 {
+    fn into_be_bytes32(self) -> [u8; 32] {
+        let be = self.to_be_bytes();
+        let mut arr = [0u8; 32];
+        arr[24..].copy_from_slice(&be);
+        arr
     }
-
-    let x: Fq;
-    let y: Fq;
-
-    if reverse {
-        y = read_fq_util(&data[0..32]).expect("Should always succeed");
-        x = read_fq_util(&data[32..64]).expect("Should always succeed");
-    } else {
-        x = read_fq_util(&data[0..32]).expect("Should always succeed");
-        y = read_fq_util(&data[32..64]).expect("Should always succeed");
-    }
-
-    let point = G1::new_unchecked(x, y);
-
-    // Validate point
-    if !point.is_on_curve() {
-        return Err(GroupError::NotOnCurve);
-    }
-
-    Ok(point)
 }
 
-// Utility function for parsing points in G2
-pub(crate) fn read_fq_util(data: &[u8]) -> Result<Fq, FieldError> {
-    if data.len() != 32 {
-        return Err(FieldError::InvalidSliceLength {
-            expected_length: 32,
-            actual_length: data.len(),
-        });
-    }
+// // Parsing utility for points in G1
+// pub(crate) fn read_g1_util<H: CurveHooks>(data: &[u8], reverse: bool) -> Result<G1<H>, GroupError> {
+//     if data.len() != 64 {
+//         return Err(GroupError::InvalidSliceLength {
+//             expected_length: 64,
+//             actual_length: data.len(),
+//         });
+//     }
 
-    // Convert bytes to limbs manually
-    let mut limbs = [0u64; 4];
-    for (i, chunk) in data.chunks(8).enumerate() {
-        limbs[3 - i] = u64::from_be_bytes(chunk.try_into().unwrap());
-    }
+//     let x: Fq;
+//     let y: Fq;
 
-    let bigint = U256::new(limbs);
+//     if reverse {
+//         y = read_fq_util(&data[0..32]).expect("Should always succeed");
+//         x = read_fq_util(&data[32..64]).expect("Should always succeed");
+//     } else {
+//         x = read_fq_util(&data[0..32]).expect("Should always succeed");
+//         y = read_fq_util(&data[32..64]).expect("Should always succeed");
+//     }
 
-    Ok(bigint.into_fq())
-}
+//     let point = G1::new_unchecked(x, y);
+
+//     // Validate point
+//     if !point.is_on_curve() {
+//         return Err(GroupError::NotOnCurve);
+//     }
+
+//     Ok(point)
+// }
+
+// // Utility function for parsing points in G2
+// pub(crate) fn read_fq_util(data: &[u8]) -> Result<Fq, FieldError> {
+//     if data.len() != 32 {
+//         return Err(FieldError::InvalidSliceLength {
+//             expected_length: 32,
+//             actual_length: data.len(),
+//         });
+//     }
+
+//     // Convert bytes to limbs manually
+//     let mut limbs = [0u64; 4];
+//     for (i, chunk) in data.chunks(8).enumerate() {
+//         limbs[3 - i] = u64::from_be_bytes(chunk.try_into().unwrap());
+//     }
+
+//     let bigint = U256::new(limbs);
+
+//     Ok(bigint.into_fq())
+// }
 
 pub(crate) fn read_u64(data: &[u8]) -> Result<(u64, &[u8]), ()> {
     let value = u64::from_be_bytes(data[..8].try_into().map_err(|_| ())?);

@@ -7,3 +7,5 @@ zkvk
 proof
 zkproof
 hex_dump.py
+Verifier.sol
+zkVerifier.sol
