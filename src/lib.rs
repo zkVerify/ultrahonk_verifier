@@ -30,10 +30,12 @@ mod types;
 mod transcript;
 mod utils;
 
+use core::array::from_fn;
+
 use crate::{constants::{CONST_PROOF_SIZE_LOG_N, NUMBER_OF_ALPHAS, ZK_BATCHED_RELATION_PARTIAL_LENGTH}, key::VerificationKey, proof::ZKProof, relations::accumulate_relation_evaluations, transcript::{generate_transcript, ZKTranscript}, utils::{IntoFr, IntoU256}};
 use alloc::format;
 use ark_bn254_ext::{Config, CurveHooks};
-use ark_ff::{AdditiveGroup, BigInteger, Field, MontFp, PrimeField};
+use ark_ff::{AdditiveGroup, BigInteger, Field, MontFp, PrimeField, batch_inversion};
 use ark_models_ext::bn::{BnConfig, G1Prepared, G2Prepared};
 use errors::VerifyError;
 // use sha3::{Digest, Keccak256};
@@ -179,16 +181,13 @@ fn compute_next_target_sum(round_univariates: &[Fr; ZK_BATCHED_RELATION_PARTIAL_
         numerator_value *= round_challenge - Fr::from(i as u64);
     }
 
-    // Calculate domain size N of inverses -- TODO: montgomery's trick
-    let mut denominator_inverses = [Fr::ZERO; ZK_BATCHED_RELATION_PARTIAL_LENGTH];
-    for i in 0..ZK_BATCHED_RELATION_PARTIAL_LENGTH { // (uint256 i; i < ZK_BATCHED_RELATION_PARTIAL_LENGTH; ++i) {
-        // Expensive operation
-        let inv = (BARYCENTRIC_LAGRANGE_DENOMINATORS[i] * (round_challenge - Fr::from(i as u64))).inverse();
-        match inv {
-            Some(k) => { denominator_inverses[i] = k; }
-            None => { return Err("Non-invertible element"); }
-        }
-    }
+    // Calculate domain size N of inverses using Montgomery's trick for batch inversion.
+    // This reduces computation of `ZK_BATCHED_RELATION_PARTIAL_LENGTH`-many expensive inverses
+    // to computing just 1 inverse + `O(ZK_BATCHED_RELATION_PARTIAL_LENGTH)` modular multiplications.
+    // Notice that we do not need to check for successfull inversion since `BARYCENTRIC_LAGRANGE_DENOMINATORS`
+    // are fixed (and non-zero) and w.h.p. `round_challenge - Fr::from(i as u64)` is non-zero.
+    let mut denominator_inverses: [Fr; ZK_BATCHED_RELATION_PARTIAL_LENGTH] = from_fn(|i| BARYCENTRIC_LAGRANGE_DENOMINATORS[i] * (round_challenge - Fr::from(i as u64)));
+    batch_inversion(&mut denominator_inverses);
 
     for i in 0..ZK_BATCHED_RELATION_PARTIAL_LENGTH {
         target_sum += round_univariates[i]*denominator_inverses[i];
