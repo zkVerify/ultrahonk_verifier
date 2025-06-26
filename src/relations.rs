@@ -85,13 +85,14 @@ pub(crate) fn accumulate_relation_evaluations(
     purported_evaluations: &[Fr; NUMBER_OF_ENTITIES],
     rp_challenges: &RelationParametersChallenges,
     alphas: &[Fr; NUMBER_OF_ALPHAS],
+    public_inputs_delta: Fr,
     pow_partial_eval: Fr,
 ) -> Fr {
     let mut evaluations = [Fr::ZERO; NUMBER_OF_SUBRELATIONS];
 
     // Accumulate all relations in Ultra Honk - each with varying number of subrelations
     accumulate_arithmetic_relation(purported_evaluations, &mut evaluations, pow_partial_eval);
-    accumulate_permutation_relation(purported_evaluations, rp_challenges, &mut evaluations, pow_partial_eval);
+    accumulate_permutation_relation(purported_evaluations, rp_challenges, &mut evaluations, public_inputs_delta, pow_partial_eval);
     accumulate_log_derivative_lookup_relation(purported_evaluations, rp_challenges, &mut evaluations, pow_partial_eval);
     accumulate_delta_range_relation(purported_evaluations, &mut evaluations, pow_partial_eval);
     accumulate_elliptic_relation(purported_evaluations, &mut evaluations, pow_partial_eval);
@@ -114,7 +115,7 @@ fn accumulate_arithmetic_relation(
     {
         const NEG_HALF: Fr = MontFp!("10944121435919637611123202872628637544274182200208017171849102093287904247808"); // neg half modulo P
 
-        let mut accum = (q_arith + MINUS_THREE) * (wire(p, Wire::Q_M) * wire(p, Wire::W_R) * wire(p, Wire::W_L)) * neg_half;
+        let mut accum = (q_arith + MINUS_THREE) * (wire(p, Wire::Q_M) * wire(p, Wire::W_R) * wire(p, Wire::W_L)) * NEG_HALF;
         accum += (wire(p, Wire::Q_L) * wire(p, Wire::W_L)) + (wire(p, Wire::Q_R) * wire(p, Wire::W_R))
             + (wire(p, Wire::Q_O) * wire(p, Wire::W_O)) + (wire(p, Wire::Q_4) * wire(p, Wire::W_4)) + wire(p, Wire::Q_C);
         accum += (q_arith - Fr::ONE) * wire(p, Wire::W_4_SHIFT);
@@ -137,14 +138,15 @@ fn accumulate_arithmetic_relation(
 fn accumulate_permutation_relation(
     p: &[Fr; NUMBER_OF_ENTITIES],
     rp_challenges: &RelationParametersChallenges,
-    evals: &[Fr; NUMBER_OF_SUBRELATIONS],
+    evals: &mut [Fr; NUMBER_OF_SUBRELATIONS],
+    public_inputs_delta: Fr,
     domain_sep: Fr
 ) {
     let mut grand_product_numerator;
     let mut grand_product_denominator;
 
     {
-        let num = wire(p, Wire::W_L) + wire(p, Wire::ID_1) * rp_challenges.beta + rp_challenges.gamma;
+        let mut num = wire(p, Wire::W_L) + wire(p, Wire::ID_1) * rp_challenges.beta + rp_challenges.gamma;
         num = num * (wire(p, Wire::W_R) + wire(p, Wire::ID_2) * rp_challenges.beta + rp_challenges.gamma);
         num = num * (wire(p, Wire::W_O) + wire(p, Wire::ID_3) * rp_challenges.beta + rp_challenges.gamma);
         num = num * (wire(p, Wire::W_4) + wire(p, Wire::ID_4) * rp_challenges.beta + rp_challenges.gamma);
@@ -152,7 +154,7 @@ fn accumulate_permutation_relation(
         grand_product_numerator = num;
     }
     {
-        let den = wire(p, Wire::W_L) + wire(p, Wire::SIGMA_1) * rp_challenges.beta + rp_challenges.gamma;
+        let mut den = wire(p, Wire::W_L) + wire(p, Wire::SIGMA_1) * rp_challenges.beta + rp_challenges.gamma;
         den = den * (wire(p, Wire::W_R) + wire(p, Wire::SIGMA_2) * rp_challenges.beta + rp_challenges.gamma);
         den = den * (wire(p, Wire::W_O) + wire(p, Wire::SIGMA_3) * rp_challenges.beta + rp_challenges.gamma);
         den = den * (wire(p, Wire::W_4) + wire(p, Wire::SIGMA_4) * rp_challenges.beta + rp_challenges.gamma);
@@ -166,7 +168,7 @@ fn accumulate_permutation_relation(
 
         acc = acc
             - (
-                (wire(p, Wire::Z_PERM_SHIFT) + (wire(p, Wire::LAGRANGE_LAST) * rp_challenges.public_inputs_delta))
+                (wire(p, Wire::Z_PERM_SHIFT) + (wire(p, Wire::LAGRANGE_LAST) * public_inputs_delta))
                     * grand_product_denominator
             );
         acc *= domain_sep;
@@ -386,10 +388,10 @@ struct AuxParams {
     adjacent_values_match_if_adjacent_indices_match_and_next_access_is_a_read_operation: Fr,
     access_check: Fr,
     next_gate_access_type_is_boolean: Fr,
-    ROM_consistency_check_identity: Fr,
-    RAM_consistency_check_identity: Fr,
+    rom_consistency_check_identity: Fr,
+    ram_consistency_check_identity: Fr,
     timestamp_delta: Fr,
-    RAM_timestamp_check_identity: Fr,
+    ram_timestamp_check_identity: Fr,
     memory_identity: Fr,
     index_is_monotonically_increasing: Fr,
     auxiliary_identity: Fr,

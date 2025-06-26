@@ -30,8 +30,8 @@ pub enum VerifyError {
     #[snafu(display("Invalid Proof"))]
     InvalidProofError,
     /// Verify proof failed.
-    #[snafu(display("Verification Failed"))]
-    VerificationError,
+    #[snafu(display("Verification Failed. Message: {}", message))]
+    VerificationError { message: String },
     /// Provided an invalid verification key.
     #[snafu(display("Key Error"))]
     KeyError,

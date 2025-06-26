@@ -32,9 +32,12 @@
 
 use crate::{
     // errors::{FieldError, GroupError},
+    errors::FieldError,
     types::G1,
     Fq,
+    Fq2,
     Fr,
+    G2,
     U256,
 };
 use ark_bn254_ext::CurveHooks;
@@ -255,4 +258,41 @@ pub(crate) fn read_g1<H: CurveHooks>(data: &[u8]) -> Result<(G1<H>, &[u8]), ()> 
     // }
 
     Ok((point, &data[64..]))
+}
+
+// Parse point on G2
+pub(crate) fn read_g2<H: CurveHooks>(data: &[u8]) -> Result<G2<H>, ()> {
+    if data.len() != 128 {
+        return Err(());
+    }
+
+    let x_c0 = read_fq_util(&data[0..32]).expect("Parsing the SRS should always succeed!");
+    let x_c1 = read_fq_util(&data[32..64]).expect("Parsing the SRS should always succeed!");
+    let y_c0 = read_fq_util(&data[64..96]).expect("Parsing the SRS should always succeed!");
+    let y_c1 = read_fq_util(&data[96..128]).expect("Parsing the SRS should always succeed!");
+
+    let x = Fq2::new(x_c0, x_c1);
+    let y = Fq2::new(y_c0, y_c1);
+
+    Ok(G2::<H>::new(x, y))
+}
+
+// Utility function for parsing points in G2
+pub(crate) fn read_fq_util(data: &[u8]) -> Result<Fq, FieldError> {
+    if data.len() != 32 {
+        return Err(FieldError::InvalidSliceLength {
+            expected_length: 32,
+            actual_length: data.len(),
+        });
+    }
+
+    // Convert bytes to limbs manually
+    let mut limbs = [0u64; 4];
+    for (i, chunk) in data.chunks(8).enumerate() {
+        limbs[3 - i] = u64::from_be_bytes(chunk.try_into().unwrap());
+    }
+
+    let bigint = U256::new(limbs);
+
+    Ok(bigint.into_fq())
 }

@@ -14,8 +14,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Fixed G1 point
-pub static SRS_G1: [u8; 128] = hex_literal::hex!(
+// Fixed G2 point
+pub static SRS_G2: [u8; 128] = hex_literal::hex!(
     "
     198e9393920d483a7260bfb731fb5d25f1aa493335a9e71297e485b7aef312c2
     1800deef121f1e76426a00665e5c4479674322d4f75edadd46debd5cd992f6ed
@@ -24,8 +24,8 @@ pub static SRS_G1: [u8; 128] = hex_literal::hex!(
     "
 );
 
-// G1 point from VK
-pub static SRS_G1_VK: [u8; 128] = hex_literal::hex!(
+// G2 point from VK
+pub static SRS_G2_VK: [u8; 128] = hex_literal::hex!(
     "
     260e01b251f6f1c7e7ff4e580791dee8ea51d87a358e038b4efe30fac09383c1
     0118c4d5b837bcc2bc89b5b398b5974e9f5944073b32078b7e231fec938883b0

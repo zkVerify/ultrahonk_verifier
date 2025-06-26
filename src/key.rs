@@ -18,8 +18,8 @@
 
 use alloc::{format, string::String};
 
-use crate::utils::{read_g1, read_u256, read_u64, IntoU256};
-use crate::{Fq2, Fr, G1, G2, U256, VK_SIZE};
+use crate::utils::{read_g1, read_u64};
+use crate::{G1, VK_SIZE};
 use ark_bn254_ext::CurveHooks;
 use snafu::Snafu;
 
@@ -170,7 +170,7 @@ pub struct VerificationKey<H: CurveHooks> {
     pub circuit_size: u64,
     pub log_circuit_size: u64,
     pub num_public_inputs: u64,
-    pub pub_inputs_offset: u64, // !!!
+    pub pub_inputs_offset: u64, // Note: May end up being removed in the future
     // Selectors
     pub q_m: G1<H>,
     pub q_c: G1<H>,

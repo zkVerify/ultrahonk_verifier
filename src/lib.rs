@@ -19,7 +19,7 @@
 
 #![allow(non_camel_case_types)]
 
-mod commitment; // probably redundant...
+mod commitment;
 mod constants;
 pub mod errors;
 pub mod key;
@@ -32,12 +32,14 @@ mod utils;
 
 use core::array::from_fn;
 
-use crate::{constants::{CONST_PROOF_SIZE_LOG_N, NUMBER_OF_ALPHAS, ZK_BATCHED_RELATION_PARTIAL_LENGTH}, key::VerificationKey, proof::ZKProof, relations::accumulate_relation_evaluations, transcript::{generate_transcript, ZKTranscript}, utils::{IntoFr, IntoU256}};
-use alloc::format;
+use crate::{commitment::{compute_fold_pos_evaluations, compute_squares}, constants::{CONST_PROOF_SIZE_LOG_N, NUMBER_OF_ALPHAS, NUMBER_OF_ENTITIES, NUMBER_UNSHIFTED, SUBGROUP_SIZE, ZK_BATCHED_RELATION_PARTIAL_LENGTH}, key::VerificationKey, proof::{convert_proof_point, ProofCommitmentField, ProofError, ZKProof}, relations::accumulate_relation_evaluations, srs::{SRS_G2, SRS_G2_VK}, transcript::{generate_transcript, ZKTranscript}, utils::{read_g2, IntoFr, IntoU256}};
+use alloc::{format, string::ToString};
 use ark_bn254_ext::{Config, CurveHooks};
-use ark_ff::{AdditiveGroup, BigInteger, Field, MontFp, PrimeField, batch_inversion};
+use ark_ec::{AffineRepr, CurveGroup};
+use ark_ff::{AdditiveGroup, BigInteger, Field, MontFp, PrimeField, One, batch_inversion};
 use ark_models_ext::bn::{BnConfig, G1Prepared, G2Prepared};
 use errors::VerifyError;
+use ark_ec::pairing::Pairing;
 // use sha3::{Digest, Keccak256};
 
 use proof::ProofType;
@@ -46,13 +48,13 @@ pub use types::*;
 extern crate alloc;
 extern crate core;
 
-use constants::{PROOF_SIZE, ZK_PROOF_SIZE};
+use constants::{PROOF_SIZE, ZK_PROOF_SIZE, SUBGROUP_GENERATOR, SUBGROUP_GENERATOR_INVERSE};
 
 pub const VK_SIZE: usize = 1760;
-pub const PUBS_SIZE: usize = 32;
+pub const PUB_SIZE: usize = 32;
 
 /// A single public input.
-pub type PublicInput = [u8; PUBS_SIZE];
+pub type PublicInput = [u8; PUB_SIZE];
 pub type Pubs = [PublicInput];
 
 pub fn verify<H: CurveHooks + Default>(
@@ -91,12 +93,14 @@ fn verify_inner<H: CurveHooks>(
     // t.relationParameters.publicInputsDelta = compute_public_input_delta(
     //     public_inputs, t.relationParameters.beta, t.relationParameters.gamma, /*pubInputsOffset=*/1
     // );
+    let public_inputs_delta =
+        t.relation_parameters_challenges.public_inputs_delta(public_inputs, vk.circuit_size, vk.pub_inputs_offset);
 
     // Sumcheck
-    if (!verify_sumcheck(p, t)) revert SumcheckFailed();
+    verify_sumcheck(proof, &t, vk.log_circuit_size, public_inputs_delta).map_err(|msg| VerifyError::VerificationError { message: msg })?;
 
     // Shplemini
-    if (!verifyShplemini(p, vk, t)) revert ShpleminiFailed();
+    if !verify_shplemini(p, vk, t); // revert ShpleminiFailed()
 }
 
 fn check_public_input_number<H: CurveHooks>(
@@ -116,13 +120,15 @@ fn check_public_input_number<H: CurveHooks>(
     }
 }
 
-fn verify_sumcheck(proof: &ZKProof, tp: &ZKTranscript) -> Result<(), &str> {
+// TODO: Replace &'static str with a proper error enum.
+fn verify_sumcheck(proof: &ZKProof, tp: &ZKTranscript, log_circuit_size: u64, public_inputs_delta: Fr) -> Result<(), &'static str> {
+    let log_circuit_size: usize = log_circuit_size.try_into().map_err(|_| "Given log_circuit_size does not fit in a u64.")?;
     let mut round_target_sum = tp.libra_challenge * proof.libra_sum; // default 0
     let mut pow_partial_evaluation = Fr::ONE;
 
     // We perform sumcheck reductions over log n rounds (i.e., the multivariate degree)
     // for (uint256 round; round < LOG_N; ++round) {
-    for round in 0..LOG_N {
+    for round in 0..log_circuit_size {
         let round_univariate = proof.sumcheck_univariates[round];
         let total_sum = round_univariate[0] + round_univariate[1];
         if total_sum != round_target_sum {
@@ -132,18 +138,18 @@ fn verify_sumcheck(proof: &ZKProof, tp: &ZKTranscript) -> Result<(), &str> {
         let round_challenge = tp.sumcheck_u_challenges[round];
 
         // Update the round target for the next rounf
-        round_target_sum = compute_next_target_sum(round_univariate, round_challenge);
+        round_target_sum = compute_next_target_sum(&round_univariate, round_challenge).expect("compute_next_target_sum should always return an Ok variant");
         pow_partial_evaluation =
             pow_partial_evaluation * (Fr::ONE + round_challenge * (tp.gate_challenges[round] - Fr::ONE));
     }
 
     // Last round
     let mut grand_honk_relation_sum = accumulate_relation_evaluations(
-        &proof.sumcheck_evaluations, tp.relation_parameters, tp.alphas, pow_partial_evaluation
+        &proof.sumcheck_evaluations, &tp.relation_parameters_challenges, &tp.alphas, public_inputs_delta, pow_partial_evaluation
     );
 
     let mut evaluation = Fr::ONE;
-    for i in 2..LOG_N { // (uint256 i = 2; i < LOG_N; i++) {
+    for i in 2..log_circuit_size { // (uint256 i = 2; i < LOG_N; i++) {
         evaluation *= tp.sumcheck_u_challenges[i];
     }
 
@@ -155,8 +161,9 @@ fn verify_sumcheck(proof: &ZKProof, tp: &ZKTranscript) -> Result<(), &str> {
     }
 }
 
-// Return the new target sum for the next sumcheck round
+// Return the new target sum for the next sumcheck round.
 fn compute_next_target_sum(round_univariates: &[Fr; ZK_BATCHED_RELATION_PARTIAL_LENGTH], round_challenge: Fr) -> Result<Fr, &str> {
+    // NOTE: This function can't actually fail with the current BARYCENTRIC_LAGRANGE_DENOMINATORS.
     const BARYCENTRIC_LAGRANGE_DENOMINATORS: [Fr; ZK_BATCHED_RELATION_PARTIAL_LENGTH] = [
         MontFp!("0x0000000000000000000000000000000000000000000000000000000000009d80"),
         MontFp!("0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593efffec51"),
@@ -173,24 +180,25 @@ fn compute_next_target_sum(round_univariates: &[Fr; ZK_BATCHED_RELATION_PARTIAL_
 
     // To compute the next target sum, we evaluate the given univariate at a point u (challenge).
 
-    // TODO: opt: use same array mem for each iteratioon
+    // TODO: opt: use same array mem for each iteration
     // Performing Barycentric evaluations
     // Compute B(x)
     let mut numerator_value = Fr::ONE;
-    for i in 0..ZK_BATCHED_RELATION_PARTIAL_LENGTH { // (uint256 i; i < ZK_BATCHED_RELATION_PARTIAL_LENGTH; ++i) {
+    for i in 0..ZK_BATCHED_RELATION_PARTIAL_LENGTH {
         numerator_value *= round_challenge - Fr::from(i as u64);
     }
 
     // Calculate domain size N of inverses using Montgomery's trick for batch inversion.
-    // This reduces computation of `ZK_BATCHED_RELATION_PARTIAL_LENGTH`-many expensive inverses
-    // to computing just 1 inverse + `O(ZK_BATCHED_RELATION_PARTIAL_LENGTH)` modular multiplications.
-    // Notice that we do not need to check for successfull inversion since `BARYCENTRIC_LAGRANGE_DENOMINATORS`
-    // are fixed (and non-zero) and w.h.p. `round_challenge - Fr::from(i as u64)` is non-zero.
-    let mut denominator_inverses: [Fr; ZK_BATCHED_RELATION_PARTIAL_LENGTH] = from_fn(|i| BARYCENTRIC_LAGRANGE_DENOMINATORS[i] * (round_challenge - Fr::from(i as u64)));
+    // This reduces computation of `ZK_BATCHED_RELATION_PARTIAL_LENGTH`-many expensive inverses to
+    // computing just 1 inverse + `O(ZK_BATCHED_RELATION_PARTIAL_LENGTH)` modular multiplications.
+    // Notice that inversion will w.h.p. succeed because the `BARYCENTRIC_LAGRANGE_DENOMINATORS`
+    // are all fixed (and non-zero), and w.h.p. `round_challenge - i` is also non-zero.
+    let mut denominator_inverses: [Fr; ZK_BATCHED_RELATION_PARTIAL_LENGTH] =
+        from_fn(|i| BARYCENTRIC_LAGRANGE_DENOMINATORS[i] * (round_challenge - Fr::from(i as u64)));
     batch_inversion(&mut denominator_inverses);
 
     for i in 0..ZK_BATCHED_RELATION_PARTIAL_LENGTH {
-        target_sum += round_univariates[i]*denominator_inverses[i];
+        target_sum += round_univariates[i] * denominator_inverses[i];
     }
 
     // Scale the sum by the value of B(x)
@@ -199,175 +207,282 @@ fn compute_next_target_sum(round_univariates: &[Fr; ZK_BATCHED_RELATION_PARTIAL_
     Ok(target_sum)
 }
 
-fn verifyShplemini(Honk.ZKProof memory proof, Honk.VerificationKey memory vk, ZKTranscript memory tp)
-    -> (bool verified)
-{
-    ShpleminiIntermediates memory mem; // stack
+fn verify_shplemini<H: CurveHooks>(proof: &ZKProof, vk: &VerificationKey<H>, tp: &ZKTranscript)
+    -> Result<(), ProofError> {
+    // ShpleminiIntermediates mem; // stack
 
-    // - Compute vector (r, r², ... , r²⁽ⁿ⁻¹⁾), where n = log_circuit_size
-    Fr[CONST_PROOF_SIZE_LOG_N] memory powers_of_evaluation_challenge = CommitmentSchemeLib.computeSquares(tp.geminiR);
+    // - Compute vector (r, r², ..., r²⁽ⁿ⁻¹⁾), where n := log_circuit_size
+    let powers_of_evaluation_challenge = compute_squares(tp.gemini_r); // [Fr; CONST_PROOF_SIZE_LOG_N]
     // Arrays hold values that will be linearly combined for the gemini and shplonk batch openings
-    Fr[NUMBER_OF_ENTITIES + CONST_PROOF_SIZE_LOG_N + 3 + 3] memory scalars;
-    Honk.G1Point[NUMBER_OF_ENTITIES + CONST_PROOF_SIZE_LOG_N + 3 + 3] memory commitments;
+    let mut scalars: [Fr; NUMBER_OF_ENTITIES + CONST_PROOF_SIZE_LOG_N + 3 + 3];
+    let mut commitments: [G1<H>; NUMBER_OF_ENTITIES + CONST_PROOF_SIZE_LOG_N + 3 + 3];
 
-    mem.posInvertedDenominator = (tp.shplonkZ - powers_of_evaluation_challenge[0]).invert();
-    mem.negInvertedDenominator = (tp.shplonkZ + powers_of_evaluation_challenge[0]).invert();
+    // NOTE: Can use batching here to go from 2 inversions to 1 inversion + 3 multiplications
+    // but the benefit should be marginal.
+    let pos_inverted_denominator = (tp.shplonk_z - powers_of_evaluation_challenge[0]).inverse().expect("Inversion should work w.h.p.");
+    let neg_inverted_denominator = (tp.shplonk_z + powers_of_evaluation_challenge[0]).inverse().expect("Inversion should work w.h.p.");
 
+    let unshifted_scalar = pos_inverted_denominator + tp.shplonk_nu * neg_inverted_denominator;
+    let shifted_scalar =
+        tp.gemini_r.inverse().expect("Inversion should work w.h.p.") * (pos_inverted_denominator - tp.shplonk_nu * neg_inverted_denominator);
 
-    mem.unshiftedScalar = mem.posInvertedDenominator + (tp.shplonkNu * mem.negInvertedDenominator);
-    mem.shiftedScalar =
-        tp.geminiR.invert() * (mem.posInvertedDenominator - (tp.shplonkNu * mem.negInvertedDenominator));
+    scalars[0] = Fr::ONE;
+    commitments[0] = convert_proof_point::<H>(proof.shplonk_q).map_err(|_| ProofError::PointNotOnCurve {
+                field: ProofCommitmentField::SHPLONK_Q.to_str(),
+            })?;
 
-    scalars[0] = ONE;
-    commitments[0] = convertProofPoint(proof.shplonkQ);
-
-    mem.batchedEvaluation = proof.geminiMaskingEval;
-    mem.batchingChallenge = tp.rho;
-    scalars[1] = mem.unshiftedScalar.neg();
-    for (uint256 i = 0; i < NUMBER_UNSHIFTED; ++i) {
-        scalars[i + 2] = mem.unshiftedScalar.neg() * mem.batchingChallenge;
-        mem.batchedEvaluation = mem.batchedEvaluation + (proof.sumcheckEvaluations[i] * mem.batchingChallenge);
-        mem.batchingChallenge = mem.batchingChallenge * tp.rho;
+    let mut batched_evaluation = proof.gemini_masking_eval;
+    let mut batching_challenge = tp.rho;
+    scalars[1] = -unshifted_scalar;
+    for i in 0..NUMBER_UNSHIFTED {
+        scalars[i + 2] = -unshifted_scalar * batching_challenge;
+        batched_evaluation += proof.sumcheck_evaluations[i] * batching_challenge;
+        batching_challenge *= tp.rho;
     }
 
-    for (uint256 i = NUMBER_UNSHIFTED; i < NUMBER_OF_ENTITIES; ++i) {
-        scalars[i + 2] = mem.shiftedScalar.neg() * mem.batchingChallenge;
-        mem.batchedEvaluation = mem.batchedEvaluation + (proof.sumcheckEvaluations[i] * mem.batchingChallenge);
-        mem.batchingChallenge = mem.batchingChallenge * tp.rho;
+    for i in NUMBER_UNSHIFTED..NUMBER_OF_ENTITIES {
+        scalars[i + 2] = -shifted_scalar * batching_challenge;
+        batched_evaluation += proof.sumcheck_evaluations[i] * batching_challenge;
+        batching_challenge *= tp.rho;
     }
 
-    commitments[1] = convertProofPoint(proof.geminiMaskingPoly);
+    commitments[1] = convert_proof_point::<H>(proof.gemini_masking_poly).map_err(|_| ProofError::PointNotOnCurve {
+                field: ProofCommitmentField::GEMINI_MASKING_POLY.to_str(),
+            })?;
 
-    commitments[2] = vk.qm;
-    commitments[3] = vk.qc;
-    commitments[4] = vk.ql;
-    commitments[5] = vk.qr;
-    commitments[6] = vk.qo;
-    commitments[7] = vk.q4;
-    commitments[8] = vk.qLookup;
-    commitments[9] = vk.qArith;
-    commitments[10] = vk.qDeltaRange;
-    commitments[11] = vk.qElliptic;
-    commitments[12] = vk.qAux;
-    commitments[13] = vk.qPoseidon2External;
-    commitments[14] = vk.qPoseidon2Internal;
-    commitments[15] = vk.s1;
-    commitments[16] = vk.s2;
-    commitments[17] = vk.s3;
-    commitments[18] = vk.s4;
-    commitments[19] = vk.id1;
-    commitments[20] = vk.id2;
-    commitments[21] = vk.id3;
-    commitments[22] = vk.id4;
-    commitments[23] = vk.t1;
-    commitments[24] = vk.t2;
-    commitments[25] = vk.t3;
-    commitments[26] = vk.t4;
-    commitments[27] = vk.lagrangeFirst;
-    commitments[28] = vk.lagrangeLast;
+    commitments[2] = vk.q_m;
+    commitments[3] = vk.q_c;
+    commitments[4] = vk.q_l;
+    commitments[5] = vk.q_r;
+    commitments[6] = vk.q_o;
+    commitments[7] = vk.q_4;
+    commitments[8] = vk.q_lookup;
+    commitments[9] = vk.q_arith;
+    commitments[10] = vk.q_deltarange;
+    commitments[11] = vk.q_elliptic;
+    commitments[12] = vk.q_aux;
+    commitments[13] = vk.q_poseidon2external;
+    commitments[14] = vk.q_poseidon2internal;
+    commitments[15] = vk.s_1;
+    commitments[16] = vk.s_2;
+    commitments[17] = vk.s_3;
+    commitments[18] = vk.s_4;
+    commitments[19] = vk.id_1;
+    commitments[20] = vk.id_2;
+    commitments[21] = vk.id_3;
+    commitments[22] = vk.id_4;
+    commitments[23] = vk.t_1;
+    commitments[24] = vk.t_2;
+    commitments[25] = vk.t_3;
+    commitments[26] = vk.t_4;
+    commitments[27] = vk.lagrange_first;
+    commitments[28] = vk.lagrange_last;
 
     // Accumulate proof points
-    commitments[29] = convertProofPoint(proof.w1);
-    commitments[30] = convertProofPoint(proof.w2);
-    commitments[31] = convertProofPoint(proof.w3);
-    commitments[32] = convertProofPoint(proof.w4);
-    commitments[33] = convertProofPoint(proof.zPerm);
-    commitments[34] = convertProofPoint(proof.lookupInverses);
-    commitments[35] = convertProofPoint(proof.lookupReadCounts);
-    commitments[36] = convertProofPoint(proof.lookupReadTags);
+    commitments[29] = convert_proof_point(proof.w1).map_err(|_| ProofError::PointNotOnCurve {
+                field: ProofCommitmentField::W_1.to_str(),
+            })?;
+    commitments[30] = convert_proof_point(proof.w2).map_err(|_| ProofError::PointNotOnCurve {
+                field: ProofCommitmentField::W_2.to_str(),
+            })?;
+    commitments[31] = convert_proof_point(proof.w3).map_err(|_| ProofError::PointNotOnCurve {
+                field: ProofCommitmentField::W_3.to_str(),
+            })?;
+    commitments[32] = convert_proof_point(proof.w4).map_err(|_| ProofError::PointNotOnCurve {
+                field: ProofCommitmentField::W_4.to_str(),
+            })?;
+
+    commitments[33] = convert_proof_point(proof.z_perm).map_err(|_| ProofError::PointNotOnCurve {
+                field: ProofCommitmentField::Z_PERM.to_str(),
+            })?;
+    commitments[34] = convert_proof_point(proof.lookup_inverses).map_err(|_| ProofError::PointNotOnCurve {
+                field: ProofCommitmentField::LOOKUP_INVERSES.to_str(),
+            })?;
+    commitments[35] = convert_proof_point(proof.lookup_read_counts).map_err(|_| ProofError::PointNotOnCurve {
+                field: ProofCommitmentField::LOOKUP_READ_COUNTS.to_str(),
+            })?;
+    commitments[36] = convert_proof_point(proof.lookup_read_tags).map_err(|_| ProofError::PointNotOnCurve {
+                field: ProofCommitmentField::LOOKUP_READ_TAGS.to_str(),
+            })?;
 
     // to be Shifted
-    commitments[37] = convertProofPoint(proof.w1);
-    commitments[38] = convertProofPoint(proof.w2);
-    commitments[39] = convertProofPoint(proof.w3);
-    commitments[40] = convertProofPoint(proof.w4);
-    commitments[41] = convertProofPoint(proof.zPerm);
-
+    // NOTE: The following 5 points are validated anew. Can skip that by cloning.
+    commitments[37] = convert_proof_point(proof.w1).map_err(|_| ProofError::PointNotOnCurve {
+                field: ProofCommitmentField::W_1.to_str(),
+            })?;
+    commitments[38] = convert_proof_point(proof.w2).map_err(|_| ProofError::PointNotOnCurve {
+                field: ProofCommitmentField::W_2.to_str(),
+            })?;
+    commitments[39] = convert_proof_point(proof.w3).map_err(|_| ProofError::PointNotOnCurve {
+                field: ProofCommitmentField::W_3.to_str(),
+            })?;
+    commitments[40] = convert_proof_point(proof.w4).map_err(|_| ProofError::PointNotOnCurve {
+                field: ProofCommitmentField::W_4.to_str(),
+            })?;
+    commitments[41] = convert_proof_point(proof.z_perm).map_err(|_| ProofError::PointNotOnCurve {
+                field: ProofCommitmentField::Z_PERM.to_str(),
+            })?;
 
     // Add contributions from A₀(r) and A₀(-r) to constant_term_accumulator:
-    // Compute the evaluations Aₗ(r^{2ˡ}) for l = 0, ..., logN - 1
-    Fr[CONST_PROOF_SIZE_LOG_N] memory foldPosEvaluations = CommitmentSchemeLib.computeFoldPosEvaluations(
-        tp.sumCheckUChallenges,
-        mem.batchedEvaluation,
-        proof.geminiAEvaluations,
-        powers_of_evaluation_challenge,
-        LOG_N
+    // Compute the evaluations Aₗ(r^{2ˡ}) for l = 0, ..., logN - 1.
+    let fold_pos_evaluations: [Fr; CONST_PROOF_SIZE_LOG_N] = compute_fold_pos_evaluations(
+        &tp.sumcheck_u_challenges,
+        batched_evaluation,
+        &proof.gemini_a_evaluations,
+        &powers_of_evaluation_challenge,
+        vk.log_circuit_size
     );
 
-    mem.constantTermAccumulator = foldPosEvaluations[0] * mem.posInvertedDenominator;
-    mem.constantTermAccumulator =
-        mem.constantTermAccumulator + (proof.geminiAEvaluations[0] * tp.shplonkNu * mem.negInvertedDenominator);
+    let mut constant_term_accumulator = fold_pos_evaluations[0] * pos_inverted_denominator;
+    constant_term_accumulator += proof.gemini_a_evaluations[0] * tp.shplonk_nu * neg_inverted_denominator;
 
-    mem.batchingChallenge = tp.shplonkNu.sqr();
-    uint256 boundary = NUMBER_OF_ENTITIES + 2;
+    batching_challenge = tp.shplonk_nu.square();
+    let mut boundary = NUMBER_OF_ENTITIES + 2;
+
+    let mut scaling_factor_pos = Fr::ZERO;
+    let mut scaling_factor_neg = Fr::ZERO;
 
     // Compute Shplonk constant term contributions from Aₗ(± r^{2ˡ}) for l = 1, ..., m-1;
     // Compute scalar multipliers for each fold commitment
-    for (uint256 i = 0; i < CONST_PROOF_SIZE_LOG_N - 1; ++i) {
-        bool dummy_round = i >= (LOG_N - 1);
+    for i in 0..(CONST_PROOF_SIZE_LOG_N - 1) { // for (uint256 i = 0; i < CONST_PROOF_SIZE_LOG_N - 1; ++i) {
+        let dummy_round = i >= (LOG_N - 1);
 
-        if (!dummy_round) {
+        if !dummy_round {
             // Update inverted denominators
-            mem.posInvertedDenominator = (tp.shplonkZ - powers_of_evaluation_challenge[i + 1]).invert();
-            mem.negInvertedDenominator = (tp.shplonkZ + powers_of_evaluation_challenge[i + 1]).invert();
+            pos_inverted_denominator = (tp.shplonk_z - powers_of_evaluation_challenge[i + 1]).inverse().expect("Inversion should work w.h.p.");
+            neg_inverted_denominator = (tp.shplonk_z + powers_of_evaluation_challenge[i + 1]).inverse().expect("Inversion should work w.h.p.");
 
             // Compute the scalar multipliers for Aₗ(± r^{2ˡ}) and [Aₗ]
-            mem.scalingFactorPos = mem.batchingChallenge * mem.posInvertedDenominator;
-            mem.scalingFactorNeg = mem.batchingChallenge * tp.shplonkNu * mem.negInvertedDenominator;
-            scalars[boundary + i] = mem.scalingFactorNeg.neg() + mem.scalingFactorPos.neg();
+            scaling_factor_pos = batching_challenge * pos_inverted_denominator;
+            scaling_factor_neg = batching_challenge * tp.shplonk_nu * neg_inverted_denominator;
+            scalars[boundary + i] = -(scaling_factor_neg + scaling_factor_pos);
 
             // Accumulate the const term contribution given by
             // v^{2l} * Aₗ(r^{2ˡ}) /(z-r^{2^l}) + v^{2l+1} * Aₗ(-r^{2ˡ}) /(z+ r^{2^l})
-            Fr accumContribution = mem.scalingFactorNeg * proof.geminiAEvaluations[i + 1];
-            accumContribution = accumContribution + mem.scalingFactorPos * foldPosEvaluations[i + 1];
-            mem.constantTermAccumulator = mem.constantTermAccumulator + accumContribution;
+            let mut accum_contribution = scaling_factor_neg * proof.gemini_a_evaluations[i + 1];
+            accum_contribution += scaling_factor_pos * fold_pos_evaluations[i + 1];
+            constant_term_accumulator += accum_contribution;
         }
         // Update the running power of v
-        mem.batchingChallenge = mem.batchingChallenge * tp.shplonkNu * tp.shplonkNu;
+        batching_challenge *= tp.shplonk_nu.square();
 
-        commitments[boundary + i] = convertProofPoint(proof.geminiFoldComms[i]);
+        commitments[boundary + i] = convert_proof_point(proof.gemini_fold_comms[i]).map_err(|_| ProofError::PointNotOnCurve {
+                field: ProofCommitmentField::GEMINI_FOLD_COMMS(i).to_str(),
+            })?;
     }
 
     boundary += CONST_PROOF_SIZE_LOG_N - 1;
 
+    const NUM_DENOMINATORS: usize = 4; // TODO: REVISIT...
+    let mut denominators = [Fr::ZERO; NUM_DENOMINATORS];
 
     // Finalise the batch opening claim
-    mem.denominators[0] = ONE.div(tp.shplonkZ - tp.geminiR);
-    mem.denominators[1] = ONE.div(tp.shplonkZ - SUBGROUP_GENERATOR * tp.geminiR);
-    mem.denominators[2] = mem.denominators[0];
-    mem.denominators[3] = mem.denominators[0];
+    denominators[0] = (tp.shplonk_z - tp.gemini_r).inverse().expect("shplonk_z - gemini_r should be invertible w.h.p.");
+    denominators[1] = (tp.shplonk_z - SUBGROUP_GENERATOR * tp.gemini_r).inverse();
+    denominators[2] = denominators[0];
+    denominators[3] = denominators[0];
+
+    let mut batching_scalars = [Fr::ZERO; NUM_DENOMINATORS];
 
     // Artifact of interleaving, see TODO(https://github.com/AztecProtocol/barretenberg/issues/1293): Decouple Gemini from Interleaving
-    mem.batchingChallenge = mem.batchingChallenge * tp.shplonkNu * tp.shplonkNu;
-    for (uint256 i = 0; i < 4; i++) {
-        Fr scalingFactor = mem.denominators[i] * mem.batchingChallenge;
-        mem.batchingScalars[i] = scalingFactor.neg();
-        mem.batchingChallenge = mem.batchingChallenge * tp.shplonkNu;
-        mem.constantTermAccumulator = mem.constantTermAccumulator + scalingFactor * proof.libraPolyEvals[i];
+    batching_challenge *= tp.shplonk_nu.square();
+    for i in 0..denominators.len() { // for (uint256 i = 0; i < 4; i++) {
+        let scaling_factor = denominators[i] * batching_challenge;
+        batching_scalars[i] = -scaling_factor;
+        batching_challenge *= tp.shplonk_nu;
+        constant_term_accumulator += scaling_factor * proof.libra_poly_evals[i];
     }
-    scalars[boundary] = mem.batchingScalars[0];
-    scalars[boundary + 1] = mem.batchingScalars[1] + mem.batchingScalars[2];
-    scalars[boundary + 2] = mem.batchingScalars[3];
+    scalars[boundary] = batching_scalars[0];
+    scalars[boundary + 1] = batching_scalars[1] + batching_scalars[2];
+    scalars[boundary + 2] = batching_scalars[3];
 
-    for (uint256 i = 0; i < 3; i++) {
-        commitments[boundary++] = convertProofPoint(proof.libraCommitments[i]);
+    for i in 0..3 {
+        commitments[boundary] = convert_proof_point(proof.libra_commitments[i]).map_err(|_| ProofError::PointNotOnCurve {
+                field: ProofCommitmentField::LIBRA_COMMITMENTS(i).to_str(),
+            })?;
+        boundary += 1;
     }
 
-    commitments[boundary] = Honk.G1Point({x: 1, y: 2});
-    scalars[boundary++] = mem.constantTermAccumulator;
+    commitments[boundary] = G1::<H>::generator(); // (1, 2)
+    scalars[boundary] = constant_term_accumulator;
+    boundary += 1;
 
-    if (! checkEvalsConsistency(proof.libraPolyEvals, tp.geminiR, tp.sumCheckUChallenges, proof.libraEvaluation)) {
+    if !check_evals_consistency(proof.libra_poly_evals, tp.gemini_r, tp.sumcheck_u_challenges, proof.libra_evaluation) {
         revert ConsistencyCheckFailed();
     }
-    Honk.G1Point memory quotient_commitment = convertProofPoint(proof.kzgQuotient);
+    let quotient_commitment = 
+        convert_proof_point(proof.kzg_quotient).map_err(|_| ProofError::PointNotOnCurve {
+                field: ProofCommitmentField::KZG_QUOTIENT.to_str(),
+            })?;
 
     commitments[boundary] = quotient_commitment;
-    scalars[boundary] = tp.shplonkZ; // evaluation challenge
+    scalars[boundary] = tp.shplonk_z; // evaluation challenge
 
-    Honk.G1Point memory P_0 = batchMul(commitments, scalars);
-    Honk.G1Point memory P_1 = negateInplace(quotient_commitment);
+    // Pairing Check
+    let p_0 = H::bn254_msm_g1(&commitments, &scalars).map_err(|_| ProofError::OtherError { message: "Shplemini MSM computation failed.".to_string() })?; // batchMul(commitments, scalars);
+    let p_1 = -quotient_commitment;
 
-    return pairing(P_0, P_1);
+    let g1_points = [
+        G1Prepared::from(p_0.into_affine()),
+        G1Prepared::from(p_1),
+    ];
+    let g2_points = [
+        G2Prepared::from(read_g2::<H>(&SRS_G2).expect("Parsing the SRS should always work")),
+        G2Prepared::from(read_g2::<H>(&SRS_G2_VK).expect("Parsing the SRS should always work")),
+    ];
+
+    let product = Bn254::<H>::multi_pairing(g1_points, g2_points);
+
+    if product.0.is_one() {
+        Ok(())
+    } else {
+        Err(ProofError::ShpleminiPairingCheckFailed)
+    }
+}
+
+fn check_evals_consistency(
+    libra_poly_evals: &[Fr; 4],
+    gemini_r: Fr,
+    u_challenges: &[Fr; CONST_PROOF_SIZE_LOG_N],
+    libra_eval: Fr,
+) -> Result<bool, &str> {
+    let vanishing_poly_eval = gemini_r.pow([SUBGROUP_SIZE]) - Fr::ONE;
+    if vanishing_poly_eval == Fr::ZERO {
+        revert GeminiChallengeInSubgroup();
+    }
+
+    // SmallSubgroupIpaIntermediates memory mem;
+    challenge_poly_lagrange[0] = Fr::ONE;
+    for (uint256 round = 0; round < CONST_PROOF_SIZE_LOG_N; round++) {
+        uint256 currIdx = 1 + 9 * round;
+        mem.challengePolyLagrange[currIdx] = Fr::ONE;
+        for (uint256 idx = currIdx + 1; idx < currIdx + 9; idx++) {
+            mem.challengePolyLagrange[idx] = mem.challengePolyLagrange[idx - 1] * uChallenges[round];
+        }
+    }
+
+    mem.rootPower = Fr::ONE;
+    mem.challengePolyEval = Fr::ZERO;
+    for (uint256 idx = 0; idx < SUBGROUP_SIZE; idx++) {
+        mem.denominators[idx] = mem.rootPower * geminiR - ONE;
+        mem.denominators[idx] = mem.denominators[idx].invert();
+        mem.challengePolyEval = mem.challengePolyEval + mem.challengePolyLagrange[idx] * mem.denominators[idx];
+        mem.rootPower = mem.rootPower * SUBGROUP_GENERATOR_INVERSE;
+    }
+
+    Fr numerator = vanishingPolyEval * Fr.wrap(SUBGROUP_SIZE).invert();
+    mem.challengePolyEval = mem.challengePolyEval * numerator;
+    mem.lagrangeFirst = mem.denominators[0] * numerator;
+    mem.lagrangeLast = mem.denominators[SUBGROUP_SIZE - 1] * numerator;
+
+    mem.diff = mem.lagrangeFirst * libraPolyEvals[2];
+
+    mem.diff = mem.diff
+        + (geminiR - SUBGROUP_GENERATOR_INVERSE)
+            * (libraPolyEvals[1] - libraPolyEvals[2] - libraPolyEvals[0] * mem.challengePolyEval);
+    mem.diff = mem.diff + mem.lagrangeLast * (libraPolyEvals[2] - libraEval) - vanishingPolyEval * libraPolyEvals[3];
+
+    check = mem.diff == ZERO;
 }
 
 #[cfg(test)]

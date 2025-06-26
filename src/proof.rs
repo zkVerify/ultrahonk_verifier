@@ -24,11 +24,12 @@ use crate::{
     utils::read_u256,
     Fr, G1, PROOF_SIZE, U256, ZK_PROOF_SIZE,
 };
-use alloc::vec::Vec;
+use alloc::string::String;
+use alloc::{format, vec::Vec};
 use core::ops::{BitOr, Shl};
 
 #[derive(Debug, PartialEq, Snafu)]
-pub enum ZKProofError {
+pub enum ProofError {
     #[snafu(display(
         "Incorrect buffer size. Expected: {}; Got: {}",
         expected_size,
@@ -48,15 +49,18 @@ pub enum ZKProofError {
         actual_length: usize,
     },
 
-    #[snafu(display("Point for field is not on curve"))]
-    PointNotOnCurve,
+    #[snafu(display("Point for proof commitment field '{field:?}' is not on curve"))]
+    PointNotOnCurve { field: String },
 
     // // #[snafu(display("Point is not in the correct subgroup"))]
     // // PointNotInCorrectSubgroup,
     // #[snafu(display("Value is not a member of Fq"))]
     // NotMember,
-    #[snafu(display("Other error"))]
-    OtherError,
+    #[snafu(display("Other error: {message:?}"))]
+    OtherError { message: String },
+
+    #[snafu(display("Shpleminy pairing check failed"))]
+    ShpleminiPairingCheckFailed,
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -101,17 +105,17 @@ impl TryFrom<[u8; 128]> for G1ProofPoint {
     }
 }
 
-fn read_g1_proof_point(data: &[u8], offset: &mut usize) -> Result<G1ProofPoint, ZKProofError> {
+fn read_g1_proof_point(data: &[u8], offset: &mut usize) -> Result<G1ProofPoint, ProofError> {
     let start: usize = *offset;
     let end: usize = *offset + 128;
     if start >= data.len() {
         // Q: Maybe define a new variant for this case?
-        return Err(ZKProofError::InvalidSliceLength {
+        return Err(ProofError::InvalidSliceLength {
             expected_length: 128,
             actual_length: 0,
         });
     } else if end > data.len() {
-        return Err(ZKProofError::InvalidSliceLength {
+        return Err(ProofError::InvalidSliceLength {
             expected_length: 128,
             actual_length: data.len() - start,
         });
@@ -122,23 +126,25 @@ fn read_g1_proof_point(data: &[u8], offset: &mut usize) -> Result<G1ProofPoint, 
         .expect("Not enough bytes for G1ProofPoint");
 
     G1ProofPoint::try_from(chunk)
-        .map_err(|_| ZKProofError::OtherError)
+        .map_err(|_| ProofError::OtherError {
+            message: format!("Failed reading G1 Proof Point at offset {}", offset),
+        })
         .inspect(|_| {
             *offset += 128;
         })
 }
 
-fn read_fr(data: &[u8], offset: &mut usize) -> Result<Fr, ZKProofError> {
+fn read_fr(data: &[u8], offset: &mut usize) -> Result<Fr, ProofError> {
     let start: usize = *offset;
     let end: usize = *offset + 32;
     if start >= data.len() {
         // Q: Maybe define a new variant for this case?
-        return Err(ZKProofError::InvalidSliceLength {
+        return Err(ProofError::InvalidSliceLength {
             expected_length: 32,
             actual_length: 0,
         });
     } else if end > data.len() {
-        return Err(ZKProofError::InvalidSliceLength {
+        return Err(ProofError::InvalidSliceLength {
             expected_length: 32,
             actual_length: data.len() - start,
         });
@@ -153,7 +159,46 @@ fn read_fr(data: &[u8], offset: &mut usize) -> Result<Fr, ZKProofError> {
     })
 }
 
-fn convert_proof_point<H: CurveHooks>(g1_proof_point: G1ProofPoint) -> Result<G1<H>, GroupError> {
+#[derive(Debug, Hash, Eq, PartialEq)]
+pub enum ProofCommitmentField {
+    SHPLONK_Q,
+    GEMINI_MASKING_POLY,
+    W_1,
+    W_2,
+    W_3,
+    W_4,
+    Z_PERM,
+    LOOKUP_INVERSES,
+    LOOKUP_READ_COUNTS,
+    LOOKUP_READ_TAGS,
+    LIBRA_COMMITMENTS(usize),
+    GEMINI_FOLD_COMMS(usize),
+    KZG_QUOTIENT,
+}
+
+impl ProofCommitmentField {
+    pub fn to_str(&self) -> String {
+        match self {
+            ProofCommitmentField::SHPLONK_Q => "SHPLONK_Q".into(),
+            ProofCommitmentField::GEMINI_MASKING_POLY => "GEMINI_MASKING_POLY".into(),
+            ProofCommitmentField::W_1 => "W_1".into(),
+            ProofCommitmentField::W_2 => "W_2".into(),
+            ProofCommitmentField::W_3 => "W_3".into(),
+            ProofCommitmentField::W_4 => "W_4".into(),
+            ProofCommitmentField::Z_PERM => "Z_PERM".into(),
+            ProofCommitmentField::LOOKUP_INVERSES => "LOOKUP_INVERSES".into(),
+            ProofCommitmentField::LOOKUP_READ_COUNTS => "LOOKUP_READ_COUNTS".into(),
+            ProofCommitmentField::LOOKUP_READ_TAGS => "LOOKUP_READ_TAGS".into(),
+            ProofCommitmentField::LIBRA_COMMITMENTS(i) => format!("LIBRA_COMMITMENTS_{}", i),
+            ProofCommitmentField::GEMINI_FOLD_COMMS(i) => format!("GEMINI_FOLD_COMMS_{}", i),
+            ProofCommitmentField::KZG_QUOTIENT => "KZG_QUOTIENT".into(),
+        }
+    }
+}
+
+pub(crate) fn convert_proof_point<H: CurveHooks>(
+    g1_proof_point: G1ProofPoint,
+) -> Result<G1<H>, GroupError> {
     const N: u32 = 136;
     let x = Fq::from_bigint(g1_proof_point.x_0.bitor(g1_proof_point.x_1.shl(N)))
         .expect("Should always succeed");
@@ -247,11 +292,11 @@ pub struct ZKProof {
 }
 
 impl TryFrom<&[u8]> for ZKProof {
-    type Error = ZKProofError;
+    type Error = ProofError;
 
     fn try_from(proof_bytes: &[u8]) -> Result<Self, Self::Error> {
         if proof_bytes.len() != ZK_PROOF_SIZE {
-            return Err(ZKProofError::IncorrectBufferSize {
+            return Err(ProofError::IncorrectBufferSize {
                 expected_size: ZK_PROOF_SIZE,
                 actual_size: proof_bytes.len(),
             });
@@ -897,7 +942,7 @@ mod should {
             let invalid_zk_proof = &valid_zk_proof[..ZK_PROOF_SIZE - 1];
             assert_eq!(
                 ZKProof::try_from(invalid_zk_proof),
-                Err(ZKProofError::IncorrectBufferSize {
+                Err(ProofError::IncorrectBufferSize {
                     expected_size: ZK_PROOF_SIZE,
                     actual_size: invalid_zk_proof.len()
                 })
@@ -911,7 +956,7 @@ mod should {
 
             assert_eq!(
                 ZKProof::try_from(&invalid_zk_proof[..]),
-                Err(ZKProofError::PointNotOnCurve)
+                Err(ProofError::PointNotOnCurve)
             );
         }
     }

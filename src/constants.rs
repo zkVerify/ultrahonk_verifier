@@ -14,6 +14,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use ark_bn254::Fr;
+use ark_ff::MontFp;
+
 pub const CONST_PROOF_SIZE_LOG_N: usize = 28;
 pub const NUMBER_OF_SUBRELATIONS: usize = 26;
 pub const BATCHED_RELATION_PARTIAL_LENGTH: usize = 8; // for non-ZK case
@@ -42,3 +45,9 @@ pub(crate) const PROOF_SIZE: usize = 4 * G1_PROOF_POINT_SIZE   // 1. Commitments
     + 3 * G1_PROOF_POINT_SIZE // 3. Lookup helpers - logup
     + (NUMBER_OF_ENTITIES + BATCHED_RELATION_PARTIAL_LENGTH * CONST_PROOF_SIZE_LOG_N) * SCALAR_SIZE  // 4. Sumcheck
     + (CONST_PROOF_SIZE_LOG_N - 1 + 2) * G1_PROOF_POINT_SIZE + CONST_PROOF_SIZE_LOG_N * SCALAR_SIZE; // 5. Shplemini
+
+pub(crate) const SUBGROUP_SIZE: u64 = 256;
+pub(crate) const SUBGROUP_GENERATOR: Fr =
+    MontFp!("0x07b0c561a6148404f086204a9f36ffb0617942546750f230c893619174a57a76");
+pub(crate) const SUBGROUP_GENERATOR_INVERSE: Fr =
+    MontFp!("0x204bd3277422fad364751ad938e2b5e6a54cf8c68712848a692c553d0329f5d6");

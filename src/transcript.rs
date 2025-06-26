@@ -104,10 +104,10 @@ impl RelationParametersChallenges {
             // }
         }
 
-        let public_input_delta = numerator / denominator;
+        let public_inputs_delta = numerator / denominator;
         // publicInputDelta = FrLib.div(numerator, denominator);
 
-        public_input_delta
+        public_inputs_delta
     }
 }
 
