@@ -228,7 +228,7 @@ fn verify_shplemini<H: CurveHooks>(proof: &ZKProof, vk: &VerificationKey<H>, tp:
 
     scalars[0] = Fr::ONE;
     commitments[0] = convert_proof_point::<H>(proof.shplonk_q).map_err(|_| ProofError::PointNotOnCurve {
-                field: ProofCommitmentField::SHPLONK_Q.to_str(),
+                field: ProofCommitmentField::SHPLONK_Q.to_string(),
             })?;
 
     let mut batched_evaluation = proof.gemini_masking_eval;
@@ -247,7 +247,7 @@ fn verify_shplemini<H: CurveHooks>(proof: &ZKProof, vk: &VerificationKey<H>, tp:
     }
 
     commitments[1] = convert_proof_point::<H>(proof.gemini_masking_poly).map_err(|_| ProofError::PointNotOnCurve {
-                field: ProofCommitmentField::GEMINI_MASKING_POLY.to_str(),
+                field: ProofCommitmentField::GEMINI_MASKING_POLY.to_string(),
             })?;
 
     commitments[2] = vk.q_m;
@@ -280,47 +280,47 @@ fn verify_shplemini<H: CurveHooks>(proof: &ZKProof, vk: &VerificationKey<H>, tp:
 
     // Accumulate proof points
     commitments[29] = convert_proof_point(proof.w1).map_err(|_| ProofError::PointNotOnCurve {
-                field: ProofCommitmentField::W_1.to_str(),
+                field: ProofCommitmentField::W_1.to_string(),
             })?;
     commitments[30] = convert_proof_point(proof.w2).map_err(|_| ProofError::PointNotOnCurve {
-                field: ProofCommitmentField::W_2.to_str(),
+                field: ProofCommitmentField::W_2.to_string(),
             })?;
     commitments[31] = convert_proof_point(proof.w3).map_err(|_| ProofError::PointNotOnCurve {
-                field: ProofCommitmentField::W_3.to_str(),
+                field: ProofCommitmentField::W_3.to_string(),
             })?;
     commitments[32] = convert_proof_point(proof.w4).map_err(|_| ProofError::PointNotOnCurve {
-                field: ProofCommitmentField::W_4.to_str(),
+                field: ProofCommitmentField::W_4.to_string(),
             })?;
 
     commitments[33] = convert_proof_point(proof.z_perm).map_err(|_| ProofError::PointNotOnCurve {
-                field: ProofCommitmentField::Z_PERM.to_str(),
+                field: ProofCommitmentField::Z_PERM.to_string(),
             })?;
     commitments[34] = convert_proof_point(proof.lookup_inverses).map_err(|_| ProofError::PointNotOnCurve {
-                field: ProofCommitmentField::LOOKUP_INVERSES.to_str(),
+                field: ProofCommitmentField::LOOKUP_INVERSES.to_string(),
             })?;
     commitments[35] = convert_proof_point(proof.lookup_read_counts).map_err(|_| ProofError::PointNotOnCurve {
-                field: ProofCommitmentField::LOOKUP_READ_COUNTS.to_str(),
+                field: ProofCommitmentField::LOOKUP_READ_COUNTS.to_string(),
             })?;
     commitments[36] = convert_proof_point(proof.lookup_read_tags).map_err(|_| ProofError::PointNotOnCurve {
-                field: ProofCommitmentField::LOOKUP_READ_TAGS.to_str(),
+                field: ProofCommitmentField::LOOKUP_READ_TAGS.to_string(),
             })?;
 
     // to be Shifted
     // NOTE: The following 5 points are validated anew. Can skip that by cloning.
     commitments[37] = convert_proof_point(proof.w1).map_err(|_| ProofError::PointNotOnCurve {
-                field: ProofCommitmentField::W_1.to_str(),
+                field: ProofCommitmentField::W_1.to_string(),
             })?;
     commitments[38] = convert_proof_point(proof.w2).map_err(|_| ProofError::PointNotOnCurve {
-                field: ProofCommitmentField::W_2.to_str(),
+                field: ProofCommitmentField::W_2.to_string(),
             })?;
     commitments[39] = convert_proof_point(proof.w3).map_err(|_| ProofError::PointNotOnCurve {
-                field: ProofCommitmentField::W_3.to_str(),
+                field: ProofCommitmentField::W_3.to_string(),
             })?;
     commitments[40] = convert_proof_point(proof.w4).map_err(|_| ProofError::PointNotOnCurve {
-                field: ProofCommitmentField::W_4.to_str(),
+                field: ProofCommitmentField::W_4.to_string(),
             })?;
     commitments[41] = convert_proof_point(proof.z_perm).map_err(|_| ProofError::PointNotOnCurve {
-                field: ProofCommitmentField::Z_PERM.to_str(),
+                field: ProofCommitmentField::Z_PERM.to_string(),
             })?;
 
     // Add contributions from A₀(r) and A₀(-r) to constant_term_accumulator:
@@ -345,7 +345,7 @@ fn verify_shplemini<H: CurveHooks>(proof: &ZKProof, vk: &VerificationKey<H>, tp:
     // Compute Shplonk constant term contributions from Aₗ(± r^{2ˡ}) for l = 1, ..., m-1;
     // Compute scalar multipliers for each fold commitment
     for i in 0..(CONST_PROOF_SIZE_LOG_N - 1) { // for (uint256 i = 0; i < CONST_PROOF_SIZE_LOG_N - 1; ++i) {
-        let dummy_round = i >= (LOG_N - 1);
+        let dummy_round = i as u64 >= (vk.log_circuit_size - 1);
 
         if !dummy_round {
             // Update inverted denominators
@@ -367,7 +367,7 @@ fn verify_shplemini<H: CurveHooks>(proof: &ZKProof, vk: &VerificationKey<H>, tp:
         batching_challenge *= tp.shplonk_nu.square();
 
         commitments[boundary + i] = convert_proof_point(proof.gemini_fold_comms[i]).map_err(|_| ProofError::PointNotOnCurve {
-                field: ProofCommitmentField::GEMINI_FOLD_COMMS(i).to_str(),
+                field: ProofCommitmentField::GEMINI_FOLD_COMMS(i).to_string(),
             })?;
     }
 
@@ -397,7 +397,7 @@ fn verify_shplemini<H: CurveHooks>(proof: &ZKProof, vk: &VerificationKey<H>, tp:
 
     for i in 0..3 {
         commitments[boundary] = convert_proof_point(proof.libra_commitments[i]).map_err(|_| ProofError::PointNotOnCurve {
-                field: ProofCommitmentField::LIBRA_COMMITMENTS(i).to_str(),
+                field: ProofCommitmentField::LIBRA_COMMITMENTS(i).to_string(),
             })?;
         boundary += 1;
     }
@@ -407,11 +407,11 @@ fn verify_shplemini<H: CurveHooks>(proof: &ZKProof, vk: &VerificationKey<H>, tp:
     boundary += 1;
 
     if !check_evals_consistency(proof.libra_poly_evals, tp.gemini_r, tp.sumcheck_u_challenges, proof.libra_evaluation) {
-        revert ConsistencyCheckFailed();
+        return Err(ProofError::ConsistencyCheckFailed);
     }
     let quotient_commitment = 
         convert_proof_point(proof.kzg_quotient).map_err(|_| ProofError::PointNotOnCurve {
-                field: ProofCommitmentField::KZG_QUOTIENT.to_str(),
+                field: ProofCommitmentField::KZG_QUOTIENT.to_string(),
             })?;
 
     commitments[boundary] = quotient_commitment;
@@ -450,38 +450,40 @@ fn check_evals_consistency(
         revert GeminiChallengeInSubgroup();
     }
 
-    // SmallSubgroupIpaIntermediates memory mem;
+    let mut challenge_poly_lagrange = [Fr::ZERO; SUBGROUP_SIZE as usize];
+
     challenge_poly_lagrange[0] = Fr::ONE;
-    for (uint256 round = 0; round < CONST_PROOF_SIZE_LOG_N; round++) {
-        uint256 currIdx = 1 + 9 * round;
-        mem.challengePolyLagrange[currIdx] = Fr::ONE;
-        for (uint256 idx = currIdx + 1; idx < currIdx + 9; idx++) {
+    for round in 0..CONST_PROOF_SIZE_LOG_N {
+        let curr_idx = 1 + 9 * round;
+        challenge_poly_lagrange[curr_idx] = Fr::ONE;
+        for idx in (curr_idx + 1)..(curr_idx + 9) {
             challenge_poly_lagrange[idx] = challenge_poly_lagrange[idx - 1] * u_challenges[round];
         }
     }
 
-    mem.rootPower = Fr::ONE;
-    mem.challengePolyEval = Fr::ZERO;
-    for (uint256 idx = 0; idx < SUBGROUP_SIZE; idx++) {
-        mem.denominators[idx] = mem.rootPower * geminiR - ONE;
-        mem.denominators[idx] = mem.denominators[idx].inverse();
-        mem.challengePolyEval = mem.challengePolyEval + mem.challengePolyLagrange[idx] * mem.denominators[idx];
-        mem.rootPower = mem.rootPower * SUBGROUP_GENERATOR_INVERSE;
+    let mut denominators = [Fr::ZERO; SUBGROUP_SIZE as usize];
+
+    let mut root_power = Fr::ONE;
+    let mut challenge_poly_eval = Fr::ZERO;
+    for idx in 0..denominators.len() { // for (uint256 idx = 0; idx < SUBGROUP_SIZE; idx++) {
+        denominators[idx] = root_power * gemini_r - Fr::ONE;
+        denominators[idx] = denominators[idx].inverse();
+        challenge_poly_eval = challenge_poly_eval + challenge_poly_lagrange[idx] * denominators[idx];
+        root_power *= SUBGROUP_GENERATOR_INVERSE;
     }
 
-    Fr numerator = vanishingPolyEval * Fr.wrap(SUBGROUP_SIZE).inverse();
-    mem.challengePolyEval = mem.challengePolyEval * numerator;
-    mem.lagrangeFirst = mem.denominators[0] * numerator;
-    mem.lagrangeLast = mem.denominators[SUBGROUP_SIZE - 1] * numerator;
+    let numerator = vanishing_poly_eval * Fr::from(SUBGROUP_SIZE).inverse();
+    challenge_poly_eval *= numerator;
+    let lagrange_first = denominators[0] * numerator;
+    let lagrange_last = denominators.last().expect("Last element should always exist") * numerator; // denominators[SUBGROUP_SIZE - 1] * numerator
 
-    mem.diff = mem.lagrangeFirst * libraPolyEvals[2];
+    let mut diff = lagrange_first * libra_poly_evals[2];
 
-    mem.diff = mem.diff
-        + (geminiR - SUBGROUP_GENERATOR_INVERSE)
-            * (libraPolyEvals[1] - libraPolyEvals[2] - libraPolyEvals[0] * mem.challengePolyEval);
-    mem.diff = mem.diff + mem.lagrangeLast * (libraPolyEvals[2] - libraEval) - vanishingPolyEval * libraPolyEvals[3];
+    diff += (gemini_r - SUBGROUP_GENERATOR_INVERSE)
+            * (libra_poly_evals[1] - libra_poly_evals[2] - libra_poly_evals[0] * challenge_poly_eval);
+    diff += lagrange_last * (libra_poly_evals[2] - libra_eval) - vanishing_poly_eval * libra_poly_evals[3];
 
-    check = mem.diff == ZERO;
+    Ok(diff == Fr::ZERO)
 }
 
 #[cfg(test)]

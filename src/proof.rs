@@ -31,6 +31,7 @@ use alloc::string::String;
 use alloc::{format, vec::Vec};
 use core::ops::{BitOr, Shl};
 
+/// Unified enum for handling errors of all flavors.
 #[derive(Debug, PartialEq, Snafu)]
 pub enum ProofError {
     #[snafu(display(
@@ -64,6 +65,9 @@ pub enum ProofError {
 
     #[snafu(display("Shpleminy pairing check failed"))]
     ShpleminiPairingCheckFailed,
+
+    #[snafu(display("Consistency check failed"))]
+    ConsistencyCheckFailed,
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -180,7 +184,7 @@ pub enum ProofCommitmentField {
 }
 
 impl ProofCommitmentField {
-    pub fn to_str(&self) -> String {
+    pub fn to_string(&self) -> String {
         match self {
             ProofCommitmentField::SHPLONK_Q => "SHPLONK_Q".into(),
             ProofCommitmentField::GEMINI_MASKING_POLY => "GEMINI_MASKING_POLY".into(),

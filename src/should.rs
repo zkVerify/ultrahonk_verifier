@@ -18,7 +18,7 @@ use crate::*;
 use rstest::{fixture, rstest};
 
 #[fixture]
-fn valid_zk_proof() -> [u8; 15712] {
+fn valid_zk_proof() -> [u8; ZK_PROOF_SIZE] {
     hex_literal::hex!(
         "
         000000000000000000000000000000a16555b44bbe764b90975aa0d52b0ba43c
@@ -517,7 +517,7 @@ fn valid_zk_proof() -> [u8; 15712] {
 }
 
 #[fixture]
-fn valid_proof() -> [u8; 14080] {
+fn valid_proof() -> [u8; PROOF_SIZE] {
     hex_literal::hex!(
         "
         000000000000000000000000000000a16555b44bbe764b90975aa0d52b0ba43c
