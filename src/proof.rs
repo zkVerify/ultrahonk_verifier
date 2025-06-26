@@ -19,7 +19,10 @@ use ark_ff::{AdditiveGroup, PrimeField};
 use snafu::Snafu;
 
 use crate::{
-    constants::{CONST_PROOF_SIZE_LOG_N, NUMBER_OF_ENTITIES, ZK_BATCHED_RELATION_PARTIAL_LENGTH},
+    constants::{
+        CONST_PROOF_SIZE_LOG_N, LIBRA_COMMITMENTS_LENGTH, LIBRA_POLY_EVALS_LENGTH,
+        NUMBER_OF_ENTITIES, ZK_BATCHED_RELATION_PARTIAL_LENGTH,
+    },
     errors::GroupError,
     utils::read_u256,
     Fr, G1, PROOF_SIZE, U256, ZK_PROOF_SIZE,
@@ -69,7 +72,7 @@ pub enum ProofType {
     ZK([u8; ZK_PROOF_SIZE]),
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct G1ProofPoint {
     pub x_0: U256,
     pub x_1: U256,
@@ -217,50 +220,6 @@ pub(crate) fn convert_proof_point<H: CurveHooks>(
     Ok(point)
 }
 
-// impl<H: CurveHooks> TryFrom<G1ProofPoint> for G1<H> {
-//     type Error = GroupError;
-
-//     fn try_from(g1_proof_point: G1ProofPoint) -> Result<Self, Self::Error> {
-//         const N: u32 = 136;
-//         let x = Fq::from_bigint(g1_proof_point.x_0.bitor(g1_proof_point.x_1.shl(N)))
-//             .expect("Should always succeed");
-//         let y = Fq::from_bigint(g1_proof_point.y_0.bitor(g1_proof_point.y_1.shl(N)))
-//             .expect("Should always succeed");
-
-//         let point = Self::new_unchecked(x, y);
-
-//         // Validate point
-//         if !point.is_on_curve() {
-//             return Err(GroupError::NotOnCurve);
-//         }
-//         // The following cannot happen for G1 with the BN254 curve.
-//         // if !point.is_in_correct_subgroup_assuming_on_curve() {...}
-
-//         Ok(point)
-//     }
-// }
-
-// impl<H: CurveHooks> TryInto<G1<H>> for G1ProofPoint {
-//     type Error = GroupError;
-
-//     fn try_into(self) -> Result<G1<H>, Self::Error> {
-//         const N: u32 = 136;
-//         let x = Fq::from_bigint(self.x_0.bitor(self.x_1.shl(N))).expect("Should always succeed");
-//         let y = Fq::from_bigint(self.y_0.bitor(self.y_1.shl(N))).expect("Should always succeed");
-
-//         let point = G1::<H>::new_unchecked(x, y);
-
-//         // Validate point
-//         if !point.is_on_curve() {
-//             return Err(GroupError::NotOnCurve);
-//         }
-//         // This cannot happen for G1 with the BN254 curve.
-//         // if !point.is_in_correct_subgroup_assuming_on_curve() {...}
-
-//         Ok(point)
-//     }
-// }
-
 #[derive(Debug, Eq, PartialEq)]
 pub struct ZKProof {
     // Commitments to wire polynomials
@@ -274,7 +233,7 @@ pub struct ZKProof {
     pub lookup_inverses: G1ProofPoint,
     // Commitment to grand permutation polynomial
     pub z_perm: G1ProofPoint,
-    pub libra_commitments: [G1ProofPoint; 3],
+    pub libra_commitments: [G1ProofPoint; LIBRA_COMMITMENTS_LENGTH],
     // Sumcheck
     pub libra_sum: Fr,
     pub sumcheck_univariates: [[Fr; ZK_BATCHED_RELATION_PARTIAL_LENGTH]; CONST_PROOF_SIZE_LOG_N],
@@ -286,7 +245,7 @@ pub struct ZKProof {
     // Shplemini
     pub gemini_fold_comms: [G1ProofPoint; CONST_PROOF_SIZE_LOG_N - 1],
     pub gemini_a_evaluations: [Fr; CONST_PROOF_SIZE_LOG_N],
-    pub libra_poly_evals: [Fr; 4],
+    pub libra_poly_evals: [Fr; LIBRA_POLY_EVALS_LENGTH],
     pub shplonk_q: G1ProofPoint,
     pub kzg_quotient: G1ProofPoint,
 }
@@ -316,11 +275,7 @@ impl TryFrom<&[u8]> for ZKProof {
         let lookup_inverses = read_g1_proof_point(proof_bytes, &mut offset)?;
         let z_perm = read_g1_proof_point(proof_bytes, &mut offset)?;
 
-        let mut libra_commitments = [
-            G1ProofPoint::default(),
-            G1ProofPoint::default(),
-            G1ProofPoint::default(),
-        ];
+        let mut libra_commitments = [G1ProofPoint::default(); LIBRA_COMMITMENTS_LENGTH];
         libra_commitments[0] = read_g1_proof_point(proof_bytes, &mut offset)?;
 
         let libra_sum = read_fr(proof_bytes, &mut offset)?;
@@ -386,7 +341,7 @@ impl TryFrom<&[u8]> for ZKProof {
         // for i in 0..4 {
         //     libra_poly_evals[i] = read_fr(proof_bytes, &mut offset)?;
         // }
-        let libra_poly_evals: [Fr; 4] = (0..4)
+        let libra_poly_evals: [Fr; LIBRA_POLY_EVALS_LENGTH] = (0..LIBRA_POLY_EVALS_LENGTH)
             .map(|_| {
                 read_fr(proof_bytes, &mut offset)
                     .expect("Should always be able to read field element here")

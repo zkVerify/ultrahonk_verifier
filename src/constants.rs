@@ -28,6 +28,9 @@ pub const PAIRING_POINTS_SIZE: usize = 16;
 // Alphas are used as relation separators so there should be NUMBER_OF_SUBRELATIONS - 1
 pub const NUMBER_OF_ALPHAS: usize = 25;
 
+pub const LIBRA_POLY_EVALS_LENGTH: usize = 4;
+pub const LIBRA_COMMITMENTS_LENGTH: usize = 3;
+
 // Scalar size (in bytes)
 const SCALAR_SIZE: usize = 32;
 // G1ProofPoint size (in bytes)

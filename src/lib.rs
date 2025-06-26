@@ -32,7 +32,7 @@ mod utils;
 
 use core::array::from_fn;
 
-use crate::{commitment::{compute_fold_pos_evaluations, compute_squares}, constants::{CONST_PROOF_SIZE_LOG_N, NUMBER_OF_ALPHAS, NUMBER_OF_ENTITIES, NUMBER_UNSHIFTED, SUBGROUP_SIZE, ZK_BATCHED_RELATION_PARTIAL_LENGTH}, key::VerificationKey, proof::{convert_proof_point, ProofCommitmentField, ProofError, ZKProof}, relations::accumulate_relation_evaluations, srs::{SRS_G2, SRS_G2_VK}, transcript::{generate_transcript, ZKTranscript}, utils::{read_g2, IntoFr, IntoU256}};
+use crate::{commitment::{compute_fold_pos_evaluations, compute_squares}, constants::{CONST_PROOF_SIZE_LOG_N, LIBRA_POLY_EVALS_LENGTH, NUMBER_OF_ALPHAS, NUMBER_OF_ENTITIES, NUMBER_UNSHIFTED, SUBGROUP_SIZE, ZK_BATCHED_RELATION_PARTIAL_LENGTH}, key::VerificationKey, proof::{convert_proof_point, ProofCommitmentField, ProofError, ZKProof}, relations::accumulate_relation_evaluations, srs::{SRS_G2, SRS_G2_VK}, transcript::{generate_transcript, ZKTranscript}, utils::{read_g2, IntoFr, IntoU256}};
 use alloc::{format, string::ToString};
 use ark_bn254_ext::{Config, CurveHooks};
 use ark_ec::{AffineRepr, CurveGroup};
@@ -373,8 +373,7 @@ fn verify_shplemini<H: CurveHooks>(proof: &ZKProof, vk: &VerificationKey<H>, tp:
 
     boundary += CONST_PROOF_SIZE_LOG_N - 1;
 
-    const NUM_DENOMINATORS: usize = 4; // TODO: REVISIT...
-    let mut denominators = [Fr::ZERO; NUM_DENOMINATORS];
+    let mut denominators = [Fr::ZERO; LIBRA_POLY_EVALS_LENGTH];
 
     // Finalise the batch opening claim
     denominators[0] = (tp.shplonk_z - tp.gemini_r).inverse().expect("shplonk_z - gemini_r should be invertible w.h.p.");
@@ -382,11 +381,11 @@ fn verify_shplemini<H: CurveHooks>(proof: &ZKProof, vk: &VerificationKey<H>, tp:
     denominators[2] = denominators[0];
     denominators[3] = denominators[0];
 
-    let mut batching_scalars = [Fr::ZERO; NUM_DENOMINATORS];
+    let mut batching_scalars = [Fr::ZERO; LIBRA_POLY_EVALS_LENGTH];
 
     // Artifact of interleaving, see TODO(https://github.com/AztecProtocol/barretenberg/issues/1293): Decouple Gemini from Interleaving
     batching_challenge *= tp.shplonk_nu.square();
-    for i in 0..denominators.len() { // for (uint256 i = 0; i < 4; i++) {
+    for i in 0..LIBRA_POLY_EVALS_LENGTH { // for (uint256 i = 0; i < 4; i++) {
         let scaling_factor = denominators[i] * batching_challenge;
         batching_scalars[i] = -scaling_factor;
         batching_challenge *= tp.shplonk_nu;
@@ -441,7 +440,7 @@ fn verify_shplemini<H: CurveHooks>(proof: &ZKProof, vk: &VerificationKey<H>, tp:
 }
 
 fn check_evals_consistency(
-    libra_poly_evals: &[Fr; 4],
+    libra_poly_evals: &[Fr; LIBRA_POLY_EVALS_LENGTH],
     gemini_r: Fr,
     u_challenges: &[Fr; CONST_PROOF_SIZE_LOG_N],
     libra_eval: Fr,
@@ -457,7 +456,7 @@ fn check_evals_consistency(
         uint256 currIdx = 1 + 9 * round;
         mem.challengePolyLagrange[currIdx] = Fr::ONE;
         for (uint256 idx = currIdx + 1; idx < currIdx + 9; idx++) {
-            mem.challengePolyLagrange[idx] = mem.challengePolyLagrange[idx - 1] * uChallenges[round];
+            challenge_poly_lagrange[idx] = challenge_poly_lagrange[idx - 1] * u_challenges[round];
         }
     }
 
@@ -465,12 +464,12 @@ fn check_evals_consistency(
     mem.challengePolyEval = Fr::ZERO;
     for (uint256 idx = 0; idx < SUBGROUP_SIZE; idx++) {
         mem.denominators[idx] = mem.rootPower * geminiR - ONE;
-        mem.denominators[idx] = mem.denominators[idx].invert();
+        mem.denominators[idx] = mem.denominators[idx].inverse();
         mem.challengePolyEval = mem.challengePolyEval + mem.challengePolyLagrange[idx] * mem.denominators[idx];
         mem.rootPower = mem.rootPower * SUBGROUP_GENERATOR_INVERSE;
     }
 
-    Fr numerator = vanishingPolyEval * Fr.wrap(SUBGROUP_SIZE).invert();
+    Fr numerator = vanishingPolyEval * Fr.wrap(SUBGROUP_SIZE).inverse();
     mem.challengePolyEval = mem.challengePolyEval * numerator;
     mem.lagrangeFirst = mem.denominators[0] * numerator;
     mem.lagrangeLast = mem.denominators[SUBGROUP_SIZE - 1] * numerator;
