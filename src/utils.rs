@@ -43,15 +43,15 @@ use crate::{
 use ark_bn254_ext::CurveHooks;
 use ark_ff::PrimeField;
 
-// pub(crate) trait IntoFq {
-//     fn into_fq(self) -> Fq;
-// }
+pub(crate) trait IntoFq {
+    fn into_fq(self) -> Fq;
+}
 
-// impl IntoFq for U256 {
-//     fn into_fq(self) -> Fq {
-//         Fq::from(self)
-//     }
-// }
+impl IntoFq for U256 {
+    fn into_fq(self) -> Fq {
+        Fq::from(self)
+    }
+}
 
 // impl IntoFq for u64 {
 //     fn into_fq(self) -> Fq {
@@ -188,6 +188,7 @@ pub(crate) fn read_u256(bytes: &[u8]) -> Result<U256, ()> {
         .map(IntoU256::into_u256)
 }
 
+// Parse point in G1.
 pub(crate) fn read_g1<H: CurveHooks>(data: &[u8]) -> Result<(G1<H>, &[u8]), ()> {
     if data.len() < 64 {
         return Err(());
@@ -210,7 +211,7 @@ pub(crate) fn read_g1<H: CurveHooks>(data: &[u8]) -> Result<(G1<H>, &[u8]), ()> 
     Ok((point, &data[64..]))
 }
 
-// Parse point on G2
+// Parse point in G2.
 pub(crate) fn read_g2<H: CurveHooks>(data: &[u8]) -> Result<G2<H>, ()> {
     if data.len() != 128 {
         return Err(());
@@ -227,7 +228,7 @@ pub(crate) fn read_g2<H: CurveHooks>(data: &[u8]) -> Result<G2<H>, ()> {
     Ok(G2::<H>::new(x, y))
 }
 
-// Utility function for parsing points in G2
+// Utility function for parsing points in G2.
 pub(crate) fn read_fq_util(data: &[u8]) -> Result<Fq, FieldError> {
     if data.len() != 32 {
         return Err(FieldError::InvalidSliceLength {

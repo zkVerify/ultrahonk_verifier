@@ -19,6 +19,8 @@ use ark_ff::{AdditiveGroup, Field, MontFp};
 
 use crate::constants::CONST_PROOF_SIZE_LOG_N;
 
+const TWO: Fr = MontFp!("2");
+
 pub(crate) fn compute_squares(r: Fr) -> [Fr; CONST_PROOF_SIZE_LOG_N] {
     let mut squares = [r; CONST_PROOF_SIZE_LOG_N];
 
@@ -35,12 +37,16 @@ pub(crate) fn compute_inverted_gemini_denominators(
     log_size: u64,
 ) -> [Fr; CONST_PROOF_SIZE_LOG_N + 1] {
     let mut inverse_vanishing_evals = [Fr::ZERO; CONST_PROOF_SIZE_LOG_N + 1];
-    inverse_vanishing_evals[0] = (shplonk_z - eval_challenge_powers[0]).inverse();
+    inverse_vanishing_evals[0] = (shplonk_z - eval_challenge_powers[0])
+        .inverse()
+        .expect("shplonk_z - eval_challenge_powers[0] should be invertible w.h.p.");
 
     for i in 0..CONST_PROOF_SIZE_LOG_N {
-        let round_inverted_denominator = Fr::ZERO;
+        let mut round_inverted_denominator = Fr::ZERO;
         if i as u64 <= log_size + 1 {
-            round_inverted_denominator = (shplonk_z + eval_challenge_powers[i]).inverse();
+            round_inverted_denominator = (shplonk_z + eval_challenge_powers[i])
+                .inverse()
+                .expect("shplonk_z + eval_challenge_powers[i] should be invertible w.h.p.");
         }
         inverse_vanishing_evals[i + 1] = round_inverted_denominator;
     }
@@ -51,24 +57,25 @@ pub(crate) fn compute_inverted_gemini_denominators(
 // Compute the evaluations  Aₗ(r^{2ˡ}) for l = 0, ..., m-1.
 pub(crate) fn compute_fold_pos_evaluations(
     sumcheck_u_challenges: &[Fr; CONST_PROOF_SIZE_LOG_N],
-    batched_eval_accumulator: Fr,
+    batched_eval_accumulator: &mut Fr, // !!!
     gemini_evaluations: &[Fr; CONST_PROOF_SIZE_LOG_N],
     gemini_eval_challenge_powers: &[Fr; CONST_PROOF_SIZE_LOG_N],
     log_size: u64,
 ) -> [Fr; CONST_PROOF_SIZE_LOG_N] {
-    const TWO: Fr = MontFp!("2");
     let mut fold_pos_evaluations = [Fr::ZERO; CONST_PROOF_SIZE_LOG_N];
 
     for i in (1..=CONST_PROOF_SIZE_LOG_N).rev() {
         let challenge_power = gemini_eval_challenge_powers[i - 1];
         let u = sumcheck_u_challenges[i - 1];
 
-        let batched_eval_round_acc = challenge_power * batched_eval_accumulator * TWO
+        let mut batched_eval_round_acc = challenge_power * *batched_eval_accumulator * TWO
             - gemini_evaluations[i - 1] * (challenge_power * (Fr::ONE - u) - u);
         // Divide by the denominator
-        batched_eval_round_acc *= (challenge_power * (Fr::ONE - u) + u).inverse();
+        batched_eval_round_acc *= (challenge_power * (Fr::ONE - u) + u)
+            .inverse()
+            .expect("challenge_power * (Fr::ONE - u) + u should be invertible w.h.p.");
         if i as u64 <= log_size {
-            batched_eval_accumulator = batched_eval_round_acc;
+            *batched_eval_accumulator = batched_eval_round_acc;
             fold_pos_evaluations[i - 1] = batched_eval_round_acc;
         }
     }

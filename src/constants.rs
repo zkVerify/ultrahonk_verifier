@@ -19,31 +19,31 @@ use ark_ff::MontFp;
 
 pub const CONST_PROOF_SIZE_LOG_N: usize = 28;
 pub const NUMBER_OF_SUBRELATIONS: usize = 26;
-pub const BATCHED_RELATION_PARTIAL_LENGTH: usize = 8; // for non-ZK case
-pub const ZK_BATCHED_RELATION_PARTIAL_LENGTH: usize = 9;
+pub const BATCHED_RELATION_PARTIAL_LENGTH: usize = 8; // for Standard (i.e., non-ZK) case
+pub const ZK_BATCHED_RELATION_PARTIAL_LENGTH: usize = 9; // for ZK case
 pub const NUMBER_OF_ENTITIES: usize = 40;
 pub const NUMBER_UNSHIFTED: usize = 35;
 pub const NUMBER_TO_BE_SHIFTED: usize = 5;
 pub const PAIRING_POINTS_SIZE: usize = 16;
 // Alphas are used as relation separators so there should be NUMBER_OF_SUBRELATIONS - 1
-pub const NUMBER_OF_ALPHAS: usize = 25;
+pub const NUMBER_OF_ALPHAS: usize = NUMBER_OF_SUBRELATIONS - 1; // 25
 
-pub const LIBRA_POLY_EVALS_LENGTH: usize = 4;
 pub const LIBRA_COMMITMENTS_LENGTH: usize = 3;
+pub const LIBRA_POLY_EVALS_LENGTH: usize = 4;
 
 // Scalar size (in bytes)
 const SCALAR_SIZE: usize = 32;
 // G1ProofPoint size (in bytes)
 const G1_PROOF_POINT_SIZE: usize = 32 * 4;
 
-pub(crate) const ZK_PROOF_SIZE: usize = 4 * G1_PROOF_POINT_SIZE   // 1. Commitments to wire polynomials
+pub const ZK_PROOF_SIZE: usize = 4 * G1_PROOF_POINT_SIZE   // 1. Commitments to wire polynomials
     + 3 * G1_PROOF_POINT_SIZE // 2. Commitments to logup witness polynomials
     + 4 * G1_PROOF_POINT_SIZE // 3. Commitment to grand permutation polynomial
     + (2 + NUMBER_OF_ENTITIES + ZK_BATCHED_RELATION_PARTIAL_LENGTH * CONST_PROOF_SIZE_LOG_N) * SCALAR_SIZE // 4. Sumcheck
     + G1_PROOF_POINT_SIZE + SCALAR_SIZE // 5. ZK
     + (2 + CONST_PROOF_SIZE_LOG_N - 1) * G1_PROOF_POINT_SIZE + (CONST_PROOF_SIZE_LOG_N + 4) * SCALAR_SIZE; // 6. Shplemini
 
-pub(crate) const PROOF_SIZE: usize = 4 * G1_PROOF_POINT_SIZE   // 1. Commitments to wire polynomials
+pub const PROOF_SIZE: usize = 4 * G1_PROOF_POINT_SIZE   // 1. Commitments to wire polynomials
     + G1_PROOF_POINT_SIZE // 2. Lookup helpers - Permutations
     + 3 * G1_PROOF_POINT_SIZE // 3. Lookup helpers - logup
     + (NUMBER_OF_ENTITIES + BATCHED_RELATION_PARTIAL_LENGTH * CONST_PROOF_SIZE_LOG_N) * SCALAR_SIZE  // 4. Sumcheck

@@ -14,7 +14,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{constants::{NUMBER_OF_ALPHAS, NUMBER_OF_ENTITIES, NUMBER_OF_SUBRELATIONS}, transcript::RelationParametersChallenges};
+use crate::{
+    constants::{NUMBER_OF_ALPHAS, NUMBER_OF_ENTITIES, NUMBER_OF_SUBRELATIONS},
+    transcript::RelationParametersChallenges,
+};
 use ark_bn254_ext::Fr;
 use ark_ff::{AdditiveGroup, Field, MontFp};
 
@@ -73,9 +76,12 @@ const LIMB_SIZE: Fr = MontFp!("295147905179352825856"); // 1 << 68
 const SUBLIMB_SHIFT: Fr = MontFp!("16384"); // 1 << 14
 
 // Constants for avoiding recomputations.
-const MINUS_ONE: Fr = MontFp!("21888242871839275222246405745257275088548364400416034343698204186575808495616");
-const MINUS_TWO: Fr = MontFp!("21888242871839275222246405745257275088548364400416034343698204186575808495615");
-const MINUS_THREE: Fr = MontFp!("21888242871839275222246405745257275088548364400416034343698204186575808495614");
+const MINUS_ONE: Fr =
+    MontFp!("21888242871839275222246405745257275088548364400416034343698204186575808495616");
+const MINUS_TWO: Fr =
+    MontFp!("21888242871839275222246405745257275088548364400416034343698204186575808495615");
+const MINUS_THREE: Fr =
+    MontFp!("21888242871839275222246405745257275088548364400416034343698204186575808495614");
 
 pub(crate) fn accumulate_relation_evaluations(
     purported_evaluations: &[Fr; NUMBER_OF_ENTITIES],
@@ -88,13 +94,37 @@ pub(crate) fn accumulate_relation_evaluations(
 
     // Accumulate all relations in Ultra Honk - each with varying number of subrelations
     accumulate_arithmetic_relation(purported_evaluations, &mut evaluations, pow_partial_eval);
-    accumulate_permutation_relation(purported_evaluations, rp_challenges, &mut evaluations, public_inputs_delta, pow_partial_eval);
-    accumulate_log_derivative_lookup_relation(purported_evaluations, rp_challenges, &mut evaluations, pow_partial_eval);
+    accumulate_permutation_relation(
+        purported_evaluations,
+        rp_challenges,
+        &mut evaluations,
+        public_inputs_delta,
+        pow_partial_eval,
+    );
+    accumulate_log_derivative_lookup_relation(
+        purported_evaluations,
+        rp_challenges,
+        &mut evaluations,
+        pow_partial_eval,
+    );
     accumulate_delta_range_relation(purported_evaluations, &mut evaluations, pow_partial_eval);
     accumulate_elliptic_relation(purported_evaluations, &mut evaluations, pow_partial_eval);
-    accumulate_auxillary_relation(purported_evaluations, rp_challenges, &mut evaluations, pow_partial_eval);
-    accumulate_poseidon_external_relation(purported_evaluations, &mut evaluations, pow_partial_eval);
-    accumulate_poseidon_internal_relation(purported_evaluations, &mut evaluations, pow_partial_eval);
+    accumulate_auxillary_relation(
+        purported_evaluations,
+        rp_challenges,
+        &mut evaluations,
+        pow_partial_eval,
+    );
+    accumulate_poseidon_external_relation(
+        purported_evaluations,
+        &mut evaluations,
+        pow_partial_eval,
+    );
+    accumulate_poseidon_internal_relation(
+        purported_evaluations,
+        &mut evaluations,
+        pow_partial_eval,
+    );
 
     // batch the subrelations with the alpha challenges to obtain the full honk relation
     scale_and_batch_subrelations(&evaluations, alphas) // accumulator
@@ -109,11 +139,18 @@ fn accumulate_arithmetic_relation(
     // Relation 0
     let q_arith = wire(p, Wire::Q_ARITH);
     {
-        const NEG_HALF: Fr = MontFp!("10944121435919637611123202872628637544274182200208017171849102093287904247808"); // neg half modulo P
+        const NEG_HALF: Fr = MontFp!(
+            "10944121435919637611123202872628637544274182200208017171849102093287904247808"
+        ); // neg half modulo P
 
-        let mut accum = (q_arith + MINUS_THREE) * (wire(p, Wire::Q_M) * wire(p, Wire::W_R) * wire(p, Wire::W_L)) * NEG_HALF;
-        accum += (wire(p, Wire::Q_L) * wire(p, Wire::W_L)) + (wire(p, Wire::Q_R) * wire(p, Wire::W_R))
-            + (wire(p, Wire::Q_O) * wire(p, Wire::W_O)) + (wire(p, Wire::Q_4) * wire(p, Wire::W_4)) + wire(p, Wire::Q_C);
+        let mut accum = (q_arith + MINUS_THREE)
+            * (wire(p, Wire::Q_M) * wire(p, Wire::W_R) * wire(p, Wire::W_L))
+            * NEG_HALF;
+        accum += (wire(p, Wire::Q_L) * wire(p, Wire::W_L))
+            + (wire(p, Wire::Q_R) * wire(p, Wire::W_R))
+            + (wire(p, Wire::Q_O) * wire(p, Wire::W_O))
+            + (wire(p, Wire::Q_4) * wire(p, Wire::W_4))
+            + wire(p, Wire::Q_C);
         accum += (q_arith - Fr::ONE) * wire(p, Wire::W_4_SHIFT);
         accum *= q_arith;
         accum *= domain_sep;
@@ -122,7 +159,8 @@ fn accumulate_arithmetic_relation(
 
     // Relation 1
     {
-        let mut accum = wire(p, Wire::W_L) + wire(p, Wire::W_4) - wire(p, Wire::W_L_SHIFT) + wire(p, Wire::Q_M);
+        let mut accum =
+            wire(p, Wire::W_L) + wire(p, Wire::W_4) - wire(p, Wire::W_L_SHIFT) + wire(p, Wire::Q_M);
         accum *= q_arith + MINUS_TWO;
         accum *= q_arith + MINUS_ONE;
         accum *= q_arith;
@@ -136,19 +174,27 @@ fn accumulate_permutation_relation(
     rp_challenges: &RelationParametersChallenges,
     evals: &mut [Fr; NUMBER_OF_SUBRELATIONS],
     public_inputs_delta: Fr,
-    domain_sep: Fr
+    domain_sep: Fr,
 ) {
-    let mut num = wire(p, Wire::W_L) + wire(p, Wire::ID_1) * rp_challenges.beta + rp_challenges.gamma;
-    num = num * (wire(p, Wire::W_R) + wire(p, Wire::ID_2) * rp_challenges.beta + rp_challenges.gamma);
-    num = num * (wire(p, Wire::W_O) + wire(p, Wire::ID_3) * rp_challenges.beta + rp_challenges.gamma);
-    num = num * (wire(p, Wire::W_4) + wire(p, Wire::ID_4) * rp_challenges.beta + rp_challenges.gamma);
+    let mut num =
+        wire(p, Wire::W_L) + wire(p, Wire::ID_1) * rp_challenges.beta + rp_challenges.gamma;
+    num =
+        num * (wire(p, Wire::W_R) + wire(p, Wire::ID_2) * rp_challenges.beta + rp_challenges.gamma);
+    num =
+        num * (wire(p, Wire::W_O) + wire(p, Wire::ID_3) * rp_challenges.beta + rp_challenges.gamma);
+    num =
+        num * (wire(p, Wire::W_4) + wire(p, Wire::ID_4) * rp_challenges.beta + rp_challenges.gamma);
 
     let grand_product_numerator = num;
 
-    let mut den = wire(p, Wire::W_L) + wire(p, Wire::SIGMA_1) * rp_challenges.beta + rp_challenges.gamma;
-    den = den * (wire(p, Wire::W_R) + wire(p, Wire::SIGMA_2) * rp_challenges.beta + rp_challenges.gamma);
-    den = den * (wire(p, Wire::W_O) + wire(p, Wire::SIGMA_3) * rp_challenges.beta + rp_challenges.gamma);
-    den = den * (wire(p, Wire::W_4) + wire(p, Wire::SIGMA_4) * rp_challenges.beta + rp_challenges.gamma);
+    let mut den =
+        wire(p, Wire::W_L) + wire(p, Wire::SIGMA_1) * rp_challenges.beta + rp_challenges.gamma;
+    den = den
+        * (wire(p, Wire::W_R) + wire(p, Wire::SIGMA_2) * rp_challenges.beta + rp_challenges.gamma);
+    den = den
+        * (wire(p, Wire::W_O) + wire(p, Wire::SIGMA_3) * rp_challenges.beta + rp_challenges.gamma);
+    den = den
+        * (wire(p, Wire::W_4) + wire(p, Wire::SIGMA_4) * rp_challenges.beta + rp_challenges.gamma);
 
     let grand_product_denominator = den;
 
@@ -156,42 +202,38 @@ fn accumulate_permutation_relation(
     let mut acc = (wire(p, Wire::Z_PERM) + wire(p, Wire::LAGRANGE_FIRST)) * grand_product_numerator;
 
     acc = acc
-        - (
-            (wire(p, Wire::Z_PERM_SHIFT) + (wire(p, Wire::LAGRANGE_LAST) * public_inputs_delta))
-                * grand_product_denominator
-        );
+        - ((wire(p, Wire::Z_PERM_SHIFT) + (wire(p, Wire::LAGRANGE_LAST) * public_inputs_delta))
+            * grand_product_denominator);
     acc *= domain_sep;
     evals[2] = acc;
 
     // Contribution 3
     evals[3] = (wire(p, Wire::LAGRANGE_LAST) * wire(p, Wire::Z_PERM_SHIFT)) * domain_sep;
-    
 }
 
 fn accumulate_log_derivative_lookup_relation(
     p: &[Fr; NUMBER_OF_ENTITIES],
     rp_challenges: &RelationParametersChallenges,
     evals: &mut [Fr; NUMBER_OF_SUBRELATIONS],
-    domain_sep: Fr
+    domain_sep: Fr,
 ) {
-    let mut write_term: Fr;
-    let mut read_term: Fr;
-
     // Calculate the write term (the table accumulation)
-    {
-        write_term = wire(p, Wire::TABLE_1) + rp_challenges.gamma + (wire(p, Wire::TABLE_2) * rp_challenges.eta)
-            + (wire(p, Wire::TABLE_3) * rp_challenges.eta_two) + (wire(p, Wire::TABLE_4) * rp_challenges.eta_three);
-    }
+    let write_term = wire(p, Wire::TABLE_1)
+        + rp_challenges.gamma
+        + (wire(p, Wire::TABLE_2) * rp_challenges.eta)
+        + (wire(p, Wire::TABLE_3) * rp_challenges.eta_two)
+        + (wire(p, Wire::TABLE_4) * rp_challenges.eta_three);
 
     // Calculate the write term
-    {
-        let derived_entry_1 = wire(p, Wire::W_L) + rp_challenges.gamma + (wire(p, Wire::Q_R) * wire(p, Wire::W_L_SHIFT));
-        let derived_entry_2 = wire(p, Wire::W_R) + wire(p, Wire::Q_M) * wire(p, Wire::W_R_SHIFT);
-        let derived_entry_3 = wire(p, Wire::W_O) + wire(p, Wire::Q_C) * wire(p, Wire::W_O_SHIFT);
+    let derived_entry_1 =
+        wire(p, Wire::W_L) + rp_challenges.gamma + (wire(p, Wire::Q_R) * wire(p, Wire::W_L_SHIFT));
+    let derived_entry_2 = wire(p, Wire::W_R) + wire(p, Wire::Q_M) * wire(p, Wire::W_R_SHIFT);
+    let derived_entry_3 = wire(p, Wire::W_O) + wire(p, Wire::Q_C) * wire(p, Wire::W_O_SHIFT);
 
-        read_term = derived_entry_1 + derived_entry_2 * rp_challenges.eta + derived_entry_3 * rp_challenges.eta_two
-            + wire(p, Wire::Q_O) * rp_challenges.eta_three;
-    }
+    let read_term = derived_entry_1
+        + derived_entry_2 * rp_challenges.eta
+        + derived_entry_3 * rp_challenges.eta_two
+        + wire(p, Wire::Q_O) * rp_challenges.eta_three;
 
     let read_inverse = wire(p, Wire::LOOKUP_INVERSES) * write_term;
     let write_inverse = wire(p, Wire::LOOKUP_INVERSES) * read_term;
@@ -200,11 +242,13 @@ fn accumulate_log_derivative_lookup_relation(
         - (wire(p, Wire::LOOKUP_READ_TAGS) * wire(p, Wire::Q_LOOKUP));
 
     // Inverse calculated correctly relation
-    let mut accumulator_none = read_term * write_term * wire(p, Wire::LOOKUP_INVERSES) - inverse_exists_xor;
+    let mut accumulator_none =
+        read_term * write_term * wire(p, Wire::LOOKUP_INVERSES) - inverse_exists_xor;
     accumulator_none *= domain_sep;
 
     // Inverse
-    let accumulator_one = wire(p, Wire::Q_LOOKUP) * read_inverse - wire(p, Wire::LOOKUP_READ_COUNTS) * write_inverse;
+    let accumulator_one =
+        wire(p, Wire::Q_LOOKUP) * read_inverse - wire(p, Wire::LOOKUP_READ_COUNTS) * write_inverse;
 
     evals[4] = accumulator_none;
     evals[5] = accumulator_one;
@@ -213,7 +257,7 @@ fn accumulate_log_derivative_lookup_relation(
 fn accumulate_delta_range_relation(
     p: &[Fr; NUMBER_OF_ENTITIES],
     evals: &mut [Fr; NUMBER_OF_SUBRELATIONS],
-    domain_sep: Fr
+    domain_sep: Fr,
 ) {
     // Compute wire differences
     let delta_1 = wire(p, Wire::W_R) - wire(p, Wire::W_L);
@@ -266,7 +310,7 @@ fn accumulate_delta_range_relation(
     }
 }
 
-// // NOTE: Can do away with this struct since it is only used 
+// // NOTE: Can do away with this struct since it is only used
 // // inside `accumulate_elliptic_relation`.
 // struct EllipticParams {
 //     // Points
@@ -289,7 +333,7 @@ fn accumulate_delta_range_relation(
 fn accumulate_elliptic_relation(
     p: &[Fr; NUMBER_OF_ENTITIES],
     evals: &mut [Fr; NUMBER_OF_SUBRELATIONS],
-    domain_sep: Fr
+    domain_sep: Fr,
 ) {
     let x_1 = wire(p, Wire::W_R);
     let y_1 = wire(p, Wire::W_O);
@@ -318,7 +362,8 @@ fn accumulate_elliptic_relation(
         x_add_identity *= x_diff * x_diff;
         x_add_identity += y1y2 + y1y2 - y2_sqr - y1_sqr; // x_add_identity = x_add_identity - y2_sqr - y1_sqr + y1y2 + y1y2;
 
-        evals[10] = x_add_identity * partial_eval * wire(p, Wire::Q_ELLIPTIC) * (Fr::ONE - q_is_double);
+        evals[10] =
+            x_add_identity * partial_eval * wire(p, Wire::Q_ELLIPTIC) * (Fr::ONE - q_is_double);
     }
 
     // Contribution 11 point addition, x-coordinate check
@@ -327,7 +372,8 @@ fn accumulate_elliptic_relation(
         let y1_plus_y3 = y_1 + y_3;
         let y_diff = y_2 * q_sign - y_1;
         let y_add_identity = y1_plus_y3 * x_diff + (x_3 - x_1) * y_diff;
-        evals[11] = y_add_identity * domain_sep * wire(p, Wire::Q_ELLIPTIC) * (Fr::ONE - q_is_double);
+        evals[11] =
+            y_add_identity * domain_sep * wire(p, Wire::Q_ELLIPTIC) * (Fr::ONE - q_is_double);
     }
 
     // Contribution 10 point doubling, x-coordinate check
@@ -336,7 +382,7 @@ fn accumulate_elliptic_relation(
     {
         let x_pow_4 = y1_sqr + MontFp!("17") * x_1;
         let y1_sqr_mul_4 = y1_sqr.double().double(); // y1_sqr + y1_sqr;
-        // y1_sqr_mul_4 = y1_sqr_mul_4 + y1_sqr_mul_4;
+                                                     // y1_sqr_mul_4 = y1_sqr_mul_4 + y1_sqr_mul_4;
         let x1_pow_4_mul_9 = x_pow_4 * MontFp!("9");
 
         // NOTE: pushed into memory (stack >:'( )
@@ -358,9 +404,9 @@ fn accumulate_elliptic_relation(
 
 fn accumulate_auxillary_relation(
     p: &[Fr; NUMBER_OF_ENTITIES],
-    rp: Honk.RelationParameters,
+    rp: &RelationParametersChallenges,
     evals: &mut [Fr; NUMBER_OF_SUBRELATIONS],
-    domain_sep: Fr
+    domain_sep: Fr,
 ) {
     // Contribution 12
     // Non native field arithmetic gate 2
@@ -370,9 +416,11 @@ fn accumulate_auxillary_relation(
     // q_2 . q_4 |   (w_1 . w_2) + (w_1 . w_2) + (w_1 . w_4 + w_2 . w_3 - w_3) . 2    - w_3 - w_4   |
     //            \_                                                                               _/
     //
-    let mut limb_subproduct = wire(p, Wire::W_L) * wire(p, Wire::W_R_SHIFT) + wire(p, Wire::W_L_SHIFT) * wire(p, Wire::W_R);
-    let mut non_native_field_gate_2 = 
-        wire(p, Wire::W_L) * wire(p, Wire::W_4) + wire(p, Wire::W_R) * wire(p, Wire::W_O) - wire(p, Wire::W_O_SHIFT);
+    let mut limb_subproduct = wire(p, Wire::W_L) * wire(p, Wire::W_R_SHIFT)
+        + wire(p, Wire::W_L_SHIFT) * wire(p, Wire::W_R);
+    let mut non_native_field_gate_2 = wire(p, Wire::W_L) * wire(p, Wire::W_4)
+        + wire(p, Wire::W_R) * wire(p, Wire::W_O)
+        - wire(p, Wire::W_O_SHIFT);
     non_native_field_gate_2 *= LIMB_SIZE;
     non_native_field_gate_2 -= wire(p, Wire::W_4_SHIFT);
     non_native_field_gate_2 += limb_subproduct;
@@ -464,7 +512,7 @@ fn accumulate_auxillary_relation(
     memory_record_check += wire(p, Wire::W_R) * rp.eta_two;
     memory_record_check += wire(p, Wire::W_L) * rp.eta;
     memory_record_check += wire(p, Wire::Q_C);
-    let mut partial_record_check = memory_record_check; // used in RAM consistency check; deg 1 or 4
+    let partial_record_check = memory_record_check; // used in RAM consistency check; deg 1 or 4
     memory_record_check -= wire(p, Wire::W_4);
 
     //
@@ -482,19 +530,27 @@ fn accumulate_auxillary_relation(
     // 2. index values for adjacent records are monotonically increasing
     // 3. if, at gate i, index_i == index_{i + 1}, then value1_i == value1_{i + 1} and value2_i == value2_{i + 1}
     //
-    let mut index_delta = wire(p, Wire::W_L_SHIFT) - wire(p, Wire::W_L);
-    let mut record_delta = wire(p, Wire::W_4_SHIFT) - wire(p, Wire::W_4);
+    let index_delta = wire(p, Wire::W_L_SHIFT) - wire(p, Wire::W_L);
+    let record_delta = wire(p, Wire::W_4_SHIFT) - wire(p, Wire::W_4);
 
-    let mut index_is_monotonically_increasing = index_delta.square() - index_delta; // deg 2
+    let index_is_monotonically_increasing = index_delta.square() - index_delta; // deg 2
 
-    let mut adjacent_values_match_if_adjacent_indices_match = (index_delta * MINUS_ONE + Fr::ONE) * record_delta; // deg 2
+    let adjacent_values_match_if_adjacent_indices_match =
+        (index_delta * MINUS_ONE + Fr::ONE) * record_delta; // deg 2
 
-    evals[13] = adjacent_values_match_if_adjacent_indices_match * wire(p, Wire::Q_L) * wire(p, Wire::Q_R)
-        * wire(p, Wire::Q_AUX) * domain_sep; // deg 5
-    evals[14] = index_is_monotonically_increasing * wire(p, Wire::Q_L) * wire(p, Wire::Q_R)
-        * wire(p, Wire::Q_AUX) * domain_sep; // deg 5
+    evals[13] = adjacent_values_match_if_adjacent_indices_match
+        * wire(p, Wire::Q_L)
+        * wire(p, Wire::Q_R)
+        * wire(p, Wire::Q_AUX)
+        * domain_sep; // deg 5
+    evals[14] = index_is_monotonically_increasing
+        * wire(p, Wire::Q_L)
+        * wire(p, Wire::Q_R)
+        * wire(p, Wire::Q_AUX)
+        * domain_sep; // deg 5
 
-    let rom_consistency_check_identity = memory_record_check * wire(p, Wire::Q_L) * wire(p, Wire::Q_R); // deg 3 or 7
+    let rom_consistency_check_identity =
+        memory_record_check * wire(p, Wire::Q_L) * wire(p, Wire::Q_R); // deg 3 or 7
 
     //
     // Contributions 15, 16, 17
@@ -524,23 +580,31 @@ fn accumulate_auxillary_relation(
     next_gate_access_type = wire(p, Wire::W_4_SHIFT) - next_gate_access_type;
 
     let value_delta = wire(p, Wire::W_O_SHIFT) - wire(p, Wire::W_O);
-    let adjacent_values_match_if_adjacent_indices_match_and_next_access_is_a_read_operation = (
-        index_delta * MINUS_ONE + Fr::ONE
-    ) * value_delta * (next_gate_access_type * MINUS_ONE + Fr::ONE); // deg 3 or 6
+    let adjacent_values_match_if_adjacent_indices_match_and_next_access_is_a_read_operation =
+        (index_delta * MINUS_ONE + Fr::ONE)
+            * value_delta
+            * (next_gate_access_type * MINUS_ONE + Fr::ONE); // deg 3 or 6
 
     // We can't apply the RAM consistency check identity on the final entry in the sorted list (the wires in the
     // next gate would make the identity fail).  We need to validate that its 'access type' bool is correct. Can't
     // do  with an arithmetic gate because of the  `eta` factors. We need to check that the *next* gate's access
     // type is  correct, to cover this edge case
     // deg 2 or 4
-    let next_gate_access_type_is_boolean =
-        next_gate_access_type.square() - next_gate_access_type;
+    let next_gate_access_type_is_boolean = next_gate_access_type.square() - next_gate_access_type;
 
     // Putting it all together...
     evals[15] = adjacent_values_match_if_adjacent_indices_match_and_next_access_is_a_read_operation
-        * wire(p, Wire::Q_ARITH) * wire(p, Wire::Q_AUX) * domain_sep; // deg 5 or 8
-    evals[16] = index_is_monotonically_increasing * wire(p, Wire::Q_ARITH) * wire(p, Wire::Q_AUX) * domain_sep; // deg 4
-    evals[17] = next_gate_access_type_is_boolean * wire(p, Wire::Q_ARITH) * wire(p, Wire::Q_AUX) * domain_sep; // deg 4 or 6
+        * wire(p, Wire::Q_ARITH)
+        * wire(p, Wire::Q_AUX)
+        * domain_sep; // deg 5 or 8
+    evals[16] = index_is_monotonically_increasing
+        * wire(p, Wire::Q_ARITH)
+        * wire(p, Wire::Q_AUX)
+        * domain_sep; // deg 4
+    evals[17] = next_gate_access_type_is_boolean
+        * wire(p, Wire::Q_ARITH)
+        * wire(p, Wire::Q_AUX)
+        * domain_sep; // deg 4 or 6
 
     let ram_consistency_check_identity = access_check * wire(p, Wire::Q_ARITH); // deg 3 or 9
 
@@ -570,7 +634,8 @@ fn accumulate_auxillary_relation(
     memory_identity += ram_consistency_check_identity; // deg 3 or 9
 
     // (deg 3 or 9) + (deg 4) + (deg 3)
-    let mut auxiliary_identity = memory_identity + non_native_field_identity + limb_accumulator_identity;
+    let mut auxiliary_identity =
+        memory_identity + non_native_field_identity + limb_accumulator_identity;
     auxiliary_identity *= wire(p, Wire::Q_AUX) * domain_sep; // deg 4 or 10
     evals[12] = auxiliary_identity;
 }
@@ -578,7 +643,7 @@ fn accumulate_auxillary_relation(
 fn accumulate_poseidon_external_relation(
     p: &[Fr; NUMBER_OF_ENTITIES],
     evals: &mut [Fr; NUMBER_OF_SUBRELATIONS],
-    domain_sep: Fr
+    domain_sep: Fr,
 ) {
     let s1 = wire(p, Wire::W_L) + wire(p, Wire::Q_L);
     let s2 = wire(p, Wire::W_R) + wire(p, Wire::Q_R);
@@ -589,13 +654,13 @@ fn accumulate_poseidon_external_relation(
     let u2 = s2.square().square() * s2; // s2 * s2 * s2 * s2 * s2;
     let u3 = s3.square().square() * s3; // s3 * s3 * s3 * s3 * s3;
     let u4 = s4.square().square() * s4; // s4 * s4 * s4 * s4 * s4;
-    // matrix mul v = M_E * u with 14 additions
+                                        // matrix mul v = M_E * u with 14 additions
     let t0 = u1 + u2; // u_1 + u_2
     let t1 = u3 + u4; // u_3 + u_4
     let t2 = u2.double() + t1; // 2u_2
-    // ep.t2 += ep.t1; // 2u_2 + u_3 + u_4
+                               // ep.t2 += ep.t1; // 2u_2 + u_3 + u_4
     let t3 = u4.double() + t0; // 2u_4
-    // ep.t3 += ep.t0; // u_1 + u_2 + 2u_4
+                               // ep.t3 += ep.t0; // u_1 + u_2 + 2u_4
     let mut v4 = t1.double();
     v4 = v4.double() + t3;
     // ep.v4 += ep.t3; // u_1 + u_2 + 4u_3 + 6u_4
@@ -618,7 +683,7 @@ fn accumulate_poseidon_external_relation(
 fn accumulate_poseidon_internal_relation(
     p: &[Fr; NUMBER_OF_ENTITIES],
     evals: &mut [Fr; NUMBER_OF_SUBRELATIONS],
-    domain_sep: Fr
+    domain_sep: Fr,
 ) {
     // add round constants
     let s1 = wire(p, Wire::W_L) + wire(p, Wire::Q_L);
@@ -634,22 +699,30 @@ fn accumulate_poseidon_internal_relation(
 
     let q_pos_by_scaling = wire(p, Wire::Q_POSEIDON2_INTERNAL) * domain_sep;
 
-    let v1 = u1 * MontFp!("7626475329478847982857743246276194948757851985510858890691733676098590062311") + u_sum;
+    let v1 = u1
+        * MontFp!("7626475329478847982857743246276194948757851985510858890691733676098590062311")
+        + u_sum;
     evals[22] += q_pos_by_scaling * (v1 - wire(p, Wire::W_L_SHIFT));
 
-    let v2 = u2 * MontFp!("5498568565063849786384470689962419967523752476452646391422913716315471115275") + u_sum;
+    let v2 = u2
+        * MontFp!("5498568565063849786384470689962419967523752476452646391422913716315471115275")
+        + u_sum;
     evals[23] += q_pos_by_scaling * (v2 - wire(p, Wire::W_R_SHIFT));
 
-    let v3 = u3 * MontFp!("148936322117705719734052984176402258788283488576388928671173547788498414613") + u_sum;
+    let v3 = u3
+        * MontFp!("148936322117705719734052984176402258788283488576388928671173547788498414613")
+        + u_sum;
     evals[24] += q_pos_by_scaling * (v3 - wire(p, Wire::W_O_SHIFT));
 
-    let v4 = u4 * MontFp!("15456385653678559339152734484033356164266089951521103188900320352052358038155") + u_sum;
+    let v4 = u4
+        * MontFp!("15456385653678559339152734484033356164266089951521103188900320352052358038155")
+        + u_sum;
     evals[25] += q_pos_by_scaling * (v4 - wire(p, Wire::W_4_SHIFT));
 }
 
 fn scale_and_batch_subrelations(
     evaluations: &[Fr; NUMBER_OF_SUBRELATIONS],
-    subrelation_challenges: &[Fr; NUMBER_OF_ALPHAS]
+    subrelation_challenges: &[Fr; NUMBER_OF_ALPHAS],
 ) -> Fr {
     let mut accumulator = evaluations[0];
 
