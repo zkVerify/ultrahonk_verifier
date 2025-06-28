@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![cfg_attr(not(feature = "std"), no_std)]
+//#![cfg_attr(not(feature = "std"), no_std)]
 #![doc = include_str!("../README.md")]
 #![allow(non_camel_case_types)]
 
@@ -81,7 +81,11 @@ pub fn verify<H: CurveHooks + Default>(
         unimplemented!();
     }
 
+    dbg!("Parsing AOK!");
+
     check_public_input_number(&vk, pubs)?;
+
+    dbg!("Public inputs AOK!");
 
     // let public_inputs = &pubs
     //     .iter()
@@ -105,6 +109,8 @@ fn verify_inner<H: CurveHooks>(
         /*pubInputsOffset=*/ 1,
     );
 
+    dbg!("Generated transcript!");
+
     // t.relationParameters.publicInputsDelta = compute_public_input_delta(
     //     public_inputs, t.relationParameters.beta, t.relationParameters.gamma, /*pubInputsOffset=*/1
     // );
@@ -114,17 +120,23 @@ fn verify_inner<H: CurveHooks>(
         vk.pub_inputs_offset,
     );
 
+    dbg!("Computed public_inputs_delta!");
+
     // Sumcheck
-    verify_sumcheck(proof, &t, vk.log_circuit_size, public_inputs_delta).map_err(|msg| {
+    verify_sumcheck(proof, &t, vk.log_circuit_size, public_inputs_delta).map_err(|cause| {
         VerifyError::VerificationError {
-            message: msg.to_string(),
+            message: format!("Sumcheck Failed. {}", cause),
         }
     })?;
+
+    dbg!("Sumcheck AOK!");
 
     // Shplemini
     verify_shplemini(proof, vk, &t).map_err(|cause| VerifyError::VerificationError {
         message: format!("Shplemini Failed. {}", cause),
-    }) // revert ShpleminiFailed()
+    })?; // revert ShpleminiFailed()
+
+    Ok(())
 }
 
 fn check_public_input_number<H: CurveHooks>(
@@ -144,7 +156,6 @@ fn check_public_input_number<H: CurveHooks>(
     }
 }
 
-// TODO: Replace &'static str with a proper error enum.
 fn verify_sumcheck(
     proof: &ZKProof,
     tp: &ZKTranscript,
@@ -175,7 +186,7 @@ fn verify_sumcheck(
             * (Fr::ONE + round_challenge * (tp.gate_challenges[round] - Fr::ONE));
     }
 
-    // Last round
+    // Final round
     let mut grand_honk_relation_sum = accumulate_relation_evaluations(
         &proof.sumcheck_evaluations,
         &tp.relation_parameters_challenges,
@@ -186,12 +197,12 @@ fn verify_sumcheck(
 
     let mut evaluation = Fr::ONE;
     for i in 2..log_circuit_size {
-        // (uint256 i = 2; i < LOG_N; i++) {
         evaluation *= tp.sumcheck_u_challenges[i];
     }
 
     grand_honk_relation_sum = grand_honk_relation_sum * (Fr::ONE - evaluation)
         + proof.libra_evaluation * tp.libra_challenge;
+
     if grand_honk_relation_sum == round_target_sum {
         Ok(())
     } else {
@@ -292,11 +303,14 @@ fn verify_shplemini<H: CurveHooks>(
         batching_challenge *= tp.rho;
     }
 
+    // gemini_masking_poly is
     commitments[1] = convert_proof_point::<H>(proof.gemini_masking_poly).map_err(|_| {
         ProofError::PointNotOnCurve {
             field: ProofCommitmentField::GEMINI_MASKING_POLY.to_string(),
         }
     })?;
+
+    println!("Checkpoint No.1");
 
     commitments[2] = vk.q_m;
     commitments[3] = vk.q_c;
@@ -325,6 +339,8 @@ fn verify_shplemini<H: CurveHooks>(
     commitments[26] = vk.t_4;
     commitments[27] = vk.lagrange_first;
     commitments[28] = vk.lagrange_last;
+
+    println!("Checkpoint No.2");
 
     // Accumulate proof points
     commitments[29] = convert_proof_point(proof.w1).map_err(|_| ProofError::PointNotOnCurve {

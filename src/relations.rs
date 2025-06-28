@@ -310,26 +310,6 @@ fn accumulate_delta_range_relation(
     }
 }
 
-// // NOTE: Can do away with this struct since it is only used
-// // inside `accumulate_elliptic_relation`.
-// struct EllipticParams {
-//     // Points
-//     x_1: Fr,
-//     y_1: Fr,
-//     x_2: Fr,
-//     y_2: Fr,
-//     x_3: Fr,
-//     y_3: Fr,
-//     // push accumulators into memory
-//     // x_double_identity: Fr,
-// }
-
-// impl EllipticParams {
-//     fn new(x_1: Fr, y_1: Fr, x_2: Fr, y_2: Fr, x_3: Fr, y_3: Fr) -> Self {
-//         Self { x_1, y_1, x_2, y_2, x_3, y_3 }
-//     }
-// }
-
 fn accumulate_elliptic_relation(
     p: &[Fr; NUMBER_OF_ENTITIES],
     evals: &mut [Fr; NUMBER_OF_SUBRELATIONS],
@@ -343,8 +323,6 @@ fn accumulate_elliptic_relation(
     let x_3 = wire(p, Wire::W_R_SHIFT);
     let y_3 = wire(p, Wire::W_O_SHIFT);
 
-    // let ep = EllipticParams::new(x_1, y_1, x_2, y_2, x_3, y_3); // Can safely remove
-
     let q_sign = wire(p, Wire::Q_L);
     let q_is_double = wire(p, Wire::Q_M);
 
@@ -356,7 +334,7 @@ fn accumulate_elliptic_relation(
         // Move to top
         let partial_eval = domain_sep;
 
-        let y2_sqr = y_2.square();
+        let y2_sqr = y_2 * y_2;
         let y1y2 = y_1 * y_2 * q_sign;
         let mut x_add_identity = x_3 + x_2 + x_1;
         x_add_identity *= x_diff * x_diff;
@@ -380,17 +358,15 @@ fn accumulate_elliptic_relation(
     // (x3 + x1 + x1) (4y1*y1) - 9 * x1 * x1 * x1 * x1 = 0
     // N.B. we're using the equivalence x1*x1*x1 === y1*y1 - curve_b to reduce degree by 1
     {
-        let x_pow_4 = y1_sqr + MontFp!("17") * x_1;
+        let x_pow_4 = (y1_sqr + MontFp!("17")) * x_1;
         let y1_sqr_mul_4 = y1_sqr.double().double(); // y1_sqr + y1_sqr;
                                                      // y1_sqr_mul_4 = y1_sqr_mul_4 + y1_sqr_mul_4;
         let x1_pow_4_mul_9 = x_pow_4 * MontFp!("9");
 
-        // NOTE: pushed into memory (stack >:'( )
         // ep.x_double_identity = (ep.x_3 + ep.x_1 + ep.x_1) * y1_sqr_mul_4 - x1_pow_4_mul_9;
         let x_double_identity = (x_3 + x_1.double()) * y1_sqr_mul_4 - x1_pow_4_mul_9;
 
-        let acc = x_double_identity * domain_sep * wire(p, Wire::Q_ELLIPTIC) * q_is_double;
-        evals[10] += acc;
+        evals[10] += x_double_identity * domain_sep * wire(p, Wire::Q_ELLIPTIC) * q_is_double;
     }
 
     // Contribution 11 point doubling, y-coordinate check

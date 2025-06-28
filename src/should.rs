@@ -1035,6 +1035,15 @@ fn valid_pubs() -> [PublicInput; 2] {
     ]
 }
 
+#[rstest]
+fn verify_valid_zk_proof(
+    valid_vk: [u8; VK_SIZE],
+    valid_zk_proof: [u8; ZK_PROOF_SIZE],
+    valid_pubs: [PublicInput; 2],
+) {
+    assert!(verify::<()>(&valid_vk, &ProofType::ZK(valid_zk_proof), &valid_pubs).is_ok());
+}
+
 mod reject {
     use super::*;
 }

@@ -201,6 +201,7 @@ impl ProofCommitmentField {
 
 pub(crate) fn convert_proof_point<H: CurveHooks>(
     g1_proof_point: G1ProofPoint,
+    validate: bool,
 ) -> Result<G1<H>, GroupError> {
     const N: u32 = 136;
     let x = Fq::from_bigint(g1_proof_point.x_0.bitor(g1_proof_point.x_1.shl(N)))
@@ -210,10 +211,22 @@ pub(crate) fn convert_proof_point<H: CurveHooks>(
 
     let point = G1::<H>::new_unchecked(x, y);
 
-    // Validate point
-    if !point.is_on_curve() {
-        return Err(GroupError::NotOnCurve);
+    println!("So far, so good...");
+
+    dbg!(
+        g1_proof_point.x_0,
+        g1_proof_point.x_1,
+        g1_proof_point.y_0,
+        g1_proof_point.y_1
+    );
+
+    // Validate point only if flag is set
+    if validate {
+        if !point.is_on_curve() {
+            return Err(GroupError::NotOnCurve);
+        }
     }
+
     // The following cannot happen for G1 with the BN254 curve.
     // if !point.is_in_correct_subgroup_assuming_on_curve() {...}
 
@@ -305,7 +318,12 @@ impl TryFrom<&[u8]> for ZKProof {
         libra_commitments[1] = read_g1_proof_point(proof_bytes, &mut offset)?;
         libra_commitments[2] = read_g1_proof_point(proof_bytes, &mut offset)?;
 
+        dbg!(libra_commitments);
+
         let gemini_masking_poly = read_g1_proof_point(proof_bytes, &mut offset)?;
+
+        dbg!(gemini_masking_poly);
+
         let gemini_masking_eval = read_fr(proof_bytes, &mut offset)?;
 
         // Gemini

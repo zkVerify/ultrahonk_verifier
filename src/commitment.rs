@@ -31,28 +31,29 @@ pub(crate) fn compute_squares(r: Fr) -> [Fr; CONST_PROOF_SIZE_LOG_N] {
     squares
 }
 
-pub(crate) fn compute_inverted_gemini_denominators(
-    shplonk_z: Fr,
-    eval_challenge_powers: &[Fr; CONST_PROOF_SIZE_LOG_N],
-    log_size: u64,
-) -> [Fr; CONST_PROOF_SIZE_LOG_N + 1] {
-    let mut inverse_vanishing_evals = [Fr::ZERO; CONST_PROOF_SIZE_LOG_N + 1];
-    inverse_vanishing_evals[0] = (shplonk_z - eval_challenge_powers[0])
-        .inverse()
-        .expect("shplonk_z - eval_challenge_powers[0] should be invertible w.h.p.");
+// UNUSED
+// pub(crate) fn compute_inverted_gemini_denominators(
+//     shplonk_z: Fr,
+//     eval_challenge_powers: &[Fr; CONST_PROOF_SIZE_LOG_N],
+//     log_size: u64,
+// ) -> [Fr; CONST_PROOF_SIZE_LOG_N + 1] {
+//     let mut inverse_vanishing_evals = [Fr::ZERO; CONST_PROOF_SIZE_LOG_N + 1];
+//     inverse_vanishing_evals[0] = (shplonk_z - eval_challenge_powers[0])
+//         .inverse()
+//         .expect("shplonk_z - eval_challenge_powers[0] should be invertible w.h.p.");
 
-    for i in 0..CONST_PROOF_SIZE_LOG_N {
-        let mut round_inverted_denominator = Fr::ZERO;
-        if i as u64 <= log_size + 1 {
-            round_inverted_denominator = (shplonk_z + eval_challenge_powers[i])
-                .inverse()
-                .expect("shplonk_z + eval_challenge_powers[i] should be invertible w.h.p.");
-        }
-        inverse_vanishing_evals[i + 1] = round_inverted_denominator;
-    }
+//     for i in 0..CONST_PROOF_SIZE_LOG_N {
+//         let mut round_inverted_denominator = Fr::ZERO;
+//         if i as u64 <= log_size + 1 {
+//             round_inverted_denominator = (shplonk_z + eval_challenge_powers[i])
+//                 .inverse()
+//                 .expect("shplonk_z + eval_challenge_powers[i] should be invertible w.h.p.");
+//         }
+//         inverse_vanishing_evals[i + 1] = round_inverted_denominator;
+//     }
 
-    inverse_vanishing_evals
-}
+//     inverse_vanishing_evals
+// }
 
 // Compute the evaluations  Aₗ(r^{2ˡ}) for l = 0, ..., m-1.
 pub(crate) fn compute_fold_pos_evaluations(

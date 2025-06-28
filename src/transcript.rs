@@ -23,11 +23,11 @@ use crate::{
     utils::IntoBEBytes32,
     Pubs,
 };
-// use alloc::vec::Vec;
 use ark_bn254_ext::Fr;
 use ark_ff::{AdditiveGroup, Field, PrimeField};
 use sha3::{Digest, Keccak256};
 
+#[derive(Debug)]
 pub(crate) struct ZKTranscript {
     // Oink
     pub(crate) relation_parameters_challenges: RelationParametersChallenges,
@@ -105,20 +105,10 @@ impl RelationParametersChallenges {
         }
 
         let public_inputs_delta = numerator / denominator;
-        // publicInputDelta = FrLib.div(numerator, denominator);
 
         public_inputs_delta
     }
 }
-
-// Do we really need this type?
-// #[derive(Debug)]
-// pub struct RelationParameters {
-//     // challenges
-//     challenges: RelationParametersChallenges,
-//     // derived
-//     public_inputs_delta: Fr,
-// }
 
 pub(crate) fn generate_transcript(
     proof: &ZKProof,
@@ -164,7 +154,7 @@ pub(crate) fn generate_transcript(
         rp_challenges.public_inputs_delta(public_inputs, circuit_size, pub_inputs_offset);
 
     ZKTranscript {
-        relation_parameters_challenges: rp_challenges, // relation_parameters,
+        relation_parameters_challenges: rp_challenges,
         alphas,
         gate_challenges,
         libra_challenge,
