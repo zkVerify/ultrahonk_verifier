@@ -136,6 +136,8 @@ fn verify_inner<H: CurveHooks>(
         message: format!("Shplemini Failed. {}", cause),
     })?; // revert ShpleminiFailed()
 
+    dbg!("Shplemini AOK!");
+
     Ok(())
 }
 
@@ -310,8 +312,6 @@ fn verify_shplemini<H: CurveHooks>(
         }
     })?;
 
-    println!("Checkpoint No.1");
-
     commitments[2] = vk.q_m;
     commitments[3] = vk.q_c;
     commitments[4] = vk.q_l;
@@ -339,8 +339,6 @@ fn verify_shplemini<H: CurveHooks>(
     commitments[26] = vk.t_4;
     commitments[27] = vk.lagrange_first;
     commitments[28] = vk.lagrange_last;
-
-    println!("Checkpoint No.2");
 
     // Accumulate proof points
     commitments[29] = convert_proof_point(proof.w1).map_err(|_| ProofError::PointNotOnCurve {
@@ -490,6 +488,8 @@ fn verify_shplemini<H: CurveHooks>(
     scalars[boundary] = constant_term_accumulator;
     boundary += 1;
 
+    println!("cHECK");
+
     match check_evals_consistency(
         &proof.libra_poly_evals,
         tp.gemini_r,
@@ -499,6 +499,8 @@ fn verify_shplemini<H: CurveHooks>(
         Err(msg) => return Err(ProofError::ConsistencyCheckFailed { message: msg }),
         _ => {}
     }
+
+    println!("cHECK AGAIN");
 
     let quotient_commitment =
         convert_proof_point(proof.kzg_quotient).map_err(|_| ProofError::PointNotOnCurve {
@@ -593,6 +595,8 @@ fn check_evals_consistency(
     if diff == Fr::ZERO {
         return Err("Consistency Condition Not Satisfied");
     }
+
+    println!("Got past the consistency condition!");
 
     Ok(())
 }

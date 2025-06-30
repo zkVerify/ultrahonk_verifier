@@ -15,6 +15,7 @@
 // limitations under the License.
 
 use ark_bn254_ext::{CurveHooks, Fq};
+use ark_ec::AffineRepr;
 use ark_ff::{AdditiveGroup, PrimeField};
 use snafu::Snafu;
 
@@ -201,7 +202,6 @@ impl ProofCommitmentField {
 
 pub(crate) fn convert_proof_point<H: CurveHooks>(
     g1_proof_point: G1ProofPoint,
-    validate: bool,
 ) -> Result<G1<H>, GroupError> {
     const N: u32 = 136;
     let x = Fq::from_bigint(g1_proof_point.x_0.bitor(g1_proof_point.x_1.shl(N)))
@@ -209,22 +209,14 @@ pub(crate) fn convert_proof_point<H: CurveHooks>(
     let y = Fq::from_bigint(g1_proof_point.y_0.bitor(g1_proof_point.y_1.shl(N)))
         .expect("Should always succeed");
 
+    if x == Fq::ZERO && y == Fq::ZERO {
+        return Ok(G1::<H>::identity());
+    }
+
     let point = G1::<H>::new_unchecked(x, y);
 
-    println!("So far, so good...");
-
-    dbg!(
-        g1_proof_point.x_0,
-        g1_proof_point.x_1,
-        g1_proof_point.y_0,
-        g1_proof_point.y_1
-    );
-
-    // Validate point only if flag is set
-    if validate {
-        if !point.is_on_curve() {
-            return Err(GroupError::NotOnCurve);
-        }
+    if !point.is_on_curve() {
+        return Err(GroupError::NotOnCurve);
     }
 
     // The following cannot happen for G1 with the BN254 curve.
