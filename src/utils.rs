@@ -217,15 +217,15 @@ pub(crate) fn read_g2<H: CurveHooks>(data: &[u8]) -> Result<G2<H>, ()> {
         return Err(());
     }
 
-    let x_c0 = read_fq_util(&data[0..32]).expect("Parsing the SRS should always succeed!");
-    let x_c1 = read_fq_util(&data[32..64]).expect("Parsing the SRS should always succeed!");
-    let y_c0 = read_fq_util(&data[64..96]).expect("Parsing the SRS should always succeed!");
-    let y_c1 = read_fq_util(&data[96..128]).expect("Parsing the SRS should always succeed!");
+    // Reverse order to obtain the same encoding as Solidity:
+    // https://eips.ethereum.org/EIPS/eip-197#encoding
+    let x_c1 = read_fq_util(&data[0..32]).expect("Parsing the SRS should always succeed!");
+    let x_c0 = read_fq_util(&data[32..64]).expect("Parsing the SRS should always succeed!");
+    let y_c1 = read_fq_util(&data[64..96]).expect("Parsing the SRS should always succeed!");
+    let y_c0 = read_fq_util(&data[96..128]).expect("Parsing the SRS should always succeed!");
 
     let x = Fq2::new(x_c0, x_c1);
     let y = Fq2::new(y_c0, y_c1);
-
-    println!("Almost done");
 
     Ok(G2::<H>::new(x, y))
 }

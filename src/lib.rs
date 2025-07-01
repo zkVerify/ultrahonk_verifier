@@ -81,16 +81,7 @@ pub fn verify<H: CurveHooks + Default>(
         unimplemented!();
     }
 
-    dbg!("Parsing AOK!");
-
     check_public_input_number(&vk, pubs)?;
-
-    dbg!("Public inputs AOK!");
-
-    // let public_inputs = &pubs
-    //     .iter()
-    //     .map(|pi_bytes| pi_bytes.into_u256())
-    //     .collect::<Vec<U256>>();
 
     verify_inner(&vk, &proof, &pubs)
 }
@@ -109,18 +100,11 @@ fn verify_inner<H: CurveHooks>(
         /*pubInputsOffset=*/ 1,
     );
 
-    dbg!("Generated transcript!");
-
-    // t.relationParameters.publicInputsDelta = compute_public_input_delta(
-    //     public_inputs, t.relationParameters.beta, t.relationParameters.gamma, /*pubInputsOffset=*/1
-    // );
     let public_inputs_delta = t.relation_parameters_challenges.public_inputs_delta(
         public_inputs,
         vk.circuit_size,
         vk.pub_inputs_offset,
     );
-
-    dbg!("Computed public_inputs_delta!");
 
     // Sumcheck
     verify_sumcheck(proof, &t, vk.log_circuit_size, public_inputs_delta).map_err(|cause| {
@@ -129,14 +113,10 @@ fn verify_inner<H: CurveHooks>(
         }
     })?;
 
-    dbg!("Sumcheck AOK!");
-
     // Shplemini
     verify_shplemini(proof, vk, &t).map_err(|cause| VerifyError::VerificationError {
         message: format!("Shplemini Failed. {}", cause),
     })?; // revert ShpleminiFailed()
-
-    dbg!("Shplemini AOK!");
 
     Ok(())
 }
@@ -399,18 +379,12 @@ fn verify_shplemini<H: CurveHooks>(
         vk.log_circuit_size,
     );
 
-    dbg!(fold_pos_evaluations);
-
     let mut constant_term_accumulator = fold_pos_evaluations[0] * pos_inverted_denominator;
     constant_term_accumulator +=
         proof.gemini_a_evaluations[0] * tp.shplonk_nu * neg_inverted_denominator;
 
     batching_challenge = tp.shplonk_nu.square();
     let mut boundary = NUMBER_OF_ENTITIES + 2;
-
-    dbg!(constant_term_accumulator);
-    dbg!(batching_challenge);
-    dbg!(boundary);
 
     let mut scaling_factor_pos: Fr;
     let mut scaling_factor_neg: Fr;
@@ -466,8 +440,6 @@ fn verify_shplemini<H: CurveHooks>(
     denominators[2] = denominators[0];
     denominators[3] = denominators[0];
 
-    dbg!(denominators);
-
     let mut batching_scalars = [Fr::ZERO; LIBRA_POLY_EVALS_LENGTH];
 
     // Artifact of interleaving, see TODO(https://github.com/AztecProtocol/barretenberg/issues/1293): Decouple Gemini from Interleaving
@@ -481,8 +453,6 @@ fn verify_shplemini<H: CurveHooks>(
     scalars[boundary] = batching_scalars[0];
     scalars[boundary + 1] = batching_scalars[1] + batching_scalars[2];
     scalars[boundary + 2] = batching_scalars[3];
-
-    dbg!(scalars);
 
     for i in 0..LIBRA_COMMITMENTS_LENGTH {
         commitments[boundary] = convert_proof_point(proof.libra_commitments[i]).map_err(|_| {
@@ -523,16 +493,12 @@ fn verify_shplemini<H: CurveHooks>(
 
     let g1_points = [G1Prepared::from(p_0.into_affine()), G1Prepared::from(p_1)];
 
-    println!("ok");
-    let temp2 = G2Prepared::from(
-        read_g2::<H>(&SRS_G2_VK).expect("Parsing the SRS point should always work"),
-    );
-    println!("ok");
-    let temp1 =
-        G2Prepared::from(read_g2::<H>(&SRS_G2).expect("Parsing the SRS point should always work"));
-    println!("ok");
-    let g2_points = [temp1, temp2];
-    println!("ok");
+    let g2_points = [
+        G2Prepared::from(read_g2::<H>(&SRS_G2).expect("Parsing the SRS point should always work")),
+        G2Prepared::from(
+            read_g2::<H>(&SRS_G2_VK).expect("Parsing the SRS point should always work"),
+        ),
+    ];
 
     let product = Bn254::<H>::multi_pairing(g1_points, g2_points);
 

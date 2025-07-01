@@ -310,11 +310,7 @@ impl TryFrom<&[u8]> for ZKProof {
         libra_commitments[1] = read_g1_proof_point(proof_bytes, &mut offset)?;
         libra_commitments[2] = read_g1_proof_point(proof_bytes, &mut offset)?;
 
-        dbg!(libra_commitments);
-
         let gemini_masking_poly = read_g1_proof_point(proof_bytes, &mut offset)?;
-
-        dbg!(gemini_masking_poly);
 
         let gemini_masking_eval = read_fr(proof_bytes, &mut offset)?;
 
