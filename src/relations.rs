@@ -359,17 +359,14 @@ fn accumulate_elliptic_relation(
     // N.B. we're using the equivalence x1*x1*x1 === y1*y1 - curve_b to reduce degree by 1
     {
         let x_pow_4 = (y1_sqr + MontFp!("17")) * x_1;
-        let y1_sqr_mul_4 = y1_sqr.double().double(); // y1_sqr + y1_sqr;
-                                                     // y1_sqr_mul_4 = y1_sqr_mul_4 + y1_sqr_mul_4;
+        let y1_sqr_mul_4 = y1_sqr.double().double();
         let x1_pow_4_mul_9 = x_pow_4 * MontFp!("9");
-
-        // ep.x_double_identity = (ep.x_3 + ep.x_1 + ep.x_1) * y1_sqr_mul_4 - x1_pow_4_mul_9;
         let x_double_identity = (x_3 + x_1.double()) * y1_sqr_mul_4 - x1_pow_4_mul_9;
 
         evals[10] += x_double_identity * domain_sep * wire(p, Wire::Q_ELLIPTIC) * q_is_double;
     }
 
-    // Contribution 11 point doubling, y-coordinate check
+    // Contribution 11 point doubling, y-coordinate check:
     // (y1 + y1) (2y1) - (3 * x1 * x1)(x1 - x3) = 0
     {
         let x1_sqr_mul_3 = (x_1.double() + x_1) * x_1;

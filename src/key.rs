@@ -16,8 +16,6 @@
 
 #![allow(non_camel_case_types)]
 
-use alloc::{format, string::String};
-
 use crate::utils::{read_g1, read_u64};
 use crate::{G1, VK_SIZE};
 use ark_bn254_ext::CurveHooks;
@@ -127,39 +125,6 @@ impl CommitmentField {
             CommitmentField::T_4 => "T_4",
             CommitmentField::Lagrange_First => "Lagrange_First",
             CommitmentField::Lagrange_Last => "Lagrange_Last",
-        }
-    }
-
-    fn try_from(value: &str) -> Result<Self, String> {
-        match value {
-            "Q_M" => Ok(CommitmentField::Q_M),
-            "Q_C" => Ok(CommitmentField::Q_C),
-            "Q_L" => Ok(CommitmentField::Q_L),
-            "Q_R" => Ok(CommitmentField::Q_R),
-            "Q_O" => Ok(CommitmentField::Q_O),
-            "Q_4" => Ok(CommitmentField::Q_4),
-            "Q_LOOKUP" => Ok(CommitmentField::Q_LOOKUP),
-            "Q_ARITH" => Ok(CommitmentField::Q_ARITH),
-            "Q_DELTARANGE" => Ok(CommitmentField::Q_DELTARANGE),
-            "Q_ELLIPTIC" => Ok(CommitmentField::Q_ELLIPTIC),
-            "Q_AUX" => Ok(CommitmentField::Q_AUX),
-            "Q_POSEIDON2EXTERNAL" => Ok(CommitmentField::Q_POSEIDON2EXTERNAL),
-            "Q_POSEIDON2INTERNAL" => Ok(CommitmentField::Q_POSEIDON2INTERNAL),
-            "S_1" => Ok(CommitmentField::S_1),
-            "S_2" => Ok(CommitmentField::S_2),
-            "S_3" => Ok(CommitmentField::S_3),
-            "S_4" => Ok(CommitmentField::S_4),
-            "ID_1" => Ok(CommitmentField::ID_1),
-            "ID_2" => Ok(CommitmentField::ID_2),
-            "ID_3" => Ok(CommitmentField::ID_3),
-            "ID_4" => Ok(CommitmentField::ID_4),
-            "T_1" => Ok(CommitmentField::T_1),
-            "T_2" => Ok(CommitmentField::T_2),
-            "T_3" => Ok(CommitmentField::T_3),
-            "T_4" => Ok(CommitmentField::T_4),
-            "Lagrange_First" => Ok(CommitmentField::Lagrange_First),
-            "Lagrange_Last" => Ok(CommitmentField::Lagrange_Last),
-            _ => Err(format!("Invalid commitment field '{}'", value)),
         }
     }
 }

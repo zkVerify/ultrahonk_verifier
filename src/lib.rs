@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//#![cfg_attr(not(feature = "std"), no_std)]
+#![cfg_attr(not(feature = "std"), no_std)]
 #![doc = include_str!("../README.md")]
 #![allow(non_camel_case_types)]
 
@@ -116,7 +116,7 @@ fn verify_inner<H: CurveHooks>(
     // Shplemini
     verify_shplemini(proof, vk, &t).map_err(|cause| VerifyError::VerificationError {
         message: format!("Shplemini Failed. {}", cause),
-    })?; // revert ShpleminiFailed()
+    })?;
 
     Ok(())
 }
@@ -147,16 +147,15 @@ fn verify_sumcheck(
     let log_circuit_size: usize = log_circuit_size
         .try_into()
         .map_err(|_| "Given log_circuit_size does not fit in a u64.")?;
-    let mut round_target_sum = tp.libra_challenge * proof.libra_sum; // default 0
+    let mut round_target_sum = tp.libra_challenge * proof.libra_sum;
     let mut pow_partial_evaluation = Fr::ONE;
 
     // We perform sumcheck reductions over log n rounds (i.e., the multivariate degree)
-    // for (uint256 round; round < LOG_N; ++round) {
     for round in 0..log_circuit_size {
         let round_univariate = proof.sumcheck_univariates[round];
         let total_sum = round_univariate[0] + round_univariate[1];
         if total_sum != round_target_sum {
-            return Err("Sumcheck failed"); // revert SumcheckFailed();
+            return Err("Sumcheck failed");
         }
 
         let round_challenge = tp.sumcheck_u_challenges[round];
@@ -213,7 +212,6 @@ fn compute_next_target_sum(
 
     // To compute the next target sum, we evaluate the given univariate at a point u (challenge).
 
-    // TODO: opt: use same array mem for each iteration
     // Performing Barycentric evaluations
     // Compute B(x)
     let mut numerator_value = Fr::ONE;
@@ -246,8 +244,8 @@ fn verify_shplemini<H: CurveHooks>(
     tp: &ZKTranscript,
 ) -> Result<(), ProofError> {
     // - Compute vector (r, r², ..., r²⁽ⁿ⁻¹⁾), where n := log_circuit_size
-    let powers_of_evaluation_challenge = compute_squares(tp.gemini_r); // [Fr; CONST_PROOF_SIZE_LOG_N]
-                                                                       // Arrays hold values that will be linearly combined for the gemini and shplonk batch openings
+    let powers_of_evaluation_challenge = compute_squares(tp.gemini_r);
+    // Arrays hold values that will be linearly combined for the gemini and shplonk batch openings
     let mut scalars = [Fr::ZERO; NUMBER_OF_ENTITIES + CONST_PROOF_SIZE_LOG_N + 3 + 3];
     let mut commitments = [G1::<H>::default(); NUMBER_OF_ENTITIES + CONST_PROOF_SIZE_LOG_N + 3 + 3];
 
@@ -351,23 +349,12 @@ fn verify_shplemini<H: CurveHooks>(
         })?;
 
     // to be Shifted
-    // NOTE: The following 5 points are validated anew. Can skip that by cloning.
-    commitments[37] = convert_proof_point(proof.w1).map_err(|_| ProofError::PointNotOnCurve {
-        field: ProofCommitmentField::W_1.to_string(),
-    })?;
-    commitments[38] = convert_proof_point(proof.w2).map_err(|_| ProofError::PointNotOnCurve {
-        field: ProofCommitmentField::W_2.to_string(),
-    })?;
-    commitments[39] = convert_proof_point(proof.w3).map_err(|_| ProofError::PointNotOnCurve {
-        field: ProofCommitmentField::W_3.to_string(),
-    })?;
-    commitments[40] = convert_proof_point(proof.w4).map_err(|_| ProofError::PointNotOnCurve {
-        field: ProofCommitmentField::W_4.to_string(),
-    })?;
-    commitments[41] =
-        convert_proof_point(proof.z_perm).map_err(|_| ProofError::PointNotOnCurve {
-            field: ProofCommitmentField::Z_PERM.to_string(),
-        })?;
+    // The following 5 points are cloned to avoid re-validation.
+    commitments[37] = commitments[29].clone();
+    commitments[38] = commitments[30].clone();
+    commitments[39] = commitments[31].clone();
+    commitments[40] = commitments[32].clone();
+    commitments[41] = commitments[33].clone();
 
     // Add contributions from A₀(r) and A₀(-r) to constant_term_accumulator:
     // Compute the evaluations Aₗ(r^{2ˡ}) for l = 0, ..., logN - 1.
@@ -392,7 +379,6 @@ fn verify_shplemini<H: CurveHooks>(
     // Compute Shplonk constant term contributions from Aₗ(± r^{2ˡ}) for l = 1, ..., m-1;
     // Compute scalar multipliers for each fold commitment
     for i in 0..(CONST_PROOF_SIZE_LOG_N - 1) {
-        // for (uint256 i = 0; i < CONST_PROOF_SIZE_LOG_N - 1; ++i) {
         let dummy_round = i as u64 >= (vk.log_circuit_size - 1);
 
         if !dummy_round {
@@ -488,7 +474,7 @@ fn verify_shplemini<H: CurveHooks>(
     // Pairing Check
     let p_0 = H::bn254_msm_g1(&commitments, &scalars).map_err(|_| ProofError::OtherError {
         message: "Shplemini MSM computation failed.".to_string(),
-    })?; // batchMul(commitments, scalars);
+    })?;
     let p_1 = -quotient_commitment;
 
     let g1_points = [G1Prepared::from(p_0.into_affine()), G1Prepared::from(p_1)];
@@ -517,7 +503,7 @@ fn check_evals_consistency(
 ) -> Result<(), &'static str> {
     let vanishing_poly_eval = gemini_r.pow([SUBGROUP_SIZE as u64]) - Fr::ONE;
     if vanishing_poly_eval == Fr::ZERO {
-        return Err("Gemini Challenge In Subgroup"); // revert GeminiChallengeInSubgroup();
+        return Err("Gemini Challenge In Subgroup");
     }
 
     let mut challenge_poly_lagrange = [Fr::ZERO; SUBGROUP_SIZE as usize];
@@ -557,7 +543,7 @@ fn check_evals_consistency(
     let lagrange_last = *denominators
         .last()
         .expect("Last element should always exist")
-        * numerator; // denominators[SUBGROUP_SIZE - 1] * numerator
+        * numerator;
 
     let mut diff = lagrange_first * libra_poly_evals[2];
 

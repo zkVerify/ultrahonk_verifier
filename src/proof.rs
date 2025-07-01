@@ -15,7 +15,6 @@
 // limitations under the License.
 
 use ark_bn254_ext::{CurveHooks, Fq};
-use ark_ec::AffineRepr;
 use ark_ff::{AdditiveGroup, PrimeField};
 use snafu::Snafu;
 
@@ -81,7 +80,6 @@ pub struct G1ProofPoint {
     pub y_1: U256,
 }
 
-// This is undesirable... TODO: Remove if possible.
 impl Default for G1ProofPoint {
     fn default() -> Self {
         Self {
@@ -157,7 +155,6 @@ fn read_fr(data: &[u8], offset: &mut usize) -> Result<Fr, ProofError> {
     let chunk: [u8; 32] = data[start..end]
         .try_into()
         .expect("Not enough bytes for field element");
-    // TODO: DOUBLE-CHECK
     Ok(Fr::from_be_bytes_mod_order(&chunk)).inspect(|_| {
         *offset += 32;
     })
@@ -324,10 +321,6 @@ impl TryFrom<&[u8]> for ZKProof {
             .collect::<Vec<_>>()
             .try_into()
             .expect("Should always be able to convert to array");
-        // let mut gemini_fold_comms: [G1ProofPoint<H>; CONST_PROOF_SIZE_LOG_N - 1];
-        // for i in 0..(CONST_PROOF_SIZE_LOG_N - 1) {
-        //     gemini_fold_comms[i] = read_g1_proof_point::<H>(proof_bytes, &mut offset)?;
-        // }
 
         // Read gemini a evaluations
         let gemini_a_evaluations = (0..CONST_PROOF_SIZE_LOG_N)
@@ -338,15 +331,7 @@ impl TryFrom<&[u8]> for ZKProof {
             .collect::<Vec<Fr>>()
             .try_into()
             .expect("Should always be able to convert to array");
-        // let mut gemini_a_evaluations: [Fr; CONST_PROOF_SIZE_LOG_N];
-        // for i in 0..CONST_PROOF_SIZE_LOG_N {
-        //     gemini_a_evaluations[i] = read_fr(proof_bytes, &mut offset)?;
-        // }
 
-        // let mut libra_poly_evals: [Fr; 4];
-        // for i in 0..4 {
-        //     libra_poly_evals[i] = read_fr(proof_bytes, &mut offset)?;
-        // }
         let libra_poly_evals: [Fr; LIBRA_POLY_EVALS_LENGTH] = (0..LIBRA_POLY_EVALS_LENGTH)
             .map(|_| {
                 read_fr(proof_bytes, &mut offset)
