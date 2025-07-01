@@ -305,7 +305,6 @@ fn verify_shplemini<H: CurveHooks>(
         batching_challenge *= tp.rho;
     }
 
-    // gemini_masking_poly is
     commitments[1] = convert_proof_point::<H>(proof.gemini_masking_poly).map_err(|_| {
         ProofError::PointNotOnCurve {
             field: ProofCommitmentField::GEMINI_MASKING_POLY.to_string(),
@@ -400,12 +399,18 @@ fn verify_shplemini<H: CurveHooks>(
         vk.log_circuit_size,
     );
 
+    dbg!(fold_pos_evaluations);
+
     let mut constant_term_accumulator = fold_pos_evaluations[0] * pos_inverted_denominator;
     constant_term_accumulator +=
         proof.gemini_a_evaluations[0] * tp.shplonk_nu * neg_inverted_denominator;
 
     batching_challenge = tp.shplonk_nu.square();
     let mut boundary = NUMBER_OF_ENTITIES + 2;
+
+    dbg!(constant_term_accumulator);
+    dbg!(batching_challenge);
+    dbg!(boundary);
 
     let mut scaling_factor_pos: Fr;
     let mut scaling_factor_neg: Fr;
@@ -449,9 +454,9 @@ fn verify_shplemini<H: CurveHooks>(
 
     boundary += CONST_PROOF_SIZE_LOG_N - 1;
 
+    // Finalize the batch opening claim
     let mut denominators = [Fr::ZERO; LIBRA_POLY_EVALS_LENGTH];
 
-    // Finalize the batch opening claim
     denominators[0] = (tp.shplonk_z - tp.gemini_r)
         .inverse()
         .expect("shplonk_z - gemini_r should be invertible w.h.p.");
@@ -460,6 +465,8 @@ fn verify_shplemini<H: CurveHooks>(
         .expect("tp.shplonk_z - SUBGROUP_GENERATOR * tp.gemini_r should be invertible w.h.p.");
     denominators[2] = denominators[0];
     denominators[3] = denominators[0];
+
+    dbg!(denominators);
 
     let mut batching_scalars = [Fr::ZERO; LIBRA_POLY_EVALS_LENGTH];
 
@@ -475,6 +482,8 @@ fn verify_shplemini<H: CurveHooks>(
     scalars[boundary + 1] = batching_scalars[1] + batching_scalars[2];
     scalars[boundary + 2] = batching_scalars[3];
 
+    dbg!(scalars);
+
     for i in 0..LIBRA_COMMITMENTS_LENGTH {
         commitments[boundary] = convert_proof_point(proof.libra_commitments[i]).map_err(|_| {
             ProofError::PointNotOnCurve {
@@ -488,8 +497,6 @@ fn verify_shplemini<H: CurveHooks>(
     scalars[boundary] = constant_term_accumulator;
     boundary += 1;
 
-    println!("cHECK");
-
     match check_evals_consistency(
         &proof.libra_poly_evals,
         tp.gemini_r,
@@ -499,8 +506,6 @@ fn verify_shplemini<H: CurveHooks>(
         Err(msg) => return Err(ProofError::ConsistencyCheckFailed { message: msg }),
         _ => {}
     }
-
-    println!("cHECK AGAIN");
 
     let quotient_commitment =
         convert_proof_point(proof.kzg_quotient).map_err(|_| ProofError::PointNotOnCurve {
@@ -517,12 +522,17 @@ fn verify_shplemini<H: CurveHooks>(
     let p_1 = -quotient_commitment;
 
     let g1_points = [G1Prepared::from(p_0.into_affine()), G1Prepared::from(p_1)];
-    let g2_points = [
-        G2Prepared::from(read_g2::<H>(&SRS_G2).expect("Parsing the SRS point should always work")),
-        G2Prepared::from(
-            read_g2::<H>(&SRS_G2_VK).expect("Parsing the SRS point should always work"),
-        ),
-    ];
+
+    println!("ok");
+    let temp2 = G2Prepared::from(
+        read_g2::<H>(&SRS_G2_VK).expect("Parsing the SRS point should always work"),
+    );
+    println!("ok");
+    let temp1 =
+        G2Prepared::from(read_g2::<H>(&SRS_G2).expect("Parsing the SRS point should always work"));
+    println!("ok");
+    let g2_points = [temp1, temp2];
+    println!("ok");
 
     let product = Bn254::<H>::multi_pairing(g1_points, g2_points);
 
@@ -560,17 +570,15 @@ fn check_evals_consistency(
     let mut root_power = Fr::ONE;
     let mut challenge_poly_eval = Fr::ZERO;
     for idx in 0..denominators.len() {
-        denominators[idx] = root_power * gemini_r - Fr::ONE;
         // Pr[root_power * gemini_r - 1 is invertible]
         //   = Pr[root_power * gemini_r - 1 != 0]
         //   = 1 - Pr[root_power * gemini_r - 1 = 0]
         //   = 1 - Pr[gemini_r = root_power^{-1}]
         //   >= 1 - 1/2^128 because gemini_r is the 128 lower-significance bits output by Keccak256
-        denominators[idx] = denominators[idx]
+        denominators[idx] = (root_power * gemini_r - Fr::ONE)
             .inverse()
             .expect("With overwhelming probability, inversion succeeds");
-        challenge_poly_eval =
-            challenge_poly_eval + challenge_poly_lagrange[idx] * denominators[idx];
+        challenge_poly_eval += challenge_poly_lagrange[idx] * denominators[idx];
         root_power *= SUBGROUP_GENERATOR_INVERSE;
     }
 
@@ -592,11 +600,9 @@ fn check_evals_consistency(
     diff += lagrange_last * (libra_poly_evals[2] - libra_eval)
         - vanishing_poly_eval * libra_poly_evals[3];
 
-    if diff == Fr::ZERO {
+    if diff != Fr::ZERO {
         return Err("Consistency Condition Not Satisfied");
     }
-
-    println!("Got past the consistency condition!");
 
     Ok(())
 }

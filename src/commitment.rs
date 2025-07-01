@@ -69,7 +69,7 @@ pub(crate) fn compute_fold_pos_evaluations(
         let challenge_power = gemini_eval_challenge_powers[i - 1];
         let u = sumcheck_u_challenges[i - 1];
 
-        let mut batched_eval_round_acc = challenge_power * *batched_eval_accumulator * TWO
+        let mut batched_eval_round_acc = challenge_power * (*batched_eval_accumulator) * TWO
             - gemini_evaluations[i - 1] * (challenge_power * (Fr::ONE - u) - u);
         // Divide by the denominator
         batched_eval_round_acc *= (challenge_power * (Fr::ONE - u) + u)

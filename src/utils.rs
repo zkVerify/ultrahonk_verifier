@@ -225,6 +225,8 @@ pub(crate) fn read_g2<H: CurveHooks>(data: &[u8]) -> Result<G2<H>, ()> {
     let x = Fq2::new(x_c0, x_c1);
     let y = Fq2::new(y_c0, y_c1);
 
+    println!("Almost done");
+
     Ok(G2::<H>::new(x, y))
 }
 
