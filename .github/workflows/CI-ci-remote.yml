@@ -8,6 +8,7 @@ on:
   push:
     branches:
       - main
+      - dimitris/**
   schedule:
     - cron: '0 6 * * SAT'
   workflow_dispatch: 
