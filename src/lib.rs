@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![cfg_attr(not(feature = "std"), no_std)]
+// #![cfg_attr(not(feature = "std"), no_std)]
 #![doc = include_str!("../README.md")]
 #![allow(non_camel_case_types)]
 
@@ -76,16 +76,16 @@ pub fn verify<H: CurveHooks + Default>(
     let vk = VerificationKey::<H>::try_from(vk_bytes).map_err(|_| VerifyError::KeyError)?;
 
     // TODO: Update to support both flavors...
-    let mut proof: ZKProof;
     if let ProofType::ZK(proof_bytes) = proof_type {
-        proof = ZKProof::try_from(&proof_bytes[..]).map_err(|_| VerifyError::InvalidProofError)?;
+        let proof =
+            ZKProof::try_from(&proof_bytes[..]).map_err(|_| VerifyError::InvalidProofError)?;
+
+        check_public_input_number(&vk, pubs)?;
+
+        verify_inner(&vk, &proof, &pubs)
     } else {
         unimplemented!();
     }
-
-    check_public_input_number(&vk, pubs)?;
-
-    verify_inner(&vk, &proof, &pubs)
 }
 
 fn verify_inner<H: CurveHooks>(

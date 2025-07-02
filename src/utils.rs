@@ -41,7 +41,8 @@ use crate::{
     U256,
 };
 use ark_bn254_ext::CurveHooks;
-use ark_ff::PrimeField;
+use ark_ec::AffineRepr;
+use ark_ff::{AdditiveGroup, PrimeField};
 
 pub(crate) trait IntoFq {
     fn into_fq(self) -> Fq;
@@ -165,6 +166,12 @@ pub(crate) fn read_g1<H: CurveHooks>(data: &[u8]) -> Result<(G1<H>, &[u8]), ()> 
 
     let x = Fq::from_bigint(read_u256(&data[0..32])?).ok_or(())?;
     let y = Fq::from_bigint(read_u256(&data[32..64])?).ok_or(())?;
+
+    // If (0, 0) is given, we interpret this as the point at infinity:
+    // https://docs.rs/ark-ec/0.5.0/src/ark_ec/models/short_weierstrass/affine.rs.html#212-218
+    if x == Fq::ZERO && y == Fq::ZERO {
+        return Ok((G1::zero(), &data[64..]));
+    }
 
     let point = G1::new_unchecked(x, y);
 

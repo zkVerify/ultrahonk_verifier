@@ -30,12 +30,12 @@ pub enum VerificationKeyError {
 
     // // #[snafu(display("Point for field '{}' is not in the correct subgroup", field))]
     // // PointNotInCorrectSubgroup { field: &'static str },
+    #[snafu(display("Invalid circuit size. Must be a power of 2."))]
+    InvalidCircuitSize,
 
-    // #[snafu(display("Invalid circuit size"))]
-    // InvalidCircuitSize,
+    #[snafu(display("Invalid log circuit size. Must be consistent with circuit size."))]
+    InvalidLogCircuitSize,
 
-    // #[snafu(display("Invalid number of public inputs"))]
-    // InvalidNumberOfPublicInputs,
     #[snafu(display("Could not parse vk"))]
     ParsingError,
 }
@@ -160,6 +160,9 @@ impl<H: CurveHooks> TryFrom<&[u8]> for VerificationKey<H> {
         };
 
         // Assert: circuit_size > 0 and also(?) a power of 2
+        if circuit_size == 0 || (circuit_size & (circuit_size - 1) != 0) {
+            return Err(VerificationKeyError::InvalidCircuitSize);
+        }
 
         let (log_circuit_size, raw_vk) = match read_u64(raw_vk) {
             Ok((log_n, raw_vk)) => (log_n, raw_vk),
@@ -167,13 +170,14 @@ impl<H: CurveHooks> TryFrom<&[u8]> for VerificationKey<H> {
         };
 
         // Assert: log_circuit_size == log_2(circuit_size)
+        if 1 << log_circuit_size != circuit_size {
+            return Err(VerificationKeyError::InvalidLogCircuitSize);
+        }
 
         let (num_public_inputs, raw_vk) = match read_u64(raw_vk) {
             Ok((num_pubs, raw_vk)) => (num_pubs, raw_vk),
             _ => Err(VerificationKeyError::ParsingError)?,
         };
-
-        // Assert: num_pubs == pubs.len()
 
         let (pub_inputs_offset, raw_vk) = match read_u64(raw_vk) {
             Ok((pi_offset, raw_vk)) => (pi_offset, raw_vk),
@@ -411,6 +415,39 @@ mod should {
         }
 
         #[rstest]
+        fn a_vk_with_circuit_size_zero(valid_vk: [u8; VK_SIZE]) {
+            let mut invalid_vk = [0u8; VK_SIZE];
+            invalid_vk.copy_from_slice(&valid_vk);
+            invalid_vk[..8].fill(0);
+            assert_eq!(
+                VerificationKey::<()>::try_from(&invalid_vk[..]),
+                Err(VerificationKeyError::InvalidCircuitSize)
+            );
+        }
+
+        #[rstest]
+        fn a_vk_with_an_invalid_circuit_size(valid_vk: [u8; VK_SIZE]) {
+            let mut invalid_vk = [0u8; VK_SIZE];
+            invalid_vk.copy_from_slice(&valid_vk);
+            invalid_vk[..8].fill(1); // not a power of 2
+            assert_eq!(
+                VerificationKey::<()>::try_from(&invalid_vk[..]),
+                Err(VerificationKeyError::InvalidCircuitSize)
+            );
+        }
+
+        #[rstest]
+        fn a_vk_with_an_invalid_log_circuit_size(valid_vk: [u8; VK_SIZE]) {
+            let mut invalid_vk = [0u8; VK_SIZE];
+            invalid_vk.copy_from_slice(&valid_vk);
+            invalid_vk[8..16].fill(0);
+            assert_eq!(
+                VerificationKey::<()>::try_from(&invalid_vk[..]),
+                Err(VerificationKeyError::InvalidLogCircuitSize)
+            );
+        }
+
+        #[rstest]
         fn a_vk_with_a_point_not_on_curve_for_any_commitment_field(valid_vk: [u8; VK_SIZE]) {
             let commitment_fields = [
                 CommitmentField::Q_M,
@@ -444,9 +481,8 @@ mod should {
             for (i, cm) in commitment_fields.iter().enumerate() {
                 let mut invalid_vk = [0u8; VK_SIZE];
                 invalid_vk.copy_from_slice(&valid_vk);
-                // Q: We should decide how we should handle (0, 0)? Do we interpret it
-                // as G1's point at infinity, or do we want want to return an error?
-                invalid_vk[32 + i * 64..32 + (i + 1) * 64].fill(0);
+                // Please note that (0, 0) is treated as the point at infinity
+                invalid_vk[32 + i * 64..32 + (i + 1) * 64].fill(1);
 
                 assert_eq!(
                     VerificationKey::<()>::try_from(&invalid_vk[..]).unwrap_err(),

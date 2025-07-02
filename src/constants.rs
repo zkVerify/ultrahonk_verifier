@@ -24,7 +24,7 @@ pub const ZK_BATCHED_RELATION_PARTIAL_LENGTH: usize = 9; // for ZK case
 pub const NUMBER_OF_ENTITIES: usize = 40;
 pub const NUMBER_UNSHIFTED: usize = 35;
 // pub const NUMBER_TO_BE_SHIFTED: usize = 5;
-pub const PAIRING_POINTS_SIZE: usize = 16;
+// pub const PAIRING_POINTS_SIZE: usize = 16;
 // Alphas are used as relation separators so there should be NUMBER_OF_SUBRELATIONS - 1
 pub const NUMBER_OF_ALPHAS: usize = NUMBER_OF_SUBRELATIONS - 1; // 25
 
