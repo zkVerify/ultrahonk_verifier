@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// #![cfg_attr(not(feature = "std"), no_std)]
+#![cfg_attr(not(feature = "std"), no_std)]
 #![doc = include_str!("../README.md")]
 #![allow(non_camel_case_types)]
 
@@ -123,6 +123,7 @@ fn verify_inner<H: CurveHooks>(
     Ok(())
 }
 
+// Checks that number of public inputs in the vk, matches the actual length of the PI list.
 fn check_public_input_number<H: CurveHooks>(
     vk: &VerificationKey<H>,
     pubs: &Pubs,

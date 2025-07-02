@@ -1045,5 +1045,25 @@ fn verify_valid_zk_proof(
 }
 
 mod reject {
-    // use super::*;
+    use super::*;
+
+    #[rstest]
+    fn a_zk_proof_with_non_matching_number_of_pis(
+        valid_vk: [u8; VK_SIZE],
+        valid_zk_proof: [u8; ZK_PROOF_SIZE],
+        valid_pubs: [PublicInput; 2],
+    ) {
+        let invalid_pubs: [PublicInput; 0] = [];
+
+        assert_eq!(
+            verify::<()>(&valid_vk, &ProofType::ZK(valid_zk_proof), &invalid_pubs).unwrap_err(),
+            VerifyError::PublicInputError {
+                message: format!(
+                    "Provided public inputs length does not match. Expected: {}; Got: {}",
+                    valid_pubs.len(),
+                    invalid_pubs.len()
+                )
+            }
+        );
+    }
 }

@@ -1508,14 +1508,17 @@ mod should {
             );
         }
 
-        // NOTE: The following test will fail because validation is not done during parsing.
+        // // NOTE: The following test will fail because validation is not done during parsing.
         // #[rstest]
         // fn a_zk_proof_with_a_point_not_on_curve() {
+        //     let zk_proof_fields = [
+        //         // CommitmentField::Q_M,
+        //     ];
         //     let invalid_zk_proof = [0u8; ZK_PROOF_SIZE];
 
         //     assert_eq!(
         //         ZKProof::try_from(&invalid_zk_proof[..]),
-        //         Err(ProofError::PointNotOnCurve)
+        //         Err(ProofError::PointNotOnCurve { field:  })
         //     );
         // }
     }
