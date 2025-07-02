@@ -4,11 +4,10 @@ run-name: "Workflow performing CI steps: build, testing, check format, check lin
 
 on:
   pull_request:
-    types: [opened, synchronize, ready_for_review]
+    types: [opened, synchronize]
   push:
     branches:
       - main
-      - dimitris/**
   schedule:
     - cron: '0 6 * * SAT'
   workflow_dispatch: 
