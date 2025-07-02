@@ -38,7 +38,9 @@ use crate::{
         NUMBER_UNSHIFTED, SUBGROUP_SIZE, ZK_BATCHED_RELATION_PARTIAL_LENGTH,
     },
     key::VerificationKey,
-    proof::{convert_proof_point, ProofCommitmentField, ProofError, ZKProof},
+    proof::{
+        convert_proof_point, ProofCommitmentField, ProofError, ZKProof, ZKProofCommitmentField,
+    },
     relations::accumulate_relation_evaluations,
     srs::{SRS_G2, SRS_G2_VK},
     transcript::{generate_transcript, ZKTranscript},
@@ -265,7 +267,7 @@ fn verify_shplemini<H: CurveHooks>(
     scalars[0] = Fr::ONE;
     commitments[0] =
         convert_proof_point::<H>(proof.shplonk_q).map_err(|_| ProofError::PointNotOnCurve {
-            field: ProofCommitmentField::SHPLONK_Q.to_string(),
+            field: ZKProofCommitmentField::SHPLONK_Q.to_string(),
         })?;
 
     let mut batched_evaluation = proof.gemini_masking_eval;
@@ -285,7 +287,7 @@ fn verify_shplemini<H: CurveHooks>(
 
     commitments[1] = convert_proof_point::<H>(proof.gemini_masking_poly).map_err(|_| {
         ProofError::PointNotOnCurve {
-            field: ProofCommitmentField::GEMINI_MASKING_POLY.to_string(),
+            field: ZKProofCommitmentField::GEMINI_MASKING_POLY.to_string(),
         }
     })?;
     commitments[2] = vk.q_m;
@@ -318,33 +320,33 @@ fn verify_shplemini<H: CurveHooks>(
 
     // Accumulate proof points
     commitments[29] = convert_proof_point(proof.w1).map_err(|_| ProofError::PointNotOnCurve {
-        field: ProofCommitmentField::W_1.to_string(),
+        field: ZKProofCommitmentField::W_1.to_string(),
     })?;
     commitments[30] = convert_proof_point(proof.w2).map_err(|_| ProofError::PointNotOnCurve {
-        field: ProofCommitmentField::W_2.to_string(),
+        field: ZKProofCommitmentField::W_2.to_string(),
     })?;
     commitments[31] = convert_proof_point(proof.w3).map_err(|_| ProofError::PointNotOnCurve {
-        field: ProofCommitmentField::W_3.to_string(),
+        field: ZKProofCommitmentField::W_3.to_string(),
     })?;
     commitments[32] = convert_proof_point(proof.w4).map_err(|_| ProofError::PointNotOnCurve {
-        field: ProofCommitmentField::W_4.to_string(),
+        field: ZKProofCommitmentField::W_4.to_string(),
     })?;
 
     commitments[33] =
         convert_proof_point(proof.z_perm).map_err(|_| ProofError::PointNotOnCurve {
-            field: ProofCommitmentField::Z_PERM.to_string(),
+            field: ZKProofCommitmentField::Z_PERM.to_string(),
         })?;
     commitments[34] =
         convert_proof_point(proof.lookup_inverses).map_err(|_| ProofError::PointNotOnCurve {
-            field: ProofCommitmentField::LOOKUP_INVERSES.to_string(),
+            field: ZKProofCommitmentField::LOOKUP_INVERSES.to_string(),
         })?;
     commitments[35] =
         convert_proof_point(proof.lookup_read_counts).map_err(|_| ProofError::PointNotOnCurve {
-            field: ProofCommitmentField::LOOKUP_READ_COUNTS.to_string(),
+            field: ZKProofCommitmentField::LOOKUP_READ_COUNTS.to_string(),
         })?;
     commitments[36] =
         convert_proof_point(proof.lookup_read_tags).map_err(|_| ProofError::PointNotOnCurve {
-            field: ProofCommitmentField::LOOKUP_READ_TAGS.to_string(),
+            field: ZKProofCommitmentField::LOOKUP_READ_TAGS.to_string(),
         })?;
 
     // to be Shifted
@@ -406,7 +408,7 @@ fn verify_shplemini<H: CurveHooks>(
         commitments[boundary + i] =
             convert_proof_point(proof.gemini_fold_comms[i]).map_err(|_| {
                 ProofError::PointNotOnCurve {
-                    field: ProofCommitmentField::GEMINI_FOLD_COMMS(i).to_string(),
+                    field: ZKProofCommitmentField::GEMINI_FOLD_COMMS(i).to_string(),
                 }
             })?;
     }
@@ -442,7 +444,7 @@ fn verify_shplemini<H: CurveHooks>(
     for i in 0..LIBRA_COMMITMENTS {
         commitments[boundary] = convert_proof_point(proof.libra_commitments[i]).map_err(|_| {
             ProofError::PointNotOnCurve {
-                field: ProofCommitmentField::LIBRA_COMMITMENTS(i).to_string(),
+                field: ZKProofCommitmentField::LIBRA_COMMITMENTS(i).to_string(),
             }
         })?;
         boundary += 1;

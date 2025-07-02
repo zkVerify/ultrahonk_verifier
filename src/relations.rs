@@ -21,6 +21,8 @@ use crate::{
 use ark_bn254_ext::Fr;
 use ark_ff::{AdditiveGroup, Field, MontFp};
 
+const GRUMPKIN_CURVE_B_PARAMETER_NEGATED: Fr = MontFp!("17");
+
 /// Enum for wires.
 pub enum Wire {
     Q_M,
@@ -346,7 +348,7 @@ fn accumulate_elliptic_relation(
     // (x3 + x1 + x1) (4y1*y1) - 9 * x1 * x1 * x1 * x1 = 0
     // N.B. we're using the equivalence x1*x1*x1 === y1*y1 - curve_b to reduce degree by 1
     {
-        let x_pow_4 = (y1_sqr + MontFp!("17")) * x_1;
+        let x_pow_4 = (y1_sqr + GRUMPKIN_CURVE_B_PARAMETER_NEGATED) * x_1;
         let y1_sqr_mul_4 = y1_sqr.double().double();
         let x1_pow_4_mul_9 = x_pow_4 * MontFp!("9");
         let x_double_identity = (x_3 + x_1.double()) * y1_sqr_mul_4 - x1_pow_4_mul_9;
