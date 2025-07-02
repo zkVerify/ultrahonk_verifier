@@ -1,0 +1,42 @@
+name: CI-build-test-lint-fmt-deps
+
+run-name: "Workflow performing CI steps: build, testing, check format, check linting, check headers and check dependencies"
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: '0 6 * * SAT'
+  workflow_dispatch: 
+
+env:
+  RUST_BACKTRACE: 1
+
+jobs:
+  build-test-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+      - name: Install latest stable
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - name: Install cargo-make
+        uses: actions-rs/cargo@v1
+        with:
+          command: install
+          args: --debug cargo-make
+      - name: Install latest nightly
+        uses: actions-rs/toolchain@v1
+        with:
+            toolchain: nightly
+      - name: Run CI full
+        uses: actions-rs/cargo@v1
+        with:
+          toolchain: stable
+          command: make
+          args: ci-remote
