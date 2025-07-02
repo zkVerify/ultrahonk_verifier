@@ -4,7 +4,7 @@ run-name: "Workflow performing CI steps: build, testing, check format, check lin
 
 on:
   pull_request:
-    types: [opened, synchronize]
+    types: [opened, synchronize, ready_for_review]
   push:
     branches:
       - main
