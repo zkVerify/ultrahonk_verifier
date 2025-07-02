@@ -53,62 +53,31 @@ impl IntoFq for U256 {
     }
 }
 
-// impl IntoFq for u64 {
-//     fn into_fq(self) -> Fq {
-//         Fq::new(U256::from(self))
-//     }
+// pub(crate) trait IntoFr {
+//     fn into_fr(self) -> Fr;
 // }
 
-// impl IntoFq for Fr {
-//     fn into_fq(self) -> Fq {
-//         let big_int = self.into_bigint();
-//         Fq::from_bigint(big_int).expect("Fr value is always a valid Fq element")
-//     }
-// }
-
-pub(crate) trait IntoFr {
-    fn into_fr(self) -> Fr;
-}
-
-impl IntoFr for &[u8; 32] {
-    fn into_fr(self) -> Fr {
-        self.into_u256().into_fr()
-    }
-}
-
-impl IntoFr for [u8; 32] {
-    fn into_fr(self) -> Fr {
-        (&self).into_fr()
-    }
-}
-
-impl IntoFr for U256 {
-    fn into_fr(self) -> Fr {
-        Fr::new(self)
-    }
-}
-
-// impl IntoFr for u64 {
+// impl IntoFr for &[u8; 32] {
 //     fn into_fr(self) -> Fr {
-//         Fr::new(U256::from(self))
+//         self.into_u256().into_fr()
 //     }
 // }
 
-// impl IntoFr for Fq {
+// impl IntoFr for [u8; 32] {
 //     fn into_fr(self) -> Fr {
-//         Fr::from(self.into_bigint())
+//         (&self).into_fr()
+//     }
+// }
+
+// impl IntoFr for U256 {
+//     fn into_fr(self) -> Fr {
+//         Fr::new(self)
 //     }
 // }
 
 pub(crate) trait IntoU256 {
     fn into_u256(self) -> U256;
 }
-
-// impl IntoU256 for u32 {
-//     fn into_u256(self) -> U256 {
-//         U256::from(self)
-//     }
-// }
 
 impl IntoU256 for &[u8; 32] {
     fn into_u256(self) -> U256 {
@@ -217,7 +186,8 @@ pub(crate) fn read_g2<H: CurveHooks>(data: &[u8]) -> Result<G2<H>, ()> {
         return Err(());
     }
 
-    // Reverse order to obtain the same encoding as Solidity:
+    // Read in reverse order (i.e., imaginary part before real part) to match
+    // Solidity's encoding:
     // https://eips.ethereum.org/EIPS/eip-197#encoding
     let x_c1 = read_fq_util(&data[0..32]).expect("Parsing the SRS should always succeed!");
     let x_c0 = read_fq_util(&data[32..64]).expect("Parsing the SRS should always succeed!");

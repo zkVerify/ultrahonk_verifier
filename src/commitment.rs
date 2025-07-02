@@ -34,7 +34,7 @@ pub(crate) fn compute_squares(r: Fr) -> [Fr; CONST_PROOF_SIZE_LOG_N] {
 // Compute the evaluations  Aₗ(r^{2ˡ}) for l = 0, ..., m-1.
 pub(crate) fn compute_fold_pos_evaluations(
     sumcheck_u_challenges: &[Fr; CONST_PROOF_SIZE_LOG_N],
-    batched_eval_accumulator: &mut Fr, // !!!
+    batched_eval_accumulator: &mut Fr,
     gemini_evaluations: &[Fr; CONST_PROOF_SIZE_LOG_N],
     gemini_eval_challenge_powers: &[Fr; CONST_PROOF_SIZE_LOG_N],
     log_size: u64,

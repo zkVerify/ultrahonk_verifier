@@ -25,41 +25,17 @@ use snafu::Snafu;
 pub enum VerificationKeyError {
     #[snafu(display("Buffer too short"))]
     BufferTooShort,
-    // #[snafu(display(
-    //     "Slice length is incorrect. Expected: {expected_length:?}; Got: {actual_length:?}",
-    // ))]
-    // InvalidSliceLength {
-    //     expected_length: usize,
-    //     actual_length: usize,
-    // },
     #[snafu(display("Point for field '{field:?}' is not on curve"))]
     PointNotOnCurve { field: &'static str },
 
     // // #[snafu(display("Point for field '{}' is not in the correct subgroup", field))]
     // // PointNotInCorrectSubgroup { field: &'static str },
-    // #[snafu(display("Invalid circuit type. Expected: 2"))]
-    // InvalidCircuitType,
 
     // #[snafu(display("Invalid circuit size"))]
     // InvalidCircuitSize,
 
     // #[snafu(display("Invalid number of public inputs"))]
     // InvalidNumberOfPublicInputs,
-
-    // #[snafu(display("Invalid commitment field: {value:?}"))]
-    // InvalidCommitmentField { value: String },
-
-    // #[snafu(display("Invalid commitments number. Expected: 23"))]
-    // InvalidCommitmentsNumber,
-
-    // #[snafu(display("Invalid commitment key encountered"))]
-    // InvalidCommitmentKey,
-
-    // #[snafu(display("Unexpected commitment key: {key:?}. Expected: {expected:?}"))]
-    // UnexpectedCommitmentKey { key: String, expected: String },
-
-    // #[snafu(display("Recursion is not supported"))]
-    // RecursionNotSupported,
     #[snafu(display("Could not parse vk"))]
     ParsingError,
 }
@@ -135,7 +111,7 @@ pub struct VerificationKey<H: CurveHooks> {
     pub circuit_size: u64,
     pub log_circuit_size: u64,
     pub num_public_inputs: u64,
-    pub pub_inputs_offset: u64, // Note: May end up being removed in the future
+    pub pub_inputs_offset: u64, // NOTE: May end up being removed in the future
     // Selectors
     pub q_m: G1<H>,
     pub q_c: G1<H>,
@@ -182,16 +158,23 @@ impl<H: CurveHooks> TryFrom<&[u8]> for VerificationKey<H> {
             Ok((n, raw_vk)) => (n, raw_vk),
             _ => Err(VerificationKeyError::ParsingError)?,
         };
+
+        // Assert: circuit_size > 0 and also(?) a power of 2
+
         let (log_circuit_size, raw_vk) = match read_u64(raw_vk) {
             Ok((log_n, raw_vk)) => (log_n, raw_vk),
             _ => Err(VerificationKeyError::ParsingError)?,
         };
+
         // Assert: log_circuit_size == log_2(circuit_size)
+
         let (num_public_inputs, raw_vk) = match read_u64(raw_vk) {
             Ok((num_pubs, raw_vk)) => (num_pubs, raw_vk),
             _ => Err(VerificationKeyError::ParsingError)?,
         };
+
         // Assert: num_pubs == pubs.len()
+
         let (pub_inputs_offset, raw_vk) = match read_u64(raw_vk) {
             Ok((pi_offset, raw_vk)) => (pi_offset, raw_vk),
             _ => Err(VerificationKeyError::ParsingError)?,
@@ -428,15 +411,48 @@ mod should {
         }
 
         #[rstest]
-        fn a_raw_vk_with_a_point_not_on_curve(valid_vk: [u8; VK_SIZE]) {
-            let mut invalid_vk = [0u8; VK_SIZE];
-            invalid_vk.copy_from_slice(&valid_vk);
-            invalid_vk[32..32 + 64].fill(0);
+        fn a_vk_with_a_point_not_on_curve_for_any_commitment_field(valid_vk: [u8; VK_SIZE]) {
+            let commitment_fields = [
+                CommitmentField::Q_M,
+                CommitmentField::Q_C,
+                CommitmentField::Q_L,
+                CommitmentField::Q_R,
+                CommitmentField::Q_O,
+                CommitmentField::Q_4,
+                CommitmentField::Q_LOOKUP,
+                CommitmentField::Q_ARITH,
+                CommitmentField::Q_DELTARANGE,
+                CommitmentField::Q_ELLIPTIC,
+                CommitmentField::Q_AUX,
+                CommitmentField::Q_POSEIDON2EXTERNAL,
+                CommitmentField::Q_POSEIDON2INTERNAL,
+                CommitmentField::S_1,
+                CommitmentField::S_2,
+                CommitmentField::S_3,
+                CommitmentField::S_4,
+                CommitmentField::ID_1,
+                CommitmentField::ID_2,
+                CommitmentField::ID_3,
+                CommitmentField::ID_4,
+                CommitmentField::T_1,
+                CommitmentField::T_2,
+                CommitmentField::T_3,
+                CommitmentField::T_4,
+                CommitmentField::Lagrange_First,
+                CommitmentField::Lagrange_Last,
+            ];
+            for (i, cm) in commitment_fields.iter().enumerate() {
+                let mut invalid_vk = [0u8; VK_SIZE];
+                invalid_vk.copy_from_slice(&valid_vk);
+                // Q: We should decide how we should handle (0, 0)? Do we interpret it
+                // as G1's point at infinity, or do we want want to return an error?
+                invalid_vk[32 + i * 64..32 + (i + 1) * 64].fill(0);
 
-            assert_eq!(
-                VerificationKey::<()>::try_from(&invalid_vk[..]).unwrap_err(),
-                VerificationKeyError::PointNotOnCurve { field: "Q_M" }
-            );
+                assert_eq!(
+                    VerificationKey::<()>::try_from(&invalid_vk[..]).unwrap_err(),
+                    VerificationKeyError::PointNotOnCurve { field: cm.str() }
+                );
+            }
         }
     }
 }

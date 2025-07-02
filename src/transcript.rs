@@ -41,8 +41,6 @@ pub(crate) struct ZKTranscript {
     pub(crate) gemini_r: Fr,
     pub(crate) shplonk_nu: Fr,
     pub(crate) shplonk_z: Fr,
-    // Derived
-    pub(crate) public_inputs_delta: Fr,
 }
 
 // NOTE: This type simply isolates the challenges in the `RelationParameters` type.
@@ -78,35 +76,19 @@ impl RelationParametersChallenges {
         let mut denominator = Fr::ONE;
 
         let mut numerator_acc = self.gamma + self.beta * Fr::from(circuit_size + offset);
-        // Fr numerator_acc = gamma + (beta * FrLib.from(N + offset));
         let mut denominator_acc = self.gamma - self.beta * Fr::from(offset + 1);
-        // Fr denominatorAcc = gamma - (beta * FrLib.from(offset + 1));
 
-        {
-            for pi_bytes in public_inputs {
-                let pi = Fr::from_be_bytes_mod_order(pi_bytes);
+        for pi_bytes in public_inputs {
+            let pi = Fr::from_be_bytes_mod_order(pi_bytes);
 
-                numerator = numerator * (numerator_acc + pi);
-                denominator = denominator * (denominator_acc + pi);
+            numerator = numerator * (numerator_acc + pi);
+            denominator = denominator * (denominator_acc + pi);
 
-                numerator_acc += self.beta;
-                denominator_acc -= self.beta;
-            }
-
-            // for (uint256 i = 0; i < NUMBER_OF_PUBLIC_INPUTS; i++) {
-            //     Fr pubInput = FrLib.fromBytes32(publicInputs[i]);
-
-            //     numerator = numerator * (numeratorAcc + pubInput);
-            //     denominator = denominator * (denominatorAcc + pubInput);
-
-            //     numeratorAcc = numeratorAcc + beta;
-            //     denominatorAcc = denominatorAcc - beta;
-            // }
+            numerator_acc += self.beta;
+            denominator_acc -= self.beta;
         }
 
-        let public_inputs_delta = numerator / denominator;
-
-        public_inputs_delta
+        numerator / denominator
     }
 }
 
@@ -117,8 +99,6 @@ pub(crate) fn generate_transcript(
     public_inputs_size: u64,
     pub_inputs_offset: u64,
 ) -> ZKTranscript {
-    // (t.relationParameters, previousChallenge) =
-    //     generateRelationParametersChallenges(proof, publicInputs, circuitSize, publicInputsSize, pubInputsOffset, previousChallenge);
     let (rp_challenges, previous_challenge) = generate_relation_parameters_challenges(
         proof,
         public_inputs,
@@ -127,31 +107,15 @@ pub(crate) fn generate_transcript(
         pub_inputs_offset,
     );
 
-    // (t.alphas, previousChallenge) = generateAlphaChallenges(previousChallenge, proof);
     let (alphas, previous_challenge) = generate_alpha_challenges(previous_challenge, proof);
-
-    // (t.gateChallenges, previousChallenge) = generateGateChallenges(previousChallenge);
     let (gate_challenges, previous_challenge) = generate_gate_challenges(previous_challenge);
-    // (t.libraChallenge, previousChallenge) = generateLibraChallenge(previousChallenge, proof);
     let (libra_challenge, previous_challenge) = generate_libra_challenge(previous_challenge, proof);
-    // (t.sumCheckUChallenges, previousChallenge) = generateSumcheckChallenges(proof, previousChallenge);
     let (sumcheck_u_challenges, previous_challenge) =
         generate_sumcheck_challenges(proof, previous_challenge);
-
-    // (t.rho, previousChallenge) = generateRhoChallenge(proof, previousChallenge);
     let (rho, previous_challenge) = generate_rho_challenge(proof, previous_challenge);
-
-    // (t.geminiR, previousChallenge) = generateGeminiRChallenge(proof, previousChallenge);
     let (gemini_r, previous_challenge) = generate_gemini_r_challenge(proof, previous_challenge);
-
-    // (t.shplonkNu, previousChallenge) = generateShplonkNuChallenge(proof, previousChallenge);
     let (shplonk_nu, previous_challenge) = generate_shplonk_nu_challenge(proof, previous_challenge);
-
-    // (t.shplonkZ, previousChallenge) = generateShplonkZChallenge(proof, previousChallenge);
     let (shplonk_z, _) = generate_shplonk_z_challenge(proof, previous_challenge);
-
-    let public_inputs_delta =
-        rp_challenges.public_inputs_delta(public_inputs, circuit_size, pub_inputs_offset);
 
     ZKTranscript {
         relation_parameters_challenges: rp_challenges,
@@ -163,7 +127,6 @@ pub(crate) fn generate_transcript(
         gemini_r,
         shplonk_nu,
         shplonk_z,
-        public_inputs_delta,
     }
 }
 
@@ -186,7 +149,6 @@ fn generate_relation_parameters_challenges(
     public_inputs_size: u64,
     pub_inputs_offset: u64,
 ) -> (RelationParametersChallenges, Fr) {
-    // internal pure returns (Honk.RelationParameters memory rp, Fr nextPreviousChallenge)
     // Round 0
     let [eta, eta_two, eta_three, previous_challenge] = generate_eta_challenge(
         proof,
@@ -240,7 +202,7 @@ fn generate_eta_challenge(
         .finalize()
         .into();
 
-    let mut previous_challenge = Fr::from_be_bytes_mod_order(&hash); // keccak256(abi.encodePacked(round0))
+    let mut previous_challenge = Fr::from_be_bytes_mod_order(&hash);
     let (eta, eta_two) = split_challenge(previous_challenge);
 
     let hash: [u8; 32] = Keccak256::new()
@@ -271,21 +233,6 @@ fn generate_beta_and_gamma_challenges(previous_challenge: Fr, proof: &ZKProof) -
         .finalize()
         .into();
 
-    // bytes32[13] memory round1;
-    // round1[0] = FrLib.toBytes32(previousChallenge);
-    // round1[1] = bytes32(proof.lookupReadCounts.x_0);
-    // round1[2] = bytes32(proof.lookupReadCounts.x_1);
-    // round1[3] = bytes32(proof.lookupReadCounts.y_0);
-    // round1[4] = bytes32(proof.lookupReadCounts.y_1);
-    // round1[5] = bytes32(proof.lookupReadTags.x_0);
-    // round1[6] = bytes32(proof.lookupReadTags.x_1);
-    // round1[7] = bytes32(proof.lookupReadTags.y_0);
-    // round1[8] = bytes32(proof.lookupReadTags.y_1);
-    // round1[9] = bytes32(proof.w4.x_0);
-    // round1[10] = bytes32(proof.w4.x_1);
-    // round1[11] = bytes32(proof.w4.y_0);
-    // round1[12] = bytes32(proof.w4.y_1);
-
     let next_previous_challenge = Fr::from_be_bytes_mod_order(&round1);
     let (beta, gamma) = split_challenge(next_previous_challenge);
 
@@ -297,9 +244,7 @@ fn generate_alpha_challenges(
     previous_challenge: Fr,
     proof: &ZKProof,
 ) -> ([Fr; NUMBER_OF_ALPHAS], Fr) {
-    //     returns (Fr[NUMBER_OF_ALPHAS] memory alphas, Fr nextPreviousChallenge)
     let mut alphas = [Fr::ZERO; NUMBER_OF_ALPHAS];
-    // let mut next_previous_challenge: Fr;
 
     // Generate the original sumcheck alpha 0 by hashing zPerm and zLookup
     let alpha0: [u8; 32] = Keccak256::new()
@@ -315,16 +260,6 @@ fn generate_alpha_challenges(
         .finalize()
         .into();
 
-    // alpha0[0] = Fr.unwrap(previousChallenge);
-    // alpha0[1] = proof.lookupInverses.x_0;
-    // alpha0[2] = proof.lookupInverses.x_1;
-    // alpha0[3] = proof.lookupInverses.y_0;
-    // alpha0[4] = proof.lookupInverses.y_1;
-    // alpha0[5] = proof.zPerm.x_0;
-    // alpha0[6] = proof.zPerm.x_1;
-    // alpha0[7] = proof.zPerm.y_0;
-    // alpha0[8] = proof.zPerm.y_1;
-
     let mut next_previous_challenge = Fr::from_be_bytes_mod_order(&alpha0);
     (alphas[0], alphas[1]) = split_challenge(next_previous_challenge);
 
@@ -334,9 +269,6 @@ fn generate_alpha_challenges(
             .finalize()
             .into();
         next_previous_challenge = Fr::from_be_bytes_mod_order(&hash);
-        // FrLib.fromBytes32(keccak256(
-        //     abi.encodePacked(Fr.unwrap(next_previous_challenge)),
-        // ));
         (alphas[2 * i], alphas[2 * i + 1]) = split_challenge(next_previous_challenge);
     }
 
@@ -348,11 +280,6 @@ fn generate_alpha_challenges(
         next_previous_challenge = Fr::from_be_bytes_mod_order(&hash);
 
         (alphas[NUMBER_OF_ALPHAS - 1], _) = split_challenge(next_previous_challenge);
-
-        // nextPreviousChallenge = FrLib.fromBytes32(keccak256(
-        //     abi.encodePacked(Fr.unwrap(next_previous_challenge)),
-        // ));
-        // (alphas[NUMBER_OF_ALPHAS - 1], _) = split_challenge(next_previous_challenge);
     }
 
     (alphas, next_previous_challenge)
@@ -378,15 +305,6 @@ fn generate_gate_challenges(previous_challenge: Fr) -> ([Fr; CONST_PROOF_SIZE_LO
 
 fn generate_libra_challenge(previous_challenge: Fr, proof: &ZKProof) -> (Fr, Fr) {
     // 4 commitments, 1 sum, 1 challenge
-
-    // uint256[6] memory challengeData;
-    // challengeData[0] = Fr.unwrap(previousChallenge);
-    // challengeData[1] = proof.libraCommitments[0].x_0;
-    // challengeData[2] = proof.libraCommitments[0].x_1;
-    // challengeData[3] = proof.libraCommitments[0].y_0;
-    // challengeData[4] = proof.libraCommitments[0].y_1;
-    // challengeData[5] = Fr.unwrap(proof.libraSum);
-
     let hash: [u8; 32] = Keccak256::new()
         .chain_update(previous_challenge.into_be_bytes32())
         .chain_update(proof.libra_commitments[0].x_0.into_be_bytes32())
@@ -410,19 +328,12 @@ fn generate_sumcheck_challenges(
     let mut sumcheck_challenges = [Fr::ZERO; CONST_PROOF_SIZE_LOG_N];
     let mut previous_challenge = previous_challenge;
 
-    // for (uint256 i = 0; i < CONST_PROOF_SIZE_LOG_N; i++) {
     for i in 0..CONST_PROOF_SIZE_LOG_N {
-        // Fr[ZK_BATCHED_RELATION_PARTIAL_LENGTH + 1] memory univariateChal;
-        // let mut univariate_chal = [Fr::ZERO; ZK_BATCHED_RELATION_PARTIAL_LENGTH + 1];
         let mut hasher = Keccak256::new();
 
-        // univariate_chal[0] = previous_challenge;
         hasher = hasher.chain_update(previous_challenge.into_be_bytes32());
 
-        // TODO(https://github.com/AztecProtocol/barretenberg/issues/1098): memcpy
         for j in 0..ZK_BATCHED_RELATION_PARTIAL_LENGTH {
-            // (uint256 j = 0; j < ZK_BATCHED_RELATION_PARTIAL_LENGTH; j++) {
-            // univariate_chal[j + 1] = proof.sumcheck_univariates[i][j];
             hasher = hasher.chain_update(proof.sumcheck_univariates[i][j].into_be_bytes32());
         }
         let hash: [u8; 32] = hasher.finalize().into();
@@ -439,55 +350,30 @@ fn generate_sumcheck_challenges(
 fn generate_rho_challenge(proof: &ZKProof, previous_challenge: Fr) -> (Fr, Fr) {
     let mut hasher = Keccak256::new();
 
-    // uint256[NUMBER_OF_ENTITIES + 15] memory rhoChallengeElements;
-    // rhoChallengeElements[0] = Fr.unwrap(prevChallenge);
     hasher.update(previous_challenge.into_be_bytes32());
 
-    // TODO(https://github.com/AztecProtocol/barretenberg/issues/1098): memcpy
-    // uint256 i;
-    // for (i = 1; i <= NUMBER_OF_ENTITIES; i++) {
-    //     rhoChallengeElements[i] = Fr.unwrap(proof.sumcheckEvaluations[i - 1]);
-    // }
     for i in 0..NUMBER_OF_ENTITIES {
         hasher.update(proof.sumcheck_evaluations[i].into_be_bytes32());
     }
 
     hasher.update(proof.libra_evaluation.into_be_bytes32());
-    // rhoChallengeElements[i] = Fr.unwrap(proof.libraEvaluation);
 
     hasher.update(proof.libra_commitments[1].x_0.into_be_bytes32());
     hasher.update(proof.libra_commitments[1].x_1.into_be_bytes32());
     hasher.update(proof.libra_commitments[1].y_0.into_be_bytes32());
     hasher.update(proof.libra_commitments[1].y_1.into_be_bytes32());
-    // i += 1;
-    // rhoChallengeElements[i] = proof.libraCommitments[1].x_0;
-    // rhoChallengeElements[i + 1] = proof.libraCommitments[1].x_1;
-    // rhoChallengeElements[i + 2] = proof.libraCommitments[1].y_0;
-    // rhoChallengeElements[i + 3] = proof.libraCommitments[1].y_1;
 
     hasher.update(proof.libra_commitments[2].x_0.into_be_bytes32());
     hasher.update(proof.libra_commitments[2].x_1.into_be_bytes32());
     hasher.update(proof.libra_commitments[2].y_0.into_be_bytes32());
     hasher.update(proof.libra_commitments[2].y_1.into_be_bytes32());
-    // i += 4;
-    // rhoChallengeElements[i] = proof.libraCommitments[2].x_0;
-    // rhoChallengeElements[i + 1] = proof.libraCommitments[2].x_1;
-    // rhoChallengeElements[i + 2] = proof.libraCommitments[2].y_0;
-    // rhoChallengeElements[i + 3] = proof.libraCommitments[2].y_1;
 
     hasher.update(proof.gemini_masking_poly.x_0.into_be_bytes32());
     hasher.update(proof.gemini_masking_poly.x_1.into_be_bytes32());
     hasher.update(proof.gemini_masking_poly.y_0.into_be_bytes32());
     hasher.update(proof.gemini_masking_poly.y_1.into_be_bytes32());
-    // i += 4;
-    // rhoChallengeElements[i] = proof.geminiMaskingPoly.x_0;
-    // rhoChallengeElements[i + 1] = proof.geminiMaskingPoly.x_1;
-    // rhoChallengeElements[i + 2] = proof.geminiMaskingPoly.y_0;
-    // rhoChallengeElements[i + 3] = proof.geminiMaskingPoly.y_1;
 
     hasher.update(proof.gemini_masking_eval.into_be_bytes32());
-    // i += 4;
-    // rhoChallengeElements[i] = Fr.unwrap(proof.geminiMaskingEval);
 
     let hash: [u8; 32] = hasher.finalize().into();
     let next_previous_challenge = Fr::from_be_bytes_mod_order(&hash);
@@ -498,10 +384,8 @@ fn generate_rho_challenge(proof: &ZKProof, previous_challenge: Fr) -> (Fr, Fr) {
 
 fn generate_gemini_r_challenge(proof: &ZKProof, previous_challenge: Fr) -> (Fr, Fr) {
     let mut hasher = Keccak256::new();
-    // uint256[(CONST_PROOF_SIZE_LOG_N - 1) * 4 + 1] memory gR;
 
     hasher.update(previous_challenge.into_be_bytes32());
-    // gR[0] = Fr.unwrap(prevChallenge);
 
     for i in 0..(CONST_PROOF_SIZE_LOG_N - 1) {
         hasher.update(proof.gemini_fold_comms[i].x_0.into_be_bytes32());
@@ -509,12 +393,6 @@ fn generate_gemini_r_challenge(proof: &ZKProof, previous_challenge: Fr) -> (Fr, 
         hasher.update(proof.gemini_fold_comms[i].y_0.into_be_bytes32());
         hasher.update(proof.gemini_fold_comms[i].y_1.into_be_bytes32());
     }
-    // for (uint256 i = 0; i < CONST_PROOF_SIZE_LOG_N - 1; i++) {
-    //     gR[1 + i * 4] = proof.geminiFoldComms[i].x_0;
-    //     gR[2 + i * 4] = proof.geminiFoldComms[i].x_1;
-    //     gR[3 + i * 4] = proof.geminiFoldComms[i].y_0;
-    //     gR[4 + i * 4] = proof.geminiFoldComms[i].y_1;
-    // }
 
     let hash: [u8; 32] = hasher.finalize().into();
 
@@ -526,27 +404,17 @@ fn generate_gemini_r_challenge(proof: &ZKProof, previous_challenge: Fr) -> (Fr, 
 }
 
 fn generate_shplonk_nu_challenge(proof: &ZKProof, prev_challenge: Fr) -> (Fr, Fr) {
-    // uint256[(CONST_PROOF_SIZE_LOG_N) + 1 + 4] memory shplonkNuChallengeElements;
     let mut hasher = Keccak256::new();
 
     hasher.update(prev_challenge.into_be_bytes32());
-    // shplonkNuChallengeElements[0] = Fr.unwrap(prevChallenge);
 
-    // for (uint256 i = 1; i <= CONST_PROOF_SIZE_LOG_N; i++) {
     for i in 0..CONST_PROOF_SIZE_LOG_N {
         hasher.update(proof.gemini_a_evaluations[i].into_be_bytes32());
-        // shplonkNuChallengeElements[i] = Fr.unwrap(proof.geminiAEvaluations[i - 1]);
     }
 
     for lpe in proof.libra_poly_evals {
         hasher.update(lpe.into_be_bytes32());
     }
-
-    // uint256 libraIdx = 0;
-    // for (uint256 i = CONST_PROOF_SIZE_LOG_N + 1; i <= CONST_PROOF_SIZE_LOG_N + 4; i++) {
-    //     shplonkNuChallengeElements[i] = Fr.unwrap(proof.libraPolyEvals[libraIdx]);
-    //     libraIdx++;
-    // }
 
     let hash: [u8; 32] = hasher.finalize().into();
 
@@ -557,8 +425,6 @@ fn generate_shplonk_nu_challenge(proof: &ZKProof, prev_challenge: Fr) -> (Fr, Fr
 }
 
 fn generate_shplonk_z_challenge(proof: &ZKProof, previous_challenge: Fr) -> (Fr, Fr) {
-    // uint256[5] memory shplonkZChallengeElements;
-
     let hash: [u8; 32] = Keccak256::new()
         .chain_update(previous_challenge.into_be_bytes32())
         .chain_update(proof.shplonk_q.x_0.into_be_bytes32())
@@ -567,11 +433,6 @@ fn generate_shplonk_z_challenge(proof: &ZKProof, previous_challenge: Fr) -> (Fr,
         .chain_update(proof.shplonk_q.y_1.into_be_bytes32())
         .finalize()
         .into();
-    // shplonkZChallengeElements[0] = Fr.unwrap(prevChallenge);
-    // shplonkZChallengeElements[1] = proof.shplonkQ.x_0;
-    // shplonkZChallengeElements[2] = proof.shplonkQ.x_1;
-    // shplonkZChallengeElements[3] = proof.shplonkQ.y_0;
-    // shplonkZChallengeElements[4] = proof.shplonkQ.y_1;
 
     let next_previous_challenge = Fr::from_be_bytes_mod_order(&hash);
     let (shplonk_z, _) = split_challenge(next_previous_challenge);

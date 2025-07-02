@@ -34,8 +34,8 @@ use core::array::from_fn;
 use crate::{
     commitment::{compute_fold_pos_evaluations, compute_squares},
     constants::{
-        CONST_PROOF_SIZE_LOG_N, LIBRA_COMMITMENTS_LENGTH, LIBRA_POLY_EVALS_LENGTH,
-        NUMBER_OF_ENTITIES, NUMBER_UNSHIFTED, SUBGROUP_SIZE, ZK_BATCHED_RELATION_PARTIAL_LENGTH,
+        CONST_PROOF_SIZE_LOG_N, LIBRA_COMMITMENTS, LIBRA_EVALUATIONS, NUMBER_OF_ENTITIES,
+        NUMBER_UNSHIFTED, SUBGROUP_SIZE, ZK_BATCHED_RELATION_PARTIAL_LENGTH,
     },
     key::VerificationKey,
     proof::{convert_proof_point, ProofCommitmentField, ProofError, ZKProof},
@@ -288,7 +288,6 @@ fn verify_shplemini<H: CurveHooks>(
             field: ProofCommitmentField::GEMINI_MASKING_POLY.to_string(),
         }
     })?;
-
     commitments[2] = vk.q_m;
     commitments[3] = vk.q_c;
     commitments[4] = vk.q_l;
@@ -415,7 +414,7 @@ fn verify_shplemini<H: CurveHooks>(
     boundary += CONST_PROOF_SIZE_LOG_N - 1;
 
     // Finalize the batch opening claim
-    let mut denominators = [Fr::ZERO; LIBRA_POLY_EVALS_LENGTH];
+    let mut denominators = [Fr::ZERO; LIBRA_EVALUATIONS];
 
     denominators[0] = (tp.shplonk_z - tp.gemini_r)
         .inverse()
@@ -426,11 +425,11 @@ fn verify_shplemini<H: CurveHooks>(
     denominators[2] = denominators[0];
     denominators[3] = denominators[0];
 
-    let mut batching_scalars = [Fr::ZERO; LIBRA_POLY_EVALS_LENGTH];
+    let mut batching_scalars = [Fr::ZERO; LIBRA_EVALUATIONS];
 
     // Artifact of interleaving, see TODO(https://github.com/AztecProtocol/barretenberg/issues/1293): Decouple Gemini from Interleaving
     batching_challenge *= tp.shplonk_nu.square();
-    for i in 0..LIBRA_POLY_EVALS_LENGTH {
+    for i in 0..LIBRA_EVALUATIONS {
         let scaling_factor = denominators[i] * batching_challenge;
         batching_scalars[i] = -scaling_factor;
         batching_challenge *= tp.shplonk_nu;
@@ -440,7 +439,7 @@ fn verify_shplemini<H: CurveHooks>(
     scalars[boundary + 1] = batching_scalars[1] + batching_scalars[2];
     scalars[boundary + 2] = batching_scalars[3];
 
-    for i in 0..LIBRA_COMMITMENTS_LENGTH {
+    for i in 0..LIBRA_COMMITMENTS {
         commitments[boundary] = convert_proof_point(proof.libra_commitments[i]).map_err(|_| {
             ProofError::PointNotOnCurve {
                 field: ProofCommitmentField::LIBRA_COMMITMENTS(i).to_string(),
@@ -496,7 +495,7 @@ fn verify_shplemini<H: CurveHooks>(
 }
 
 fn check_evals_consistency(
-    libra_poly_evals: &[Fr; LIBRA_POLY_EVALS_LENGTH],
+    libra_poly_evals: &[Fr; LIBRA_EVALUATIONS],
     gemini_r: Fr,
     u_challenges: &[Fr; CONST_PROOF_SIZE_LOG_N],
     libra_eval: Fr,

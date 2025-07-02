@@ -20,8 +20,8 @@ use snafu::Snafu;
 
 use crate::{
     constants::{
-        CONST_PROOF_SIZE_LOG_N, LIBRA_COMMITMENTS_LENGTH, LIBRA_POLY_EVALS_LENGTH,
-        NUMBER_OF_ENTITIES, ZK_BATCHED_RELATION_PARTIAL_LENGTH,
+        CONST_PROOF_SIZE_LOG_N, LIBRA_COMMITMENTS, LIBRA_EVALUATIONS, NUMBER_OF_ENTITIES,
+        ZK_BATCHED_RELATION_PARTIAL_LENGTH,
     },
     errors::GroupError,
     utils::read_u256,
@@ -235,7 +235,7 @@ pub struct ZKProof {
     pub lookup_inverses: G1ProofPoint,
     // Commitment to grand permutation polynomial
     pub z_perm: G1ProofPoint,
-    pub libra_commitments: [G1ProofPoint; LIBRA_COMMITMENTS_LENGTH],
+    pub libra_commitments: [G1ProofPoint; LIBRA_COMMITMENTS],
     // Sumcheck
     pub libra_sum: Fr,
     pub sumcheck_univariates: [[Fr; ZK_BATCHED_RELATION_PARTIAL_LENGTH]; CONST_PROOF_SIZE_LOG_N],
@@ -247,7 +247,7 @@ pub struct ZKProof {
     // Shplemini
     pub gemini_fold_comms: [G1ProofPoint; CONST_PROOF_SIZE_LOG_N - 1],
     pub gemini_a_evaluations: [Fr; CONST_PROOF_SIZE_LOG_N],
-    pub libra_poly_evals: [Fr; LIBRA_POLY_EVALS_LENGTH],
+    pub libra_poly_evals: [Fr; LIBRA_EVALUATIONS],
     pub shplonk_q: G1ProofPoint,
     pub kzg_quotient: G1ProofPoint,
 }
@@ -277,7 +277,7 @@ impl TryFrom<&[u8]> for ZKProof {
         let lookup_inverses = read_g1_proof_point(proof_bytes, &mut offset)?;
         let z_perm = read_g1_proof_point(proof_bytes, &mut offset)?;
 
-        let mut libra_commitments = [G1ProofPoint::default(); LIBRA_COMMITMENTS_LENGTH];
+        let mut libra_commitments = [G1ProofPoint::default(); LIBRA_COMMITMENTS];
         libra_commitments[0] = read_g1_proof_point(proof_bytes, &mut offset)?;
 
         let libra_sum = read_fr(proof_bytes, &mut offset)?;
@@ -332,7 +332,7 @@ impl TryFrom<&[u8]> for ZKProof {
             .try_into()
             .expect("Should always be able to convert to array");
 
-        let libra_poly_evals: [Fr; LIBRA_POLY_EVALS_LENGTH] = (0..LIBRA_POLY_EVALS_LENGTH)
+        let libra_poly_evals: [Fr; LIBRA_EVALUATIONS] = (0..LIBRA_EVALUATIONS)
             .map(|_| {
                 read_fr(proof_bytes, &mut offset)
                     .expect("Should always be able to read field element here")

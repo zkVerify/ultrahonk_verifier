@@ -14,7 +14,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Fixed G2 point
+// Noir uses the following fixed G2 points as SRS when computing the pairing
+// near the end of the protocol. See:
+// https://github.com/AztecProtocol/barretenberg/blob/4306250af7b46d804168b59b37cec65303acbc63/sol/src/honk/utils.sol#L92-L108
+// In addition, Noir encodes G2 points in this SRS according to the following
+// specification:
+// https://eips.ethereum.org/EIPS/eip-197#encoding
+
 pub static SRS_G2: [u8; 128] = hex_literal::hex!(
     "
     198e9393920d483a7260bfb731fb5d25f1aa493335a9e71297e485b7aef312c2

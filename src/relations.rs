@@ -138,35 +138,31 @@ fn accumulate_arithmetic_relation(
 ) {
     // Relation 0
     let q_arith = wire(p, Wire::Q_ARITH);
-    {
-        const NEG_HALF: Fr = MontFp!(
-            "10944121435919637611123202872628637544274182200208017171849102093287904247808"
-        ); // neg half modulo P
 
-        let mut accum = (q_arith + MINUS_THREE)
-            * (wire(p, Wire::Q_M) * wire(p, Wire::W_R) * wire(p, Wire::W_L))
-            * NEG_HALF;
-        accum += (wire(p, Wire::Q_L) * wire(p, Wire::W_L))
-            + (wire(p, Wire::Q_R) * wire(p, Wire::W_R))
-            + (wire(p, Wire::Q_O) * wire(p, Wire::W_O))
-            + (wire(p, Wire::Q_4) * wire(p, Wire::W_4))
-            + wire(p, Wire::Q_C);
-        accum += (q_arith - Fr::ONE) * wire(p, Wire::W_4_SHIFT);
-        accum *= q_arith;
-        accum *= domain_sep;
-        evals[0] = accum;
-    }
+    const NEG_HALF: Fr =
+        MontFp!("10944121435919637611123202872628637544274182200208017171849102093287904247808"); // neg half modulo r
+
+    let mut accum = (q_arith + MINUS_THREE)
+        * (wire(p, Wire::Q_M) * wire(p, Wire::W_R) * wire(p, Wire::W_L))
+        * NEG_HALF;
+    accum += (wire(p, Wire::Q_L) * wire(p, Wire::W_L))
+        + (wire(p, Wire::Q_R) * wire(p, Wire::W_R))
+        + (wire(p, Wire::Q_O) * wire(p, Wire::W_O))
+        + (wire(p, Wire::Q_4) * wire(p, Wire::W_4))
+        + wire(p, Wire::Q_C);
+    accum += (q_arith - Fr::ONE) * wire(p, Wire::W_4_SHIFT);
+    accum *= q_arith;
+    accum *= domain_sep;
+    evals[0] = accum;
 
     // Relation 1
-    {
-        let mut accum =
-            wire(p, Wire::W_L) + wire(p, Wire::W_4) - wire(p, Wire::W_L_SHIFT) + wire(p, Wire::Q_M);
-        accum *= q_arith + MINUS_TWO;
-        accum *= q_arith + MINUS_ONE;
-        accum *= q_arith;
-        accum *= domain_sep;
-        evals[1] = accum;
-    }
+    let mut accum =
+        wire(p, Wire::W_L) + wire(p, Wire::W_4) - wire(p, Wire::W_L_SHIFT) + wire(p, Wire::Q_M);
+    accum *= q_arith + MINUS_TWO;
+    accum *= q_arith + MINUS_ONE;
+    accum *= q_arith;
+    accum *= domain_sep;
+    evals[1] = accum;
 }
 
 fn accumulate_permutation_relation(
@@ -266,48 +262,40 @@ fn accumulate_delta_range_relation(
     let delta_4 = wire(p, Wire::W_L_SHIFT) - wire(p, Wire::W_4);
 
     // Contribution 6
-    {
-        let mut acc = delta_1;
-        acc *= delta_1 + MINUS_ONE;
-        acc *= delta_1 + MINUS_TWO;
-        acc *= delta_1 + MINUS_THREE;
-        acc *= wire(p, Wire::Q_RANGE);
-        acc *= domain_sep;
-        evals[6] = acc;
-    }
+    let mut acc = delta_1;
+    acc *= delta_1 + MINUS_ONE;
+    acc *= delta_1 + MINUS_TWO;
+    acc *= delta_1 + MINUS_THREE;
+    acc *= wire(p, Wire::Q_RANGE);
+    acc *= domain_sep;
+    evals[6] = acc;
 
     // Contribution 7
-    {
-        let mut acc = delta_2;
-        acc *= delta_2 + MINUS_ONE;
-        acc *= delta_2 + MINUS_TWO;
-        acc *= delta_2 + MINUS_THREE;
-        acc *= wire(p, Wire::Q_RANGE);
-        acc *= domain_sep;
-        evals[7] = acc;
-    }
+    let mut acc = delta_2;
+    acc *= delta_2 + MINUS_ONE;
+    acc *= delta_2 + MINUS_TWO;
+    acc *= delta_2 + MINUS_THREE;
+    acc *= wire(p, Wire::Q_RANGE);
+    acc *= domain_sep;
+    evals[7] = acc;
 
     // Contribution 8
-    {
-        let mut acc = delta_3;
-        acc *= delta_3 + MINUS_ONE;
-        acc *= delta_3 + MINUS_TWO;
-        acc *= delta_3 + MINUS_THREE;
-        acc *= wire(p, Wire::Q_RANGE);
-        acc *= domain_sep;
-        evals[8] = acc;
-    }
+    let mut acc = delta_3;
+    acc *= delta_3 + MINUS_ONE;
+    acc *= delta_3 + MINUS_TWO;
+    acc *= delta_3 + MINUS_THREE;
+    acc *= wire(p, Wire::Q_RANGE);
+    acc *= domain_sep;
+    evals[8] = acc;
 
     // Contribution 9
-    {
-        let mut acc = delta_4;
-        acc *= delta_4 + MINUS_ONE;
-        acc *= delta_4 + MINUS_TWO;
-        acc *= delta_4 + MINUS_THREE;
-        acc *= wire(p, Wire::Q_RANGE);
-        acc *= domain_sep;
-        evals[9] = acc;
-    }
+    let mut acc = delta_4;
+    acc *= delta_4 + MINUS_ONE;
+    acc *= delta_4 + MINUS_TWO;
+    acc *= delta_4 + MINUS_THREE;
+    acc *= wire(p, Wire::Q_RANGE);
+    acc *= domain_sep;
+    evals[9] = acc;
 }
 
 fn accumulate_elliptic_relation(
@@ -489,7 +477,7 @@ fn accumulate_auxillary_relation(
     memory_record_check -= wire(p, Wire::W_4);
 
     //
-    // Contribution 13 & 14
+    // Contributions 13 & 14
     // ROM Consistency Check
     // Partial degree: 1
     // Total degree: 4
@@ -526,7 +514,7 @@ fn accumulate_auxillary_relation(
         memory_record_check * wire(p, Wire::Q_L) * wire(p, Wire::Q_R); // deg 3 or 7
 
     //
-    // Contributions 15, 16, 17
+    // Contributions 15, 16 and 17
     // RAM Consistency Check
     //
     // The 'access' type of the record is extracted with the expression `w_4 - ap.partial_record_check`
