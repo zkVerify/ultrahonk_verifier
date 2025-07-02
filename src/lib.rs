@@ -379,7 +379,7 @@ fn verify_shplemini<H: CurveHooks>(
     let mut scaling_factor_neg: Fr;
 
     // Compute Shplonk constant term contributions from Aₗ(± r^{2ˡ}) for l = 1, ..., m-1;
-    // Compute scalar multipliers for each fold commitment
+    // Compute scalar multipliers for each fold commitment.
     for i in 0..(CONST_PROOF_SIZE_LOG_N - 1) {
         let dummy_round = i as u64 >= (vk.log_circuit_size - 1);
 
