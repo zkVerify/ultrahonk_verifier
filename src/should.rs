@@ -1066,4 +1066,66 @@ mod reject {
             }
         );
     }
+
+    #[rstest]
+    fn a_zk_proof_failing_sumcheck(
+        valid_vk: [u8; VK_SIZE],
+        valid_zk_proof: [u8; ZK_PROOF_SIZE],
+        valid_pubs: [PublicInput; 2],
+    ) {
+        let mut invalid_zk_proof = [0u8; ZK_PROOF_SIZE];
+        invalid_zk_proof.copy_from_slice(&valid_zk_proof);
+        invalid_zk_proof[1184..1184 + 32].fill(0); // Alter sumcheck_univariates[0]
+
+        assert_eq!(
+            verify::<()>(&valid_vk, &ProofType::ZK(invalid_zk_proof), &valid_pubs).unwrap_err(),
+            VerifyError::VerificationError {
+                message: format!(
+                    "Sumcheck Failed. Cause: Total Sum differs from Round Target Sum."
+                )
+            }
+        );
+    }
+
+    #[rstest]
+    fn a_zk_proof_failing_sumcheck_v2(
+        valid_vk: [u8; VK_SIZE],
+        valid_zk_proof: [u8; ZK_PROOF_SIZE],
+        valid_pubs: [PublicInput; 2],
+    ) {
+        let mut invalid_zk_proof = [0u8; ZK_PROOF_SIZE];
+        invalid_zk_proof.copy_from_slice(&valid_zk_proof);
+        invalid_zk_proof[(8 * 128 + 28 * 8 * 32)..(8 * 128 + 28 * 8 * 32 + 40 * 32)].fill(0); // Alter sumcheck_evaluations
+
+        assert_eq!(
+            verify::<()>(&valid_vk, &ProofType::ZK(invalid_zk_proof), &valid_pubs).unwrap_err(),
+            VerifyError::VerificationError {
+                message: format!(
+                    "Sumcheck Failed. Cause: Grand Honk Relation Sum does not match Round Target Sum."
+                )
+            }
+        );
+    }
+
+    #[rstest]
+    fn a_zk_proof_failing_shplemini(
+        valid_vk: [u8; VK_SIZE],
+        valid_zk_proof: [u8; ZK_PROOF_SIZE],
+        valid_pubs: [PublicInput; 2],
+    ) {
+        let mut invalid_zk_proof = [0u8; ZK_PROOF_SIZE];
+        invalid_zk_proof.copy_from_slice(&valid_zk_proof);
+        // Alter gemini_masking_poly
+        let gemini_masking_poly_offset: usize = 10816;
+        invalid_zk_proof[gemini_masking_poly_offset..gemini_masking_poly_offset + 128].fill(0);
+        invalid_zk_proof[gemini_masking_poly_offset + 31] = 1;
+        invalid_zk_proof[gemini_masking_poly_offset + 64 + 31] = 3;
+
+        assert_eq!(
+            verify::<()>(&valid_vk, &ProofType::ZK(invalid_zk_proof), &valid_pubs).unwrap_err(),
+            VerifyError::VerificationError {
+                message: format!("Shplemini Failed. Cause: Point for proof commitment field '\"GEMINI_MASKING_POLY\"' is not on curve")
+            }
+        );
+    }
 }

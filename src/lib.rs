@@ -111,13 +111,13 @@ fn verify_inner<H: CurveHooks>(
     // Sumcheck
     verify_sumcheck(proof, &t, vk.log_circuit_size, public_inputs_delta).map_err(|cause| {
         VerifyError::VerificationError {
-            message: format!("Sumcheck Failed. {}", cause),
+            message: format!("Sumcheck Failed. Cause: {}", cause),
         }
     })?;
 
     // Shplemini
     verify_shplemini(proof, vk, &t).map_err(|cause| VerifyError::VerificationError {
-        message: format!("Shplemini Failed. {}", cause),
+        message: format!("Shplemini Failed. Cause: {}", cause),
     })?;
 
     Ok(())
@@ -158,7 +158,7 @@ fn verify_sumcheck(
         let round_univariate = proof.sumcheck_univariates[round];
         let total_sum = round_univariate[0] + round_univariate[1];
         if total_sum != round_target_sum {
-            return Err("Sumcheck failed");
+            return Err("Total Sum differs from Round Target Sum.");
         }
 
         let round_challenge = tp.sumcheck_u_challenges[round];
@@ -190,7 +190,7 @@ fn verify_sumcheck(
     if grand_honk_relation_sum == round_target_sum {
         Ok(())
     } else {
-        Err("Grand Honk Relation Sum does not match Round Target Sum")
+        Err("Grand Honk Relation Sum does not match Round Target Sum.")
     }
 }
 
