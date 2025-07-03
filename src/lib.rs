@@ -59,7 +59,8 @@ pub use types::*;
 extern crate alloc;
 extern crate core;
 
-use constants::{PROOF_SIZE, SUBGROUP_GENERATOR, SUBGROUP_GENERATOR_INVERSE, ZK_PROOF_SIZE};
+pub use constants::{PROOF_SIZE, ZK_PROOF_SIZE};
+use constants::{SUBGROUP_GENERATOR, SUBGROUP_GENERATOR_INVERSE};
 
 pub const VK_SIZE: usize = 1760;
 pub const PUB_SIZE: usize = 32;
