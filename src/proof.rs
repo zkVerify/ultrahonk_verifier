@@ -100,7 +100,7 @@ impl TryFrom<[u8; 128]> for G1ProofPoint {
         let y_1 = read_u256(&data[96..])?;
 
         // IMPORTANT: Note that validation is skipped here but
-        // is instead performed when we try to convert to G1.
+        // is instead performed when we try to convert to `G1`.
 
         Ok(Self { x_0, x_1, y_0, y_1 })
     }
@@ -1507,19 +1507,5 @@ mod should {
                 })
             );
         }
-
-        // // NOTE: The following test will fail because validation is not done during parsing.
-        // #[rstest]
-        // fn a_zk_proof_with_a_point_not_on_curve() {
-        //     let zk_proof_fields = [
-        //         // CommitmentField::Q_M,
-        //     ];
-        //     let invalid_zk_proof = [0u8; ZK_PROOF_SIZE];
-
-        //     assert_eq!(
-        //         ZKProof::try_from(&invalid_zk_proof[..]),
-        //         Err(ProofError::PointNotOnCurve { field:  })
-        //     );
-        // }
     }
 }
