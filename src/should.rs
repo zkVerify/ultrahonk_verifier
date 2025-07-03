@@ -15,6 +15,7 @@
 // limitations under the License.
 
 use crate::*;
+use alloc::boxed::Box;
 use rstest::{fixture, rstest};
 
 #[fixture]
@@ -1041,7 +1042,12 @@ fn verify_valid_zk_proof(
     valid_zk_proof: [u8; ZK_PROOF_SIZE],
     valid_pubs: [PublicInput; 2],
 ) {
-    assert!(verify::<()>(&valid_vk, &ProofType::ZK(valid_zk_proof), &valid_pubs).is_ok());
+    assert!(verify::<()>(
+        &valid_vk,
+        &ProofType::ZK(Box::new(valid_zk_proof)),
+        &valid_pubs
+    )
+    .is_ok());
 }
 
 mod reject {
@@ -1056,7 +1062,12 @@ mod reject {
         let invalid_pubs: [PublicInput; 0] = [];
 
         assert_eq!(
-            verify::<()>(&valid_vk, &ProofType::ZK(valid_zk_proof), &invalid_pubs).unwrap_err(),
+            verify::<()>(
+                &valid_vk,
+                &ProofType::ZK(Box::new(valid_zk_proof)),
+                &invalid_pubs
+            )
+            .unwrap_err(),
             VerifyError::PublicInputError {
                 message: format!(
                     "Provided public inputs length does not match. Expected: {}; Got: {}",
@@ -1078,7 +1089,12 @@ mod reject {
         invalid_zk_proof[1184..1184 + 32].fill(0); // Alter sumcheck_univariates[0]
 
         assert_eq!(
-            verify::<()>(&valid_vk, &ProofType::ZK(invalid_zk_proof), &valid_pubs).unwrap_err(),
+            verify::<()>(
+                &valid_vk,
+                &ProofType::ZK(Box::new(invalid_zk_proof)),
+                &valid_pubs
+            )
+            .unwrap_err(),
             VerifyError::VerificationError {
                 message: format!(
                     "Sumcheck Failed. Cause: Total Sum differs from Round Target Sum."
@@ -1098,7 +1114,7 @@ mod reject {
         invalid_zk_proof[(8 * 128 + 28 * 8 * 32)..(8 * 128 + 28 * 8 * 32 + 40 * 32)].fill(0); // Alter sumcheck_evaluations
 
         assert_eq!(
-            verify::<()>(&valid_vk, &ProofType::ZK(invalid_zk_proof), &valid_pubs).unwrap_err(),
+            verify::<()>(&valid_vk, &ProofType::ZK(Box::new(invalid_zk_proof)), &valid_pubs).unwrap_err(),
             VerifyError::VerificationError {
                 message: format!(
                     "Sumcheck Failed. Cause: Grand Honk Relation Sum does not match Round Target Sum."
@@ -1122,7 +1138,7 @@ mod reject {
         invalid_zk_proof[gemini_masking_poly_offset + 64 + 31] = 3;
 
         assert_eq!(
-            verify::<()>(&valid_vk, &ProofType::ZK(invalid_zk_proof), &valid_pubs).unwrap_err(),
+            verify::<()>(&valid_vk, &ProofType::ZK(Box::new(invalid_zk_proof)), &valid_pubs).unwrap_err(),
             VerifyError::VerificationError {
                 message: format!("Shplemini Failed. Cause: Point for proof commitment field '\"GEMINI_MASKING_POLY\"' is not on curve")
             }

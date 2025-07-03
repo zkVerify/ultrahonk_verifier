@@ -81,8 +81,8 @@ impl RelationParametersChallenges {
         for pi_bytes in public_inputs {
             let pi = Fr::from_be_bytes_mod_order(pi_bytes);
 
-            numerator = numerator * (numerator_acc + pi);
-            denominator = denominator * (denominator_acc + pi);
+            numerator *= numerator_acc + pi;
+            denominator *= denominator_acc + pi;
 
             numerator_acc += self.beta;
             denominator_acc -= self.beta;
@@ -136,9 +136,9 @@ pub(crate) fn generate_transcript(
 fn split_challenge(challenge: Fr) -> (Fr, Fr) {
     let limbs = challenge.into_bigint().0;
     // compose lower 128 bits as an `Fr`
-    let lower = Fr::from((limbs[1] as u128) << 64 | (limbs[0] as u128));
+    let lower = Fr::from(((limbs[1] as u128) << 64) | (limbs[0] as u128));
     // compose upper 128 bits as an `Fr`
-    let upper = Fr::from((limbs[3] as u128) << 64 | (limbs[2] as u128));
+    let upper = Fr::from(((limbs[3] as u128) << 64) | (limbs[2] as u128));
     (lower, upper)
 }
 

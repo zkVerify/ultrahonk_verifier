@@ -14,6 +14,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+extern crate alloc;
+
 use ark_bn254_ext::{CurveHooks, Fq};
 use ark_ff::{AdditiveGroup, PrimeField};
 use snafu::Snafu;
@@ -27,7 +29,7 @@ use crate::{
     utils::read_u256,
     Fr, G1, PROOF_SIZE, U256, ZK_PROOF_SIZE,
 };
-use alloc::{format, string::String, vec::Vec};
+use alloc::{boxed::Box, format, string::String, vec::Vec};
 use core::ops::{BitOr, Shl};
 
 /// Unified enum for handling errors of all flavors.
@@ -67,8 +69,8 @@ pub enum ProofError {
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum ProofType {
-    Standard([u8; PROOF_SIZE]),
-    ZK([u8; ZK_PROOF_SIZE]),
+    Standard(Box<[u8; PROOF_SIZE]>),
+    ZK(Box<[u8; ZK_PROOF_SIZE]>),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

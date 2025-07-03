@@ -82,7 +82,7 @@ pub fn verify<H: CurveHooks + Default>(
 
         check_public_input_number(&vk, pubs)?;
 
-        verify_inner(&vk, &proof, &pubs)
+        verify_inner(&vk, &proof, pubs)
     } else {
         unimplemented!();
     }
@@ -95,8 +95,8 @@ fn verify_inner<H: CurveHooks>(
 ) -> Result<(), VerifyError> {
     // Generate the Fiat-Shamir challenges for the whole protocol and derive public inputs delta
     let t: ZKTranscript = generate_transcript(
-        &proof,
-        &public_inputs,
+        proof,
+        public_inputs,
         vk.circuit_size,
         public_inputs.len() as u64,
         /*pubInputsOffset=*/ 1,
@@ -166,8 +166,7 @@ fn verify_sumcheck(
         // Update round target for the next round
         round_target_sum = compute_next_target_sum(&round_univariate, round_challenge)
             .expect("compute_next_target_sum should always return an Ok variant");
-        pow_partial_evaluation = pow_partial_evaluation
-            * (Fr::ONE + round_challenge * (tp.gate_challenges[round] - Fr::ONE));
+        pow_partial_evaluation *= Fr::ONE + round_challenge * (tp.gate_challenges[round] - Fr::ONE);
     }
 
     // Final round
@@ -351,12 +350,12 @@ fn verify_shplemini<H: CurveHooks>(
         })?;
 
     // to be Shifted
-    // The following 5 points are cloned to avoid re-validation.
-    commitments[37] = commitments[29].clone();
-    commitments[38] = commitments[30].clone();
-    commitments[39] = commitments[31].clone();
-    commitments[40] = commitments[32].clone();
-    commitments[41] = commitments[33].clone();
+    // The following 5 points are copied to avoid re-validation.
+    commitments[37] = commitments[29];
+    commitments[38] = commitments[30];
+    commitments[39] = commitments[31];
+    commitments[40] = commitments[32];
+    commitments[41] = commitments[33];
 
     // Add contributions from A₀(r) and A₀(-r) to constant_term_accumulator:
     // Compute the evaluations Aₗ(r^{2ˡ}) for l = 0, ..., logN - 1.
@@ -455,14 +454,13 @@ fn verify_shplemini<H: CurveHooks>(
     scalars[boundary] = constant_term_accumulator;
     boundary += 1;
 
-    match check_evals_consistency(
+    if let Err(msg) = check_evals_consistency(
         &proof.libra_poly_evals,
         tp.gemini_r,
         &tp.sumcheck_u_challenges,
         proof.libra_evaluation,
     ) {
-        Err(msg) => return Err(ProofError::ConsistencyCheckFailed { message: msg }),
-        _ => {}
+        return Err(ProofError::ConsistencyCheckFailed { message: msg });
     }
 
     let quotient_commitment =

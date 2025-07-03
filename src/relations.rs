@@ -176,32 +176,25 @@ fn accumulate_permutation_relation(
 ) {
     let mut num =
         wire(p, Wire::W_L) + wire(p, Wire::ID_1) * rp_challenges.beta + rp_challenges.gamma;
-    num =
-        num * (wire(p, Wire::W_R) + wire(p, Wire::ID_2) * rp_challenges.beta + rp_challenges.gamma);
-    num =
-        num * (wire(p, Wire::W_O) + wire(p, Wire::ID_3) * rp_challenges.beta + rp_challenges.gamma);
-    num =
-        num * (wire(p, Wire::W_4) + wire(p, Wire::ID_4) * rp_challenges.beta + rp_challenges.gamma);
+    num *= wire(p, Wire::W_R) + wire(p, Wire::ID_2) * rp_challenges.beta + rp_challenges.gamma;
+    num *= wire(p, Wire::W_O) + wire(p, Wire::ID_3) * rp_challenges.beta + rp_challenges.gamma;
+    num *= wire(p, Wire::W_4) + wire(p, Wire::ID_4) * rp_challenges.beta + rp_challenges.gamma;
 
     let grand_product_numerator = num;
 
     let mut den =
         wire(p, Wire::W_L) + wire(p, Wire::SIGMA_1) * rp_challenges.beta + rp_challenges.gamma;
-    den = den
-        * (wire(p, Wire::W_R) + wire(p, Wire::SIGMA_2) * rp_challenges.beta + rp_challenges.gamma);
-    den = den
-        * (wire(p, Wire::W_O) + wire(p, Wire::SIGMA_3) * rp_challenges.beta + rp_challenges.gamma);
-    den = den
-        * (wire(p, Wire::W_4) + wire(p, Wire::SIGMA_4) * rp_challenges.beta + rp_challenges.gamma);
+    den *= wire(p, Wire::W_R) + wire(p, Wire::SIGMA_2) * rp_challenges.beta + rp_challenges.gamma;
+    den *= wire(p, Wire::W_O) + wire(p, Wire::SIGMA_3) * rp_challenges.beta + rp_challenges.gamma;
+    den *= wire(p, Wire::W_4) + wire(p, Wire::SIGMA_4) * rp_challenges.beta + rp_challenges.gamma;
 
     let grand_product_denominator = den;
 
     // Contribution 2
     let mut acc = (wire(p, Wire::Z_PERM) + wire(p, Wire::LAGRANGE_FIRST)) * grand_product_numerator;
 
-    acc = acc
-        - ((wire(p, Wire::Z_PERM_SHIFT) + (wire(p, Wire::LAGRANGE_LAST) * public_inputs_delta))
-            * grand_product_denominator);
+    acc -= (wire(p, Wire::Z_PERM_SHIFT) + (wire(p, Wire::LAGRANGE_LAST) * public_inputs_delta))
+        * grand_product_denominator;
     acc *= domain_sep;
     evals[2] = acc;
 
