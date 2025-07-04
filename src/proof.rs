@@ -30,7 +30,10 @@ use crate::{
     Fr, G1, PROOF_SIZE, U256, ZK_PROOF_SIZE,
 };
 use alloc::{boxed::Box, format, string::String, vec::Vec};
-use core::ops::{BitOr, Shl};
+use core::{
+    fmt,
+    ops::{BitOr, Shl},
+};
 
 /// Unified enum for handling errors of all flavors.
 #[derive(Debug, PartialEq, Snafu)]
@@ -180,22 +183,22 @@ pub enum ZKProofCommitmentField {
     KZG_QUOTIENT,
 }
 
-impl ZKProofCommitmentField {
-    pub fn to_string(&self) -> String {
+impl fmt::Display for ZKProofCommitmentField {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ZKProofCommitmentField::SHPLONK_Q => "SHPLONK_Q".into(),
-            ZKProofCommitmentField::GEMINI_MASKING_POLY => "GEMINI_MASKING_POLY".into(),
-            ZKProofCommitmentField::W_1 => "W_1".into(),
-            ZKProofCommitmentField::W_2 => "W_2".into(),
-            ZKProofCommitmentField::W_3 => "W_3".into(),
-            ZKProofCommitmentField::W_4 => "W_4".into(),
-            ZKProofCommitmentField::Z_PERM => "Z_PERM".into(),
-            ZKProofCommitmentField::LOOKUP_INVERSES => "LOOKUP_INVERSES".into(),
-            ZKProofCommitmentField::LOOKUP_READ_COUNTS => "LOOKUP_READ_COUNTS".into(),
-            ZKProofCommitmentField::LOOKUP_READ_TAGS => "LOOKUP_READ_TAGS".into(),
-            ZKProofCommitmentField::LIBRA_COMMITMENTS(i) => format!("LIBRA_COMMITMENTS_{i}"),
-            ZKProofCommitmentField::GEMINI_FOLD_COMMS(i) => format!("GEMINI_FOLD_COMMS_{i}"),
-            ZKProofCommitmentField::KZG_QUOTIENT => "KZG_QUOTIENT".into(),
+            ZKProofCommitmentField::SHPLONK_Q => write!(f, "SHPLONK_Q"),
+            ZKProofCommitmentField::GEMINI_MASKING_POLY => write!(f, "GEMINI_MASKING_POLY"),
+            ZKProofCommitmentField::W_1 => write!(f, "W_1"),
+            ZKProofCommitmentField::W_2 => write!(f, "W_2"),
+            ZKProofCommitmentField::W_3 => write!(f, "W_3"),
+            ZKProofCommitmentField::W_4 => write!(f, "W_4"),
+            ZKProofCommitmentField::Z_PERM => write!(f, "Z_PERM"),
+            ZKProofCommitmentField::LOOKUP_INVERSES => write!(f, "LOOKUP_INVERSES"),
+            ZKProofCommitmentField::LOOKUP_READ_COUNTS => write!(f, "LOOKUP_READ_COUNTS"),
+            ZKProofCommitmentField::LOOKUP_READ_TAGS => write!(f, "LOOKUP_READ_TAGS"),
+            ZKProofCommitmentField::LIBRA_COMMITMENTS(i) => write!(f, "LIBRA_COMMITMENTS_{i}"),
+            ZKProofCommitmentField::GEMINI_FOLD_COMMS(i) => write!(f, "GEMINI_FOLD_COMMS_{i}"),
+            ZKProofCommitmentField::KZG_QUOTIENT => write!(f, "KZG_QUOTIENT"),
         }
     }
 }
@@ -215,20 +218,40 @@ pub enum ProofCommitmentField {
     KZG_QUOTIENT,
 }
 
-impl ProofCommitmentField {
-    pub fn to_string(&self) -> String {
+// impl ProofCommitmentField {
+//     fn to_string(&self) -> String {
+//         match self {
+//             ProofCommitmentField::SHPLONK_Q => "SHPLONK_Q".into(),
+//             ProofCommitmentField::W_1 => "W_1".into(),
+//             ProofCommitmentField::W_2 => "W_2".into(),
+//             ProofCommitmentField::W_3 => "W_3".into(),
+//             ProofCommitmentField::W_4 => "W_4".into(),
+//             ProofCommitmentField::Z_PERM => "Z_PERM".into(),
+//             ProofCommitmentField::LOOKUP_INVERSES => "LOOKUP_INVERSES".into(),
+//             ProofCommitmentField::LOOKUP_READ_COUNTS => "LOOKUP_READ_COUNTS".into(),
+//             ProofCommitmentField::LOOKUP_READ_TAGS => "LOOKUP_READ_TAGS".into(),
+//             ProofCommitmentField::GEMINI_FOLD_COMMS(i) => format!("GEMINI_FOLD_COMMS_{i}"),
+//             ProofCommitmentField::KZG_QUOTIENT => "KZG_QUOTIENT".into(),
+//         }
+//     }
+// }
+
+impl fmt::Display for ProofCommitmentField {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ProofCommitmentField::SHPLONK_Q => "SHPLONK_Q".into(),
-            ProofCommitmentField::W_1 => "W_1".into(),
-            ProofCommitmentField::W_2 => "W_2".into(),
-            ProofCommitmentField::W_3 => "W_3".into(),
-            ProofCommitmentField::W_4 => "W_4".into(),
-            ProofCommitmentField::Z_PERM => "Z_PERM".into(),
-            ProofCommitmentField::LOOKUP_INVERSES => "LOOKUP_INVERSES".into(),
-            ProofCommitmentField::LOOKUP_READ_COUNTS => "LOOKUP_READ_COUNTS".into(),
-            ProofCommitmentField::LOOKUP_READ_TAGS => "LOOKUP_READ_TAGS".into(),
-            ProofCommitmentField::GEMINI_FOLD_COMMS(i) => format!("GEMINI_FOLD_COMMS_{i}"),
-            ProofCommitmentField::KZG_QUOTIENT => "KZG_QUOTIENT".into(),
+            ProofCommitmentField::SHPLONK_Q => write!(f, "SHPLONK_Q"),
+            ProofCommitmentField::W_1 => write!(f, "W_1"),
+            ProofCommitmentField::W_2 => write!(f, "W_2"),
+            ProofCommitmentField::W_3 => write!(f, "W_3"),
+            ProofCommitmentField::W_4 => write!(f, "W_4"),
+            ProofCommitmentField::Z_PERM => write!(f, "Z_PERM"),
+            ProofCommitmentField::LOOKUP_INVERSES => write!(f, "LOOKUP_INVERSES"),
+            ProofCommitmentField::LOOKUP_READ_COUNTS => write!(f, "LOOKUP_READ_COUNTS"),
+            ProofCommitmentField::LOOKUP_READ_TAGS => write!(f, "LOOKUP_READ_TAGS"),
+            ProofCommitmentField::GEMINI_FOLD_COMMS(i) => {
+                write!(f, "GEMINI_FOLD_COMMS_{i}")
+            }
+            ProofCommitmentField::KZG_QUOTIENT => write!(f, "KZG_QUOTIENT"),
         }
     }
 }
