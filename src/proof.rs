@@ -328,9 +328,12 @@ impl TryFrom<&[u8]> for ZKProof {
         let mut sumcheck_univariates =
             [[Fr::ZERO; ZK_BATCHED_RELATION_PARTIAL_LENGTH]; CONST_PROOF_SIZE_LOG_N];
 
-        for i in 0..CONST_PROOF_SIZE_LOG_N {
-            for j in 0..ZK_BATCHED_RELATION_PARTIAL_LENGTH {
-                sumcheck_univariates[i][j] = read_fr(proof_bytes, &mut offset)?;
+        for sumcheck_univariate in sumcheck_univariates.iter_mut().take(CONST_PROOF_SIZE_LOG_N) {
+            for su in sumcheck_univariate
+                .iter_mut()
+                .take(ZK_BATCHED_RELATION_PARTIAL_LENGTH)
+            {
+                *su = read_fr(proof_bytes, &mut offset)?;
             }
         }
 
@@ -465,9 +468,12 @@ impl TryFrom<&[u8]> for Proof {
         let mut sumcheck_univariates =
             [[Fr::ZERO; BATCHED_RELATION_PARTIAL_LENGTH]; CONST_PROOF_SIZE_LOG_N];
 
-        for i in 0..CONST_PROOF_SIZE_LOG_N {
-            for j in 0..BATCHED_RELATION_PARTIAL_LENGTH {
-                sumcheck_univariates[i][j] = read_fr(proof_bytes, &mut offset)?;
+        for sumcheck_univariate in sumcheck_univariates.iter_mut().take(CONST_PROOF_SIZE_LOG_N) {
+            for su in sumcheck_univariate
+                .iter_mut()
+                .take(ZK_BATCHED_RELATION_PARTIAL_LENGTH)
+            {
+                *su = read_fr(proof_bytes, &mut offset)?;
             }
         }
 

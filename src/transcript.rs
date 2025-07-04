@@ -289,14 +289,14 @@ fn generate_gate_challenges(previous_challenge: Fr) -> ([Fr; CONST_PROOF_SIZE_LO
     let mut gate_challenges = [Fr::ZERO; CONST_PROOF_SIZE_LOG_N];
     let mut previous_challenge = previous_challenge;
 
-    for i in 0..CONST_PROOF_SIZE_LOG_N {
+    for gc in gate_challenges.iter_mut().take(CONST_PROOF_SIZE_LOG_N) {
         let hash: [u8; 32] = Keccak256::new()
             .chain_update(previous_challenge.into_be_bytes32())
             .finalize()
             .into();
         previous_challenge = Fr::from_be_bytes_mod_order(&hash);
 
-        (gate_challenges[i], _) = split_challenge(previous_challenge);
+        (*gc, _) = split_challenge(previous_challenge);
     }
     let next_previous_challenge = previous_challenge;
 
@@ -338,8 +338,11 @@ fn generate_sumcheck_challenges(
 
         hasher = hasher.chain_update(previous_challenge.into_be_bytes32());
 
-        for j in 0..ZK_BATCHED_RELATION_PARTIAL_LENGTH {
-            hasher = hasher.chain_update(sumcheck_univariate[j].into_be_bytes32());
+        for su in sumcheck_univariate
+            .iter()
+            .take(ZK_BATCHED_RELATION_PARTIAL_LENGTH)
+        {
+            hasher = hasher.chain_update(su.into_be_bytes32());
         }
         let hash: [u8; 32] = hasher.finalize().into();
         previous_challenge = Fr::from_be_bytes_mod_order(&hash);
