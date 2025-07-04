@@ -328,13 +328,18 @@ fn generate_sumcheck_challenges(
     let mut sumcheck_challenges = [Fr::ZERO; CONST_PROOF_SIZE_LOG_N];
     let mut previous_challenge = previous_challenge;
 
-    for i in 0..CONST_PROOF_SIZE_LOG_N {
+    for (i, sumcheck_univariate) in proof
+        .sumcheck_univariates
+        .iter()
+        .enumerate()
+        .take(CONST_PROOF_SIZE_LOG_N)
+    {
         let mut hasher = Keccak256::new();
 
         hasher = hasher.chain_update(previous_challenge.into_be_bytes32());
 
         for j in 0..ZK_BATCHED_RELATION_PARTIAL_LENGTH {
-            hasher = hasher.chain_update(proof.sumcheck_univariates[i][j].into_be_bytes32());
+            hasher = hasher.chain_update(sumcheck_univariate[j].into_be_bytes32());
         }
         let hash: [u8; 32] = hasher.finalize().into();
         previous_challenge = Fr::from_be_bytes_mod_order(&hash);

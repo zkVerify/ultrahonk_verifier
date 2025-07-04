@@ -218,24 +218,6 @@ pub enum ProofCommitmentField {
     KZG_QUOTIENT,
 }
 
-// impl ProofCommitmentField {
-//     fn to_string(&self) -> String {
-//         match self {
-//             ProofCommitmentField::SHPLONK_Q => "SHPLONK_Q".into(),
-//             ProofCommitmentField::W_1 => "W_1".into(),
-//             ProofCommitmentField::W_2 => "W_2".into(),
-//             ProofCommitmentField::W_3 => "W_3".into(),
-//             ProofCommitmentField::W_4 => "W_4".into(),
-//             ProofCommitmentField::Z_PERM => "Z_PERM".into(),
-//             ProofCommitmentField::LOOKUP_INVERSES => "LOOKUP_INVERSES".into(),
-//             ProofCommitmentField::LOOKUP_READ_COUNTS => "LOOKUP_READ_COUNTS".into(),
-//             ProofCommitmentField::LOOKUP_READ_TAGS => "LOOKUP_READ_TAGS".into(),
-//             ProofCommitmentField::GEMINI_FOLD_COMMS(i) => format!("GEMINI_FOLD_COMMS_{i}"),
-//             ProofCommitmentField::KZG_QUOTIENT => "KZG_QUOTIENT".into(),
-//         }
-//     }
-// }
-
 impl fmt::Display for ProofCommitmentField {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
