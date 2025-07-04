@@ -113,13 +113,13 @@ fn verify_inner<H: CurveHooks>(
     // Sumcheck
     verify_sumcheck(proof, &t, vk.log_circuit_size, public_inputs_delta).map_err(|cause| {
         VerifyError::VerificationError {
-            message: format!("Sumcheck Failed. Cause: {}", cause),
+            message: format!("Sumcheck Failed. Cause: {cause}"),
         }
     })?;
 
     // Shplemini
     verify_shplemini(proof, vk, &t).map_err(|cause| VerifyError::VerificationError {
-        message: format!("Shplemini Failed. Cause: {}", cause),
+        message: format!("Shplemini Failed. Cause: {cause}"),
     })?;
 
     Ok(())
@@ -511,11 +511,11 @@ fn check_evals_consistency(
     let mut challenge_poly_lagrange = [Fr::ZERO; SUBGROUP_SIZE as usize];
 
     challenge_poly_lagrange[0] = Fr::ONE;
-    for round in 0..CONST_PROOF_SIZE_LOG_N {
+    for (round, u_ch) in u_challenges.iter().enumerate().take(CONST_PROOF_SIZE_LOG_N) {
         let curr_idx = 1 + 9 * round;
         challenge_poly_lagrange[curr_idx] = Fr::ONE;
         for idx in (curr_idx + 1)..(curr_idx + 9) {
-            challenge_poly_lagrange[idx] = challenge_poly_lagrange[idx - 1] * u_challenges[round];
+            challenge_poly_lagrange[idx] = challenge_poly_lagrange[idx - 1] * u_ch;
         }
     }
 

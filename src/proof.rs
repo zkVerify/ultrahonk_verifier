@@ -131,7 +131,7 @@ fn read_g1_proof_point(data: &[u8], offset: &mut usize) -> Result<G1ProofPoint, 
 
     G1ProofPoint::try_from(chunk)
         .map_err(|_| ProofError::OtherError {
-            message: format!("Failed reading G1 Proof Point at offset {}", offset),
+            message: format!("Failed reading G1 Proof Point at offset {offset}"),
         })
         .inspect(|_| {
             *offset += 128;
@@ -193,8 +193,8 @@ impl ZKProofCommitmentField {
             ZKProofCommitmentField::LOOKUP_INVERSES => "LOOKUP_INVERSES".into(),
             ZKProofCommitmentField::LOOKUP_READ_COUNTS => "LOOKUP_READ_COUNTS".into(),
             ZKProofCommitmentField::LOOKUP_READ_TAGS => "LOOKUP_READ_TAGS".into(),
-            ZKProofCommitmentField::LIBRA_COMMITMENTS(i) => format!("LIBRA_COMMITMENTS_{}", i),
-            ZKProofCommitmentField::GEMINI_FOLD_COMMS(i) => format!("GEMINI_FOLD_COMMS_{}", i),
+            ZKProofCommitmentField::LIBRA_COMMITMENTS(i) => format!("LIBRA_COMMITMENTS_{i}"),
+            ZKProofCommitmentField::GEMINI_FOLD_COMMS(i) => format!("GEMINI_FOLD_COMMS_{i}"),
             ZKProofCommitmentField::KZG_QUOTIENT => "KZG_QUOTIENT".into(),
         }
     }
@@ -227,7 +227,7 @@ impl ProofCommitmentField {
             ProofCommitmentField::LOOKUP_INVERSES => "LOOKUP_INVERSES".into(),
             ProofCommitmentField::LOOKUP_READ_COUNTS => "LOOKUP_READ_COUNTS".into(),
             ProofCommitmentField::LOOKUP_READ_TAGS => "LOOKUP_READ_TAGS".into(),
-            ProofCommitmentField::GEMINI_FOLD_COMMS(i) => format!("GEMINI_FOLD_COMMS_{}", i),
+            ProofCommitmentField::GEMINI_FOLD_COMMS(i) => format!("GEMINI_FOLD_COMMS_{i}"),
             ProofCommitmentField::KZG_QUOTIENT => "KZG_QUOTIENT".into(),
         }
     }
