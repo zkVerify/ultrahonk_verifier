@@ -49,16 +49,15 @@ use ark_bn254_ext::CurveHooks;
 use ark_ec::{pairing::Pairing, AffineRepr, CurveGroup};
 use ark_ff::{batch_inversion, AdditiveGroup, Field, MontFp, One};
 use ark_models_ext::bn::{G1Prepared, G2Prepared};
+use constants::{SUBGROUP_GENERATOR, SUBGROUP_GENERATOR_INVERSE};
 use core::array::from_fn;
 use errors::VerifyError;
-use proof::ProofType;
 
+pub use proof::ProofType;
 pub use types::*;
 
 extern crate alloc;
 extern crate core;
-
-use constants::{SUBGROUP_GENERATOR, SUBGROUP_GENERATOR_INVERSE};
 
 pub const VK_SIZE: usize = 1760;
 pub const PUB_SIZE: usize = 32;
