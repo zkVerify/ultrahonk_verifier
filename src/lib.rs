@@ -62,8 +62,8 @@ use constants::{SUBGROUP_GENERATOR, SUBGROUP_GENERATOR_INVERSE};
 
 pub const VK_SIZE: usize = 1760;
 pub const PUB_SIZE: usize = 32;
-pub const PROOF_SIZE: usize = constants::PROOF_SIZE;
-pub const ZK_PROOF_SIZE: usize = constants::ZK_PROOF_SIZE;
+pub use constants::PROOF_SIZE;
+pub use constants::ZK_PROOF_SIZE;
 
 /// A single public input.
 pub type PublicInput = [u8; PUB_SIZE];
