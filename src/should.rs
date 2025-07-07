@@ -1070,7 +1070,7 @@ mod reject {
             .unwrap_err(),
             VerifyError::PublicInputError {
                 message: format!(
-                    "Provided public inputs length does not match. Expected: {}; Got: {}",
+                    "Provided public inputs length does not match value in vk. Expected: {}; Got: {}",
                     valid_pubs.len(),
                     invalid_pubs.len()
                 )
@@ -1124,23 +1124,100 @@ mod reject {
     }
 
     #[rstest]
-    fn a_zk_proof_failing_shplemini(
+    fn a_zk_proof_failing_shplemini_because_of_points_not_on_curve(
         valid_vk: [u8; VK_SIZE],
         valid_zk_proof: [u8; ZK_PROOF_SIZE],
         valid_pubs: [PublicInput; 2],
     ) {
-        let mut invalid_zk_proof = [0u8; ZK_PROOF_SIZE];
-        invalid_zk_proof.copy_from_slice(&valid_zk_proof);
-        // Alter gemini_masking_poly
-        let gemini_masking_poly_offset: usize = 10816;
-        invalid_zk_proof[gemini_masking_poly_offset..gemini_masking_poly_offset + 128].fill(0);
-        invalid_zk_proof[gemini_masking_poly_offset + 31] = 1;
-        invalid_zk_proof[gemini_masking_poly_offset + 64 + 31] = 3;
+        let field_offset = [
+            // (ZKProofCommitmentField::W_1, 0x00),
+            // (ZKProofCommitmentField::W_2, 0x80),
+            // (ZKProofCommitmentField::W_3, 0x100),
+            // (ZKProofCommitmentField::LOOKUP_READ_COUNTS, 0x180),
+            // (ZKProofCommitmentField::LOOKUP_READ_TAGS, 0x200),
+            // (ZKProofCommitmentField::W_4, 0x280),
+            // (ZKProofCommitmentField::LOOKUP_INVERSES, 0x300),
+            // (ZKProofCommitmentField::Z_PERM, 0x380),
+            // (ZKProofCommitmentField::LIBRA_COMMITMENTS(0), 0x400),
+            // libra_sum, 0x480
+            // sumcheck_univariates 0x4a0, ..., 0x2420
+            // sumcheck_evaluations 0x2440, ..., 0x2940
+            // libra_evaluation 0x2960
+            (ZKProofCommitmentField::LIBRA_COMMITMENTS(1), 0x2940),
+            (ZKProofCommitmentField::LIBRA_COMMITMENTS(2), 0x29c0),
+            (ZKProofCommitmentField::GEMINI_MASKING_POLY, 0x2a40),
+            (ZKProofCommitmentField::GEMINI_FOLD_COMMS(0), 0x2ae0),
+            (ZKProofCommitmentField::GEMINI_FOLD_COMMS(1), 0x2b60),
+            (ZKProofCommitmentField::GEMINI_FOLD_COMMS(2), 0x2be0),
+            (ZKProofCommitmentField::GEMINI_FOLD_COMMS(3), 0x2c60),
+            (ZKProofCommitmentField::GEMINI_FOLD_COMMS(4), 0x2ce0),
+            (ZKProofCommitmentField::GEMINI_FOLD_COMMS(5), 0x2d60),
+            (ZKProofCommitmentField::GEMINI_FOLD_COMMS(6), 0x2de0),
+            (ZKProofCommitmentField::GEMINI_FOLD_COMMS(7), 0x2e60),
+            (ZKProofCommitmentField::GEMINI_FOLD_COMMS(8), 0x2ee0),
+            (ZKProofCommitmentField::GEMINI_FOLD_COMMS(9), 0x2f60),
+            (ZKProofCommitmentField::GEMINI_FOLD_COMMS(10), 0x2fe0),
+            (ZKProofCommitmentField::GEMINI_FOLD_COMMS(11), 0x3060),
+            (ZKProofCommitmentField::GEMINI_FOLD_COMMS(12), 0x30e0),
+            (ZKProofCommitmentField::GEMINI_FOLD_COMMS(13), 0x3160),
+            (ZKProofCommitmentField::GEMINI_FOLD_COMMS(14), 0x31e0),
+            (ZKProofCommitmentField::GEMINI_FOLD_COMMS(15), 0x3260),
+            (ZKProofCommitmentField::GEMINI_FOLD_COMMS(16), 0x32e0),
+            (ZKProofCommitmentField::GEMINI_FOLD_COMMS(17), 0x3360),
+            (ZKProofCommitmentField::GEMINI_FOLD_COMMS(18), 0x33e0),
+            (ZKProofCommitmentField::GEMINI_FOLD_COMMS(19), 0x3460),
+            (ZKProofCommitmentField::GEMINI_FOLD_COMMS(20), 0x34e0),
+            (ZKProofCommitmentField::GEMINI_FOLD_COMMS(21), 0x3560),
+            (ZKProofCommitmentField::GEMINI_FOLD_COMMS(22), 0x35e0),
+            (ZKProofCommitmentField::GEMINI_FOLD_COMMS(23), 0x3660),
+            (ZKProofCommitmentField::GEMINI_FOLD_COMMS(24), 0x36e0),
+            (ZKProofCommitmentField::GEMINI_FOLD_COMMS(25), 0x3760),
+            (ZKProofCommitmentField::GEMINI_FOLD_COMMS(26), 0x37e0),
+            // gemini_a_evaluations 0x3860, ..., 0x3be0
+            // libra_poly_evals 0x3c00, ..., 0x3c80
+            (ZKProofCommitmentField::SHPLONK_Q, 0x3ca0),
+            (ZKProofCommitmentField::KZG_QUOTIENT, 0x3ce0), // 0x3d20
+        ];
 
-        assert_eq!(
+        for (field, offset) in field_offset {
+            let mut invalid_zk_proof = [0u8; ZK_PROOF_SIZE];
+            invalid_zk_proof.copy_from_slice(&valid_zk_proof);
+            // Alter current field; notice that (1, 3) ∉ G1
+            invalid_zk_proof[offset..offset + 128].fill(0);
+            invalid_zk_proof[offset + 31] = 1;
+            invalid_zk_proof[offset + 64 + 31] = 3;
+
+            assert_eq!(
             verify::<()>(&valid_vk, &ProofType::ZK(Box::new(invalid_zk_proof)), &valid_pubs).unwrap_err(),
             VerifyError::VerificationError {
-                message: format!("Shplemini Failed. Cause: Point for proof commitment field '\"GEMINI_MASKING_POLY\"' is not on curve")
+                message: format!("Shplemini Failed. Cause: Point for proof commitment field '\"{field}\"' is not on curve")
+            });
+        }
+    }
+
+    #[rstest]
+    fn a_zk_proof_failing_shplemini_pairing_check(
+        valid_vk: [u8; VK_SIZE],
+        valid_zk_proof: [u8; ZK_PROOF_SIZE],
+        valid_pubs: [PublicInput; 2],
+    ) {
+        let offset = 0x3860; // offset for gemini_fold_comms[27]
+        let mut invalid_zk_proof = [0u8; ZK_PROOF_SIZE];
+        invalid_zk_proof.copy_from_slice(&valid_zk_proof);
+        // Alter field; notice that (1, 3) ∉ G1
+        invalid_zk_proof[offset..offset + 128].fill(0);
+        invalid_zk_proof[offset + 31] = 1;
+        invalid_zk_proof[offset + 64 + 31] = 3;
+
+        assert_eq!(
+            verify::<()>(
+                &valid_vk,
+                &ProofType::ZK(Box::new(invalid_zk_proof)),
+                &valid_pubs
+            )
+            .unwrap_err(),
+            VerifyError::VerificationError {
+                message: format!("Shplemini Failed. Cause: Shpleminy pairing check failed")
             }
         );
     }

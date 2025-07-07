@@ -16,10 +16,6 @@
 
 extern crate alloc;
 
-use ark_bn254_ext::{CurveHooks, Fq};
-use ark_ff::{AdditiveGroup, PrimeField};
-use snafu::Snafu;
-
 use crate::{
     constants::{
         BATCHED_RELATION_PARTIAL_LENGTH, CONST_PROOF_SIZE_LOG_N, LIBRA_COMMITMENTS,
@@ -30,10 +26,13 @@ use crate::{
     Fr, G1, PROOF_SIZE, U256, ZK_PROOF_SIZE,
 };
 use alloc::{boxed::Box, format, string::String, vec::Vec};
+use ark_bn254_ext::{CurveHooks, Fq};
+use ark_ff::{AdditiveGroup, PrimeField};
 use core::{
     fmt,
     ops::{BitOr, Shl},
 };
+use snafu::Snafu;
 
 /// Unified enum for handling errors of all flavors.
 #[derive(Debug, PartialEq, Snafu)]
@@ -320,6 +319,7 @@ impl TryFrom<&[u8]> for ZKProof {
         let z_perm = read_g1_proof_point(proof_bytes, &mut offset)?;
 
         let mut libra_commitments = [G1ProofPoint::default(); LIBRA_COMMITMENTS];
+
         libra_commitments[0] = read_g1_proof_point(proof_bytes, &mut offset)?;
 
         let libra_sum = read_fr(proof_bytes, &mut offset)?;

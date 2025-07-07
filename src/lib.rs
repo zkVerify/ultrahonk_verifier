@@ -29,8 +29,6 @@ mod transcript;
 mod types;
 mod utils;
 
-use core::array::from_fn;
-
 use crate::{
     commitment::{compute_fold_pos_evaluations, compute_squares},
     constants::{
@@ -51,9 +49,10 @@ use ark_bn254_ext::CurveHooks;
 use ark_ec::{pairing::Pairing, AffineRepr, CurveGroup};
 use ark_ff::{batch_inversion, AdditiveGroup, Field, MontFp, One};
 use ark_models_ext::bn::{G1Prepared, G2Prepared};
-
+use core::array::from_fn;
 use errors::VerifyError;
 use proof::ProofType;
+
 pub use types::*;
 
 extern crate alloc;
@@ -133,7 +132,7 @@ fn check_public_input_number<H: CurveHooks>(
     if vk.num_public_inputs != pubs.len() as u64 {
         Err(VerifyError::PublicInputError {
             message: format!(
-                "Provided public inputs length does not match. Expected: {}; Got: {}",
+                "Provided public inputs length does not match value in vk. Expected: {}; Got: {}",
                 vk.num_public_inputs,
                 pubs.len()
             ),
