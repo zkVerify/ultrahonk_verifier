@@ -82,21 +82,11 @@ pub(crate) trait IntoU256 {
 
 impl IntoU256 for &[u8; 32] {
     fn into_u256(self) -> U256 {
-        // Convert the byte array to a little-endian byte vector
-        let mut bytes = self.to_vec(); // Convert the &[u8; 32] slice to a Vec<u8>
-        bytes.reverse(); // Reverse the bytes to ensure little-endian order
-
-        // Create a BigInteger256 from the little-endian byte array
-        let mut limbs = [0u64; 4];
-
-        // Populate the limbs from the byte vector (which is little-endian)
-        for i in 0..4 {
-            limbs[i] = u64::from_le_bytes(
-                bytes[(i << 3)..((i + 1) << 3)]
-                    .try_into()
-                    .expect("Invalid byte slice"),
-            );
-        }
+        let mut rchunks_iter = self.rchunks_exact(8);
+        let limbs: [_; 4] = core::array::from_fn(|_| {
+            u64::from_be_bytes(rchunks_iter.next().unwrap().try_into().unwrap())
+        });
+        debug_assert!(rchunks_iter.remainder().is_empty());
 
         U256::new(limbs)
     }
