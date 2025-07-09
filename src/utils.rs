@@ -200,13 +200,10 @@ pub(crate) fn read_fq_util(data: &[u8]) -> Result<Fq, FieldError> {
         });
     }
 
-    // Convert bytes to limbs manually
-    let mut limbs = [0u64; 4];
-    for (i, chunk) in data.chunks(8).enumerate() {
-        limbs[3 - i] = u64::from_be_bytes(chunk.try_into().unwrap());
-    }
+    let mut rchunks_iter = data.rchunks(8);
+    let limbs = core::array::from_fn(|_| {
+        u64::from_be_bytes(rchunks_iter.next().unwrap().try_into().unwrap())
+    });
 
-    let bigint = U256::new(limbs);
-
-    Ok(bigint.into_fq())
+    Ok(U256::new(limbs).into_fq())
 }
