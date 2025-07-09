@@ -105,14 +105,8 @@ pub(crate) trait IntoBEBytes32 {
 
 impl IntoBEBytes32 for U256 {
     fn into_be_bytes32(self) -> [u8; 32] {
-        let mut bytes = [0u8; 32];
-        for (i, limb) in self.0.iter().rev().enumerate() {
-            // Convert each limb to big-endian bytes
-            let limb_bytes = limb.to_be_bytes();
-            // Copy the bytes into the correct position in the output array
-            bytes[(i << 3)..((i + 1) << 3)].copy_from_slice(&limb_bytes);
-        }
-        bytes
+        let mut rev_iter_be = self.0.iter().rev().flat_map(|limb| limb.to_be_bytes());
+        core::array::from_fn(|_| rev_iter_be.next().unwrap())
     }
 }
 
