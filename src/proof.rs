@@ -25,10 +25,14 @@ use crate::{
     utils::read_u256,
     Fr, G1, PROOF_SIZE, U256, ZK_PROOF_SIZE,
 };
-use alloc::{boxed::Box, format, string::String, vec::Vec};
+use alloc::{
+    boxed::Box,
+    string::{String, ToString},
+};
 use ark_bn254_ext::{CurveHooks, Fq};
 use ark_ff::{AdditiveGroup, PrimeField};
 use core::{
+    array::from_fn,
     fmt,
     ops::{BitOr, Shl},
 };
@@ -111,58 +115,33 @@ impl TryFrom<[u8; 128]> for G1ProofPoint {
 }
 
 // Utility function for parsing `G1ProofPoint` from raw bytes.
-fn read_g1_proof_point(data: &[u8], offset: &mut usize) -> Result<G1ProofPoint, ProofError> {
-    let start: usize = *offset;
-    let end: usize = *offset + 128;
-    if start >= data.len() {
-        // Q: Maybe define a new variant for this case?
-        return Err(ProofError::InvalidSliceLength {
-            expected_length: 128,
-            actual_length: 0,
-        });
-    } else if end > data.len() {
-        return Err(ProofError::InvalidSliceLength {
-            expected_length: 128,
-            actual_length: data.len() - start,
-        });
-    }
-
-    let chunk: [u8; 128] = data[start..end]
+fn read_g1_proof_point(data: &mut &[u8]) -> Result<G1ProofPoint, ProofError> {
+    const CHUNK_SIZE: usize = 128;
+    let chunk: [_; CHUNK_SIZE] = data
+        .split_off(..CHUNK_SIZE)
+        .ok_or(ProofError::InvalidSliceLength {
+            expected_length: CHUNK_SIZE,
+            actual_length: data.len(),
+        })?
         .try_into()
-        .expect("Not enough bytes for G1ProofPoint");
+        .unwrap();
 
-    G1ProofPoint::try_from(chunk)
-        .map_err(|_| ProofError::OtherError {
-            message: format!("Failed reading G1 Proof Point at offset {offset}"),
-        })
-        .inspect(|_| {
-            *offset += 128;
-        })
+    G1ProofPoint::try_from(chunk).map_err(|_| ProofError::OtherError {
+        message: "Failed reading G1 Proof Point".to_string(),
+    })
 }
 
 // Utility function for parsing `Fr` from raw bytes.
-fn read_fr(data: &[u8], offset: &mut usize) -> Result<Fr, ProofError> {
-    let start: usize = *offset;
-    let end: usize = *offset + 32;
-    if start >= data.len() {
-        // Q: Maybe define a new variant for this case?
-        return Err(ProofError::InvalidSliceLength {
-            expected_length: 32,
-            actual_length: 0,
-        });
-    } else if end > data.len() {
-        return Err(ProofError::InvalidSliceLength {
-            expected_length: 32,
-            actual_length: data.len() - start,
-        });
-    }
+fn read_fr(data: &mut &[u8]) -> Result<Fr, ProofError> {
+    const CHUNK_SIZE: usize = 32;
+    let chunk = data
+        .split_off(..CHUNK_SIZE)
+        .ok_or(ProofError::InvalidSliceLength {
+            expected_length: CHUNK_SIZE,
+            actual_length: data.len(),
+        })?;
 
-    let chunk: [u8; 32] = data[start..end]
-        .try_into()
-        .expect("Not enough bytes for field element");
-    Ok(Fr::from_be_bytes_mod_order(&chunk)).inspect(|_| {
-        *offset += 32;
-    })
+    Ok(Fr::from_be_bytes_mod_order(chunk))
 }
 
 #[derive(Debug, Hash, Eq, PartialEq)]
@@ -296,7 +275,7 @@ pub struct ZKProof {
 impl TryFrom<&[u8]> for ZKProof {
     type Error = ProofError;
 
-    fn try_from(proof_bytes: &[u8]) -> Result<Self, Self::Error> {
+    fn try_from(mut proof_bytes: &[u8]) -> Result<Self, Self::Error> {
         if proof_bytes.len() != ZK_PROOF_SIZE {
             return Err(ProofError::IncorrectBufferSize {
                 expected_size: ZK_PROOF_SIZE,
@@ -304,25 +283,23 @@ impl TryFrom<&[u8]> for ZKProof {
             });
         }
 
-        let mut offset = 0;
-
         // Commitments
-        let w1 = read_g1_proof_point(proof_bytes, &mut offset)?;
-        let w2 = read_g1_proof_point(proof_bytes, &mut offset)?;
-        let w3 = read_g1_proof_point(proof_bytes, &mut offset)?;
+        let w1 = read_g1_proof_point(&mut proof_bytes)?;
+        let w2 = read_g1_proof_point(&mut proof_bytes)?;
+        let w3 = read_g1_proof_point(&mut proof_bytes)?;
 
         // Lookup / Permutation Helper Commitments
-        let lookup_read_counts = read_g1_proof_point(proof_bytes, &mut offset)?;
-        let lookup_read_tags = read_g1_proof_point(proof_bytes, &mut offset)?;
-        let w4 = read_g1_proof_point(proof_bytes, &mut offset)?;
-        let lookup_inverses = read_g1_proof_point(proof_bytes, &mut offset)?;
-        let z_perm = read_g1_proof_point(proof_bytes, &mut offset)?;
+        let lookup_read_counts = read_g1_proof_point(&mut proof_bytes)?;
+        let lookup_read_tags = read_g1_proof_point(&mut proof_bytes)?;
+        let w4 = read_g1_proof_point(&mut proof_bytes)?;
+        let lookup_inverses = read_g1_proof_point(&mut proof_bytes)?;
+        let z_perm = read_g1_proof_point(&mut proof_bytes)?;
 
         let mut libra_commitments = [G1ProofPoint::default(); LIBRA_COMMITMENTS];
 
-        libra_commitments[0] = read_g1_proof_point(proof_bytes, &mut offset)?;
+        libra_commitments[0] = read_g1_proof_point(&mut proof_bytes)?;
 
-        let libra_sum = read_fr(proof_bytes, &mut offset)?;
+        let libra_sum = read_fr(&mut proof_bytes)?;
 
         // Sumcheck univariates
         let mut sumcheck_univariates =
@@ -330,58 +307,44 @@ impl TryFrom<&[u8]> for ZKProof {
 
         for sumcheck_univariate in sumcheck_univariates.iter_mut() {
             for su in sumcheck_univariate.iter_mut() {
-                *su = read_fr(proof_bytes, &mut offset)?;
+                *su = read_fr(&mut proof_bytes)?;
             }
         }
 
         // Sumcheck evaluations
-        let sumcheck_evaluations = core::array::from_fn(|_| {
+        let sumcheck_evaluations = from_fn(|_| {
             read_fr(&mut proof_bytes).expect("Should always be able to read field element here")
         });
 
-        let libra_evaluation = read_fr(proof_bytes, &mut offset)?;
+        let libra_evaluation = read_fr(&mut proof_bytes)?;
 
-        libra_commitments[1] = read_g1_proof_point(proof_bytes, &mut offset)?;
-        libra_commitments[2] = read_g1_proof_point(proof_bytes, &mut offset)?;
+        libra_commitments[1] = read_g1_proof_point(&mut proof_bytes)?;
+        libra_commitments[2] = read_g1_proof_point(&mut proof_bytes)?;
 
-        let gemini_masking_poly = read_g1_proof_point(proof_bytes, &mut offset)?;
+        let gemini_masking_poly = read_g1_proof_point(&mut proof_bytes)?;
 
-        let gemini_masking_eval = read_fr(proof_bytes, &mut offset)?;
+        let gemini_masking_eval = read_fr(&mut proof_bytes)?;
 
         // Gemini
         // Read gemini fold univariates
-        let gemini_fold_comms = (0..(CONST_PROOF_SIZE_LOG_N - 1))
-            .map(|_| {
-                read_g1_proof_point(proof_bytes, &mut offset)
-                    .expect("Should always be able to read a G1ProofPoint here")
-            })
-            .collect::<Vec<_>>()
-            .try_into()
-            .expect("Should always be able to convert to array");
+        let gemini_fold_comms = from_fn(|_| {
+            read_g1_proof_point(&mut proof_bytes)
+                .expect("Should always be able to read a G1ProofPoint here")
+        });
 
         // Read gemini a evaluations
-        let gemini_a_evaluations = (0..CONST_PROOF_SIZE_LOG_N)
-            .map(|_| {
-                read_fr(proof_bytes, &mut offset)
-                    .expect("Should always be able to read field element here")
-            })
-            .collect::<Vec<Fr>>()
-            .try_into()
-            .expect("Should always be able to convert to array");
+        let gemini_a_evaluations = from_fn(|_| {
+            read_fr(&mut proof_bytes).expect("Should always be able to read field element here")
+        });
 
-        let libra_poly_evals: [Fr; LIBRA_EVALUATIONS] = (0..LIBRA_EVALUATIONS)
-            .map(|_| {
-                read_fr(proof_bytes, &mut offset)
-                    .expect("Should always be able to read field element here")
-            })
-            .collect::<Vec<Fr>>()
-            .try_into()
-            .expect("Should always be able to convert to array");
+        let libra_poly_evals = from_fn(|_| {
+            read_fr(&mut proof_bytes).expect("Should always be able to read field element here")
+        });
 
         // Shplonk
-        let shplonk_q = read_g1_proof_point(proof_bytes, &mut offset)?;
+        let shplonk_q = read_g1_proof_point(&mut proof_bytes)?;
         // KZG
-        let kzg_quotient = read_g1_proof_point(proof_bytes, &mut offset)?;
+        let kzg_quotient = read_g1_proof_point(&mut proof_bytes)?;
 
         Ok(Self {
             w1,
@@ -434,7 +397,7 @@ pub struct Proof {
 impl TryFrom<&[u8]> for Proof {
     type Error = ProofError;
 
-    fn try_from(proof_bytes: &[u8]) -> Result<Self, Self::Error> {
+    fn try_from(mut proof_bytes: &[u8]) -> Result<Self, Self::Error> {
         if proof_bytes.len() != PROOF_SIZE {
             return Err(ProofError::IncorrectBufferSize {
                 expected_size: PROOF_SIZE,
@@ -442,68 +405,49 @@ impl TryFrom<&[u8]> for Proof {
             });
         }
 
-        let mut offset = 0;
-
         // Commitments
-        let w1 = read_g1_proof_point(proof_bytes, &mut offset)?;
-        let w2 = read_g1_proof_point(proof_bytes, &mut offset)?;
-        let w3 = read_g1_proof_point(proof_bytes, &mut offset)?;
+        let w1 = read_g1_proof_point(&mut proof_bytes)?;
+        let w2 = read_g1_proof_point(&mut proof_bytes)?;
+        let w3 = read_g1_proof_point(&mut proof_bytes)?;
 
         // Lookup / Permutation Helper Commitments
-        let lookup_read_counts = read_g1_proof_point(proof_bytes, &mut offset)?;
-        let lookup_read_tags = read_g1_proof_point(proof_bytes, &mut offset)?;
-        let w4 = read_g1_proof_point(proof_bytes, &mut offset)?;
-        let lookup_inverses = read_g1_proof_point(proof_bytes, &mut offset)?;
-        let z_perm = read_g1_proof_point(proof_bytes, &mut offset)?;
+        let lookup_read_counts = read_g1_proof_point(&mut proof_bytes)?;
+        let lookup_read_tags = read_g1_proof_point(&mut proof_bytes)?;
+        let w4 = read_g1_proof_point(&mut proof_bytes)?;
+        let lookup_inverses = read_g1_proof_point(&mut proof_bytes)?;
+        let z_perm = read_g1_proof_point(&mut proof_bytes)?;
 
         // Sumcheck univariates
         let mut sumcheck_univariates =
             [[Fr::ZERO; BATCHED_RELATION_PARTIAL_LENGTH]; CONST_PROOF_SIZE_LOG_N];
 
-        for sumcheck_univariate in sumcheck_univariates.iter_mut().take(CONST_PROOF_SIZE_LOG_N) {
-            for su in sumcheck_univariate
-                .iter_mut()
-                .take(ZK_BATCHED_RELATION_PARTIAL_LENGTH)
-            {
-                *su = read_fr(proof_bytes, &mut offset)?;
+        for sumcheck_univariate in sumcheck_univariates.iter_mut() {
+            for su in sumcheck_univariate.iter_mut() {
+                *su = read_fr(&mut proof_bytes)?;
             }
         }
 
         // Sumcheck evaluations
-        let sumcheck_evaluations = (0..NUMBER_OF_ENTITIES)
-            .map(|_| {
-                read_fr(proof_bytes, &mut offset)
-                    .expect("Should always be able to read field element here")
-            })
-            .collect::<Vec<Fr>>()
-            .try_into()
-            .expect("Should always be able to convert to array");
+        let sumcheck_evaluations = from_fn(|_| {
+            read_fr(&mut proof_bytes).expect("Should always be able to read field element here")
+        });
 
         // Gemini
         // Read gemini fold univariates
-        let gemini_fold_comms = (0..(CONST_PROOF_SIZE_LOG_N - 1))
-            .map(|_| {
-                read_g1_proof_point(proof_bytes, &mut offset)
-                    .expect("Should always be able to read a G1ProofPoint here")
-            })
-            .collect::<Vec<_>>()
-            .try_into()
-            .expect("Should always be able to convert to array");
+        let gemini_fold_comms = from_fn(|_| {
+            read_g1_proof_point(&mut proof_bytes)
+                .expect("Should always be able to read a G1ProofPoint here")
+        });
 
         // Read gemini a evaluations
-        let gemini_a_evaluations = (0..CONST_PROOF_SIZE_LOG_N)
-            .map(|_| {
-                read_fr(proof_bytes, &mut offset)
-                    .expect("Should always be able to read field element here")
-            })
-            .collect::<Vec<Fr>>()
-            .try_into()
-            .expect("Should always be able to convert to array");
+        let gemini_a_evaluations = from_fn(|_| {
+            read_fr(&mut proof_bytes).expect("Should always be able to read field element here")
+        });
 
         // Shplonk
-        let shplonk_q = read_g1_proof_point(proof_bytes, &mut offset)?;
+        let shplonk_q = read_g1_proof_point(&mut proof_bytes)?;
         // KZG
-        let kzg_quotient = read_g1_proof_point(proof_bytes, &mut offset)?;
+        let kzg_quotient = read_g1_proof_point(&mut proof_bytes)?;
 
         Ok(Self {
             w1,
