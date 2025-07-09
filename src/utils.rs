@@ -54,28 +54,6 @@ impl IntoFq for U256 {
     }
 }
 
-// pub(crate) trait IntoFr {
-//     fn into_fr(self) -> Fr;
-// }
-
-// impl IntoFr for &[u8; 32] {
-//     fn into_fr(self) -> Fr {
-//         self.into_u256().into_fr()
-//     }
-// }
-
-// impl IntoFr for [u8; 32] {
-//     fn into_fr(self) -> Fr {
-//         (&self).into_fr()
-//     }
-// }
-
-// impl IntoFr for U256 {
-//     fn into_fr(self) -> Fr {
-//         Fr::new(self)
-//     }
-// }
-
 pub(crate) trait IntoU256 {
     fn into_u256(self) -> U256;
 }
