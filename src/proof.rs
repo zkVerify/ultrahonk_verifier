@@ -335,14 +335,9 @@ impl TryFrom<&[u8]> for ZKProof {
         }
 
         // Sumcheck evaluations
-        let sumcheck_evaluations = (0..NUMBER_OF_ENTITIES)
-            .map(|_| {
-                read_fr(proof_bytes, &mut offset)
-                    .expect("Should always be able to read field element here")
-            })
-            .collect::<Vec<Fr>>()
-            .try_into()
-            .expect("Should always be able to convert to array");
+        let sumcheck_evaluations = core::array::from_fn(|_| {
+            read_fr(&mut proof_bytes).expect("Should always be able to read field element here")
+        });
 
         let libra_evaluation = read_fr(proof_bytes, &mut offset)?;
 
