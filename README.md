@@ -578,7 +578,7 @@ static pubs: Vec<[u8; PUB_SIZE]> = alloc::vec![
     ];
 
 // Use the `ProofType::ZK` variant to wrap around `zk_proof_data`.
-static proof = ProofType::ZK(Box::new(zk_proof_data));
+static proof: ProofType = ProofType::ZK(Box::new(zk_proof_data));
 
 // Call the UltraHonk verifier.
 verify::<()>(&vk, &proof, &pubs).is_ok() // true
