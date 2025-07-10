@@ -8,8 +8,8 @@ The UltraHonk zk-SNARK verifier is a Rust-based implementation of Noir's UltraHo
 extern crate alloc;
 
 use alloc::boxed::Box;
-use ultraplonk_no_std::{ProofType, PUB_SIZE, verify, VK_SIZE, ZK_PROOF_SIZE};
 use hex_literal::hex;
+use ultrahonk_no_std::{ProofType, verify};
 
 // Sample zero-knowledge proof.
 let zk_proof_data = hex!(
