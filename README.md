@@ -5,16 +5,14 @@ The UltraHonk zk-SNARK verifier is a Rust-based implementation of Noir's UltraHo
 ## Usage
 
 ```rust
-#![no_std]
-
 extern crate alloc;
 
-use alloc::{boxed::Box, vec::Vec};
+use alloc::boxed::Box;
 use ultraplonk_no_std::{ProofType, PUB_SIZE, verify, VK_SIZE, ZK_PROOF_SIZE};
 use hex_literal::hex;
 
 // Sample zero-knowledge proof.
-static zk_proof_data: [u8; ZK_PROOF_SIZE] = hex_literal::hex!(
+let zk_proof_data = hex!(
       "
         000000000000000000000000000000a16555b44bbe764b90975aa0d52b0ba43c
         0000000000000000000000000000000000041100eba196005627bb28e3b6ec82
@@ -511,9 +509,9 @@ static zk_proof_data: [u8; ZK_PROOF_SIZE] = hex_literal::hex!(
     );
 
 // Sample verification key.
-static vk: [u8; VK_SIZE] = hex_literal::hex!(
+let vk = hex!(
       "
-      0000000000000020000000000000000500000000000000020000000000000001
+        0000000000000020000000000000000500000000000000020000000000000001
         1d4e2b662cf75598ae75c80cb6190d6d86bc92fd69f1420fc9e6d5be8ba09e2c
         30210ded34398f54e3048f65c3f1dac749cc5022828668a6b345712af7369cbb
         1c3736f27bc34afe8eb1021704555717e76024100c144933330df5d9a6fb7e7f
@@ -572,13 +570,13 @@ static vk: [u8; VK_SIZE] = hex_literal::hex!(
     );
 
 // Sample public inputs.
-static pubs: Vec<[u8; PUB_SIZE]> = alloc::vec![
-        hex_literal::hex!("0000000000000000000000000000000000000000000000000000000000000002"),
-        hex_literal::hex!("0000000000000000000000000000000000000000000000000000000000000003"),
+let pubs = [
+        hex!("0000000000000000000000000000000000000000000000000000000000000002"),
+        hex!("0000000000000000000000000000000000000000000000000000000000000003"),
     ];
 
 // Use the `ProofType::ZK` variant to wrap around `zk_proof_data`.
-static proof: ProofType = ProofType::ZK(Box::new(zk_proof_data));
+let proof: ProofType = ProofType::ZK(Box::new(zk_proof_data));
 
 // Call the UltraHonk verifier.
 verify::<()>(&vk, &proof, &pubs).is_ok() // true
