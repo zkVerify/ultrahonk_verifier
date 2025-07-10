@@ -14,7 +14,7 @@ use ultraplonk_no_std::{ProofType, PUB_SIZE, verify, VK_SIZE, ZK_PROOF_SIZE};
 use hex_literal::hex;
 
 // Sample zero-knowledge proof.
-let zk_proof_data: [u8; ZK_PROOF_SIZE] = hex_literal::hex!(
+static zk_proof_data: [u8; ZK_PROOF_SIZE] = hex_literal::hex!(
       "
         000000000000000000000000000000a16555b44bbe764b90975aa0d52b0ba43c
         0000000000000000000000000000000000041100eba196005627bb28e3b6ec82
@@ -511,7 +511,7 @@ let zk_proof_data: [u8; ZK_PROOF_SIZE] = hex_literal::hex!(
     );
 
 // Sample verification key.
-let vk: [u8; VK_SIZE] = hex_literal::hex!(
+static vk: [u8; VK_SIZE] = hex_literal::hex!(
       "
       0000000000000020000000000000000500000000000000020000000000000001
         1d4e2b662cf75598ae75c80cb6190d6d86bc92fd69f1420fc9e6d5be8ba09e2c
@@ -572,7 +572,7 @@ let vk: [u8; VK_SIZE] = hex_literal::hex!(
     );
 
 // Sample public inputs.
-let pubs: Vec<[u8; PUB_SIZE]> = alloc::vec![
+static pubs: Vec<[u8; PUB_SIZE]> = alloc::vec![
         hex_literal::hex!("0000000000000000000000000000000000000000000000000000000000000002"),
         hex_literal::hex!("0000000000000000000000000000000000000000000000000000000000000003"),
     ];
