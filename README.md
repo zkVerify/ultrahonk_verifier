@@ -662,7 +662,7 @@ dump_data_hex "$ZKV_PROOF_FILE_PATH" > "$ZKV_PROOF_HEX_FILE_PATH"
 echo "✅ 'zkv_proof.hex' file generated at ${ZKV_PROOF_HEX_FILE_PATH}."
 ```
 
-This command will provide the `zkv_proof` and `zkv_pubs` files in binary format. Also the hexadecimal files `zkv_proof.hex`, and `zkv_pubs.hex`are generated, for ease of submission to `zkVerify`.
+This command will provide the `zkv_proof` and `zkv_pubs` files in binary format. Also, the hexadecimal files `zkv_proof.hex`, and `zkv_pubs.hex`are generated, for ease of submission to `zkVerify`.
 
 The vk output by Noir should be ready do use as it is. However, if you wish to generate a `zkv_vk.hex` file, you can use the following script:
 
@@ -677,4 +677,4 @@ echo "✍️  Writing vk (hex) data to ${ZKV_VK_HEX_FILE_PATH}..."
 echo "✅ 'zkv_vk.hex' file generated at ${ZKV_VK_HEX_FILE_PATH}."
 ```
 
-And with that, you are all set!
+And with that, you're all set!
