@@ -579,7 +579,7 @@ let pubs = [
 let proof: ProofType = ProofType::ZK(Box::new(zk_proof_data));
 
 // Call the UltraHonk verifier.
-verify::<()>(&vk, &proof, &pubs).is_ok() // true
+verify::<()>(&vk, &proof, &pubs) // success
 ```
 
 > **Note:** Please note that this verifier currently only supports the following configuration:
