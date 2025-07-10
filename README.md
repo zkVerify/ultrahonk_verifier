@@ -577,7 +577,7 @@ let pubs: Vec<[u8; PUB_SIZE]> = alloc::vec![
 let proof = ProofType::ZK(Box::new(zk_proof_data));
 
 // Call the UltraHonk verifier.
-Ultrahonk::<MockRuntime>::verify_proof(&vk, &proof, &pubs).is_ok() // true
+verify::<()>(&vk, &proof, &pubs).is_ok() // true
 ```
 
 > **Note:** Please note that this verifier currently only supports the following configuration:
