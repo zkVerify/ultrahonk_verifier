@@ -2,8 +2,7 @@ target
 target/*
 Cargo.lock
 lcov.info
-vk
-zkvk
-proof
-zkproof
 hex_dump.py
+bb_artifacts
+bb_artifacts/*
+contracts/zkVerifier-recursive.sol
