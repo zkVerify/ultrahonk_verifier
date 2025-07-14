@@ -608,6 +608,12 @@ ZKV_PUBS_FILE_PATH="./zkv_pubs"
 ZKV_PROOF_HEX_FILE_PATH="./zkv_proof.hex"
 ZKV_PUBS_HEX_FILE_PATH="./zkv_pubs.hex"
 
+# If the file does NOT exist
+if [ ! -f "$PROOF_FILE_PATH" ]; then
+    echo "Error: File not found at '$PROOF_FILE_PATH'. Terminating." >&2
+    exit 1
+fi
+
 # A Bash utility function for writing binary data to a .hex file.
 # It takes one argument: the path to the file containing the raw binary data.
 # It prints the "0x" prefixed hex string to standard output.
@@ -671,6 +677,12 @@ VK_FILE_PATH="./target/vk"  # Adjust path depending on where the Noir-generated 
 
 # Ignore the following:
 ZKV_VK_HEX_FILE_PATH="./zkv_vk.hex"
+
+# If the file does NOT exist
+if [ ! -f "$VK_FILE_PATH" ]; then
+    echo "Error: File not found at '$VK_FILE_PATH'. Terminating." >&2
+    exit 1
+fi
 
 echo "✍️  Writing vk (hex) data to ${ZKV_VK_HEX_FILE_PATH}..."
 { printf "0x"; xxd -p -c 256 "$VK_FILE_PATH" | tr -d '\n'; echo; } > "$ZKV_VK_HEX_FILE_PATH"
