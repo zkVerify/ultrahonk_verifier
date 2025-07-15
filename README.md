@@ -625,13 +625,12 @@ convert_to_hex_and_write() {
   local output_path="$2"
   local data_name="$3" # e.g., "proof", "vk", "public inputs"
 
-  # 1. Check if the input file exists. If not, print error and exit.
+  # Check if input binary file exists
   if [ ! -f "$input_path" ]; then
     echo "Error: Input file for '$data_name' not found at '$input_path'. Terminating." >&2
     exit 1
   fi
 
-  # 2. Announce the action, convert the file, and announce success.
   echo "✍️  Writing $data_name (hex) data to ${output_path}..."
   { printf "0x"; xxd -p -c 256 "$input_path" | tr -d '\n'; echo; } > "$output_path"
   echo "✅ '$data_name' hex file generated at ${output_path}."
