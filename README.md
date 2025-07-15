@@ -594,8 +594,8 @@ Please, ensure that you are using the latest version of Noir and follow the [off
 Please make sure to use `--scheme ultra_honk` in order to make explicit that you wish to use UltraHonk as your proving scheme. In addition, use `--oracle_hash keccak` to instruct `bb` to generate a proof with `keccak` as the hash function, and `--zk` to specify that you would like `bb` to use the zero-knowledge version of UltraHonk for proof generation. You will also need to specify the scheme and oracle hash when using the `write_vk` subcommand.
 
 >Example: Here's a worked example:
-`bb prove --scheme ultra_honk -b ./target/hello_world.json -w ./target/hello_world.gz -o ./target --oracle_hash keccak --zk`
-`bb write_vk --scheme ultra_honk -b ./target/hello_world.json -o ./target --oracle_hash keccak`
+- `bb prove --scheme ultra_honk -b ./target/hello_world.json -w ./target/hello_world.gz -o ./target --oracle_hash keccak --zk`
+- `bb write_vk --scheme ultra_honk -b ./target/hello_world.json -o ./target --oracle_hash keccak`
 
 ## Convert `proof`, `vk`, and `pubs` into zkVerify-compatible format
 The binary files output by Noir are ready to use out of the box. However, for your ease of submission to `zkVerify`, we provide a Bash script for converting them into hexadecimal files `zkv_proof.hex`, `zkv_vk.hex`, and `zkv_pubs.hex`.
