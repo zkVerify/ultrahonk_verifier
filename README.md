@@ -597,7 +597,7 @@ Please make sure to use `--scheme ultra_honk` in order to make explicit that you
 `bb prove --scheme ultra_honk -b ./target/hello_world.json -w ./target/hello_world.gz -o ./target --oracle_hash keccak --zk`
 `bb write_vk --scheme ultra_honk -b ./target/hello_world.json -o ./target --oracle_hash keccak`
 
-## Convert `proof`, `pubs`, and `vk` into zkVerify-compatible format
+## Convert `proof`, `vk`, and `pubs` into zkVerify-compatible format
 The binary files output by Noir are ready to use out of the box. However, for your ease of submission to `zkVerify`, we provide a Bash script for converting them into hexadecimal files `zkv_proof.hex`, `zkv_vk.hex`, and `zkv_pubs.hex`.
 
 Please run the following script, adjusting the path to the proof, vk, and public inputs files, accordingly:
