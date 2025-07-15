@@ -1,0 +1,30 @@
+[package]
+version = "0.1.0"
+name = "ultrahonk-no-std"
+authors = ["Horizen Labs <admin@horizenlabs.io>"]
+repository = "https://github.com/zkVerify/ultrahonk_verifier"
+homepage = "https://horizenlabs.io"
+keywords = ["cryptography", "elliptic-curves", "pairing", "zk-SNARKs"]
+categories = ["cryptography"]
+include = ["Cargo.toml", "src", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
+license = "MIT/Apache-2.0"
+edition = "2021"
+
+[dependencies]
+ark-bn254-ext = { git = "https://github.com/zkVerify/accelerated-bn-cryptography.git", default-features = false, tag = "v0.6.0" }
+ark-models-ext = { git = "https://github.com/zkVerify/accelerated-bn-cryptography.git", default-features = false, tag = "v0.6.0" }
+ark-bn254 = { version = "0.5.0", default-features = false }
+ark-ec = { version = "0.5.0", default-features = false }
+ark-ff = { version = "0.5.0", default-features = false }
+ark-std = { version = "0.5.0", default-features = false }
+hex = { version = "0.4.3", default-features = false, features = ["alloc"], optional = true }
+hex-literal = { version = "0.4.1", default-features = false }
+sha3 = { version = "0.10.8", default-features = false }
+snafu = { version = "0.8.3", default-features = false }
+
+[dev-dependencies]
+rstest = { version = "0.19.0", default-features = false }
+
+[features]
+default = ["std"]
+std = []

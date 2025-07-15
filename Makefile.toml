@@ -1,0 +1,81 @@
+[config]
+default_to_workspace = false
+
+[tasks.ignore-members]
+workspace = false
+
+[tasks.clean]
+command = "cargo"
+args = ["clean"]
+
+[tasks.install-bare-metal]
+command = "rustup"
+args = ["target", "add", "thumbv7em-none-eabi"]
+
+[tasks.build-bare-metal]
+dependencies = ["install-bare-metal"]
+command = "cargo"
+args = ["build", "--no-default-features", "--target", "thumbv7em-none-eabi"]
+
+[tasks.build]
+command = "cargo"
+args = ["build", "--release"]
+
+[tasks.test]
+command = "cargo"
+args = ["test", "--release"]
+
+[tasks.format_inst]
+[tasks.format-inst]
+install_crate = { crate_name = "rustfmt", rustup_component_name = "rustfmt", binary = "rustfmt", test_arg = "--help" }
+
+[tasks.format]
+dependencies = ["format-inst"]
+command = "cargo"
+args = ["fmt"]
+
+[tasks.format-check]
+dependencies = ["format-inst"]
+command = "cargo"
+args = ["fmt", "--check"]
+
+[tasks.clippy-inst]
+install_crate = { crate_name = "clippy", rustup_component_name = "clippy", binary = "clippy", test_arg = "--help" }
+
+[tasks.clippy]
+dependencies = ["clippy-inst"]
+command = "cargo"
+args = ["clippy", "--", "--deny", "warnings"]
+
+[tasks.audit-inst]
+command = "cargo"
+args = ["install", "cargo-audit"]
+
+[tasks.audit]
+dependencies = ["audit-inst"]
+command = "cargo"
+args = ["audit"]
+
+[tasks.cov]
+command = "cargo"
+args = ["llvm-cov", "--workspace", "--lcov", "--output-path", "lcov.info"]
+
+[tasks.udeps-inst]
+command = "cargo"
+toolchain = "nightly"
+args = ["install", "cargo-udeps", "--locked"]
+
+[tasks.udeps]
+dependencies = ["udeps-inst"]
+toolchain = "nightly"
+command = "cargo"
+args = ["udeps", "--all-targets"]
+
+[tasks.ci-common]
+dependencies = ["build", "build-bare-metal", "test", "clippy", "audit", "udeps"]
+
+[tasks.ci]
+dependencies = ["format", "ci-common"]
+
+[tasks.ci-remote]
+dependencies = ["format-check", "ci-common"]

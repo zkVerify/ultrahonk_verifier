@@ -1,0 +1,50 @@
+name: CI-rustdoc
+
+run-name: "Rust doc generation"
+
+on:
+  push:
+    tags:
+      - v[0-9]+.[0-9]+.[0-9]+*
+  workflow_dispatch:
+
+env:
+  RUST_BACKTRACE: 1
+
+jobs:
+  rustdoc-generation:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+
+      - name: Generate Rust documentation
+        run: cargo doc --no-deps
+
+      - name: Remove lock file
+        run: rm target/doc/.lock
+
+      - name: Add redirect
+        run: echo '<meta http-equiv="refresh" content="0;url=ultrahonk_no_std/index.html">' > target/doc/index.html
+
+      - name: Upload documentation
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: target/doc
+
+  rustdoc-deployment:
+    needs: rustdoc-generation
+
+    permissions:
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
