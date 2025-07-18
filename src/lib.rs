@@ -37,11 +37,12 @@ use crate::{
     },
     key::VerificationKey,
     proof::{
-        convert_proof_point, ProofCommitmentField, ProofError, ZKProof, ZKProofCommitmentField,
+        convert_proof_point, ParsedProof, PlainProof, PlainProofCommitmentField, ProofError,
+        ZKProof, ZKProofCommitmentField,
     },
     relations::accumulate_relation_evaluations,
     srs::{SRS_G2, SRS_G2_VK},
-    transcript::{generate_transcript, ZKTranscript},
+    transcript::{generate_transcript, Transcript, ZKTranscript},
     utils::read_g2,
 };
 use alloc::{format, string::ToString};
@@ -75,27 +76,35 @@ pub fn verify<H: CurveHooks + Default>(
 ) -> Result<(), VerifyError> {
     let vk = VerificationKey::<H>::try_from(vk_bytes).map_err(|_| VerifyError::KeyError)?;
 
-    // TODO: Update to support both flavors...
     if let ProofType::ZK(proof_bytes) = proof_type {
-        let proof =
-            ZKProof::try_from(&proof_bytes[..]).map_err(|_| VerifyError::InvalidProofError)?;
+        let proof = ParsedProof::ZK(
+            ZKProof::try_from(&proof_bytes[..]).map_err(|_| VerifyError::InvalidProofError)?,
+        );
+
+        check_public_input_number(&vk, pubs)?;
+
+        verify_inner(&vk, &proof, pubs)
+    } else if let ProofType::Plain(proof_bytes) = proof_type {
+        let proof = ParsedProof::Plain(
+            PlainProof::try_from(&proof_bytes[..]).map_err(|_| VerifyError::InvalidProofError)?,
+        );
 
         check_public_input_number(&vk, pubs)?;
 
         verify_inner(&vk, &proof, pubs)
     } else {
-        unimplemented!();
+        unimplemented!("Unreachable for now.");
     }
 }
 
 fn verify_inner<H: CurveHooks>(
     vk: &VerificationKey<H>,
-    proof: &ZKProof,
+    parsed_proof: &ParsedProof,
     public_inputs: &Pubs,
 ) -> Result<(), VerifyError> {
     // Generate the Fiat-Shamir challenges for the whole protocol and derive public inputs delta
-    let t: ZKTranscript = generate_transcript(
-        proof,
+    let t: Transcript = generate_transcript(
+        parsed_proof,
         public_inputs,
         vk.circuit_size,
         public_inputs.len() as u64,
@@ -465,7 +474,7 @@ fn verify_shplemini<H: CurveHooks>(
 
     let quotient_commitment =
         convert_proof_point(proof.kzg_quotient).map_err(|_| ProofError::PointNotOnCurve {
-            field: ProofCommitmentField::KZG_QUOTIENT.to_string(),
+            field: PlainProofCommitmentField::KZG_QUOTIENT.to_string(),
         })?;
 
     commitments[boundary] = quotient_commitment;

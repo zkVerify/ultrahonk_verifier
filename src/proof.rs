@@ -75,7 +75,7 @@ pub enum ProofError {
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum ProofType {
-    Standard(Box<[u8; PROOF_SIZE]>),
+    Plain(Box<[u8; PROOF_SIZE]>),
     ZK(Box<[u8; ZK_PROOF_SIZE]>),
 }
 
@@ -182,7 +182,7 @@ impl fmt::Display for ZKProofCommitmentField {
 }
 
 #[derive(Debug, Hash, Eq, PartialEq)]
-pub enum ProofCommitmentField {
+pub enum PlainProofCommitmentField {
     SHPLONK_Q,
     W_1,
     W_2,
@@ -196,22 +196,22 @@ pub enum ProofCommitmentField {
     KZG_QUOTIENT,
 }
 
-impl fmt::Display for ProofCommitmentField {
+impl fmt::Display for PlainProofCommitmentField {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ProofCommitmentField::SHPLONK_Q => write!(f, "SHPLONK_Q"),
-            ProofCommitmentField::W_1 => write!(f, "W_1"),
-            ProofCommitmentField::W_2 => write!(f, "W_2"),
-            ProofCommitmentField::W_3 => write!(f, "W_3"),
-            ProofCommitmentField::W_4 => write!(f, "W_4"),
-            ProofCommitmentField::Z_PERM => write!(f, "Z_PERM"),
-            ProofCommitmentField::LOOKUP_INVERSES => write!(f, "LOOKUP_INVERSES"),
-            ProofCommitmentField::LOOKUP_READ_COUNTS => write!(f, "LOOKUP_READ_COUNTS"),
-            ProofCommitmentField::LOOKUP_READ_TAGS => write!(f, "LOOKUP_READ_TAGS"),
-            ProofCommitmentField::GEMINI_FOLD_COMMS(i) => {
+            PlainProofCommitmentField::SHPLONK_Q => write!(f, "SHPLONK_Q"),
+            PlainProofCommitmentField::W_1 => write!(f, "W_1"),
+            PlainProofCommitmentField::W_2 => write!(f, "W_2"),
+            PlainProofCommitmentField::W_3 => write!(f, "W_3"),
+            PlainProofCommitmentField::W_4 => write!(f, "W_4"),
+            PlainProofCommitmentField::Z_PERM => write!(f, "Z_PERM"),
+            PlainProofCommitmentField::LOOKUP_INVERSES => write!(f, "LOOKUP_INVERSES"),
+            PlainProofCommitmentField::LOOKUP_READ_COUNTS => write!(f, "LOOKUP_READ_COUNTS"),
+            PlainProofCommitmentField::LOOKUP_READ_TAGS => write!(f, "LOOKUP_READ_TAGS"),
+            PlainProofCommitmentField::GEMINI_FOLD_COMMS(i) => {
                 write!(f, "GEMINI_FOLD_COMMS_{i}")
             }
-            ProofCommitmentField::KZG_QUOTIENT => write!(f, "KZG_QUOTIENT"),
+            PlainProofCommitmentField::KZG_QUOTIENT => write!(f, "KZG_QUOTIENT"),
         }
     }
 }
@@ -242,6 +242,24 @@ pub(crate) fn convert_proof_point<H: CurveHooks>(
     Ok(point)
 }
 
+pub(crate) trait HasCommonProofData {
+    // getters
+    fn w1(&self) -> &G1ProofPoint;
+    fn w2(&self) -> &G1ProofPoint;
+    fn w3(&self) -> &G1ProofPoint;
+    fn w4(&self) -> &G1ProofPoint;
+    fn lookup_read_counts(&self) -> &G1ProofPoint;
+    fn lookup_read_tags(&self) -> &G1ProofPoint;
+    fn lookup_inverses(&self) -> &G1ProofPoint;
+    fn z_perm(&self) -> &G1ProofPoint;
+    fn sumcheck_univariates<'a>(&'a self) -> Box<dyn Iterator<Item = &'a [Fr]> + 'a>; // varies
+    fn sumcheck_evaluations(&self) -> &[Fr];
+    fn gemini_fold_comms(&self) -> &[G1ProofPoint];
+    fn gemini_a_evaluations(&self) -> &[Fr];
+    fn shplonk_q(&self) -> &G1ProofPoint;
+    fn kzg_quotient(&self) -> &G1ProofPoint;
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub struct ZKProof {
     // Commitments to wire polynomials
@@ -270,6 +288,64 @@ pub struct ZKProof {
     pub libra_poly_evals: [Fr; LIBRA_EVALUATIONS],
     pub shplonk_q: G1ProofPoint,
     pub kzg_quotient: G1ProofPoint,
+}
+
+impl HasCommonProofData for ZKProof {
+    fn w1(&self) -> &G1ProofPoint {
+        &self.w1
+    }
+
+    fn w2(&self) -> &G1ProofPoint {
+        &self.w2
+    }
+
+    fn w3(&self) -> &G1ProofPoint {
+        &self.w3
+    }
+
+    fn w4(&self) -> &G1ProofPoint {
+        &self.w4
+    }
+
+    fn lookup_read_counts(&self) -> &G1ProofPoint {
+        &self.lookup_read_counts
+    }
+
+    fn lookup_read_tags(&self) -> &G1ProofPoint {
+        &self.lookup_read_tags
+    }
+
+    fn lookup_inverses(&self) -> &G1ProofPoint {
+        &self.lookup_inverses
+    }
+
+    fn z_perm(&self) -> &G1ProofPoint {
+        &self.z_perm
+    }
+
+    fn shplonk_q(&self) -> &G1ProofPoint {
+        &self.shplonk_q
+    }
+
+    fn kzg_quotient(&self) -> &G1ProofPoint {
+        &self.kzg_quotient
+    }
+
+    fn sumcheck_univariates<'a>(&'a self) -> Box<dyn Iterator<Item = &'a [Fr]> + 'a> {
+        Box::new(self.sumcheck_univariates.iter().map(|row| &row[..]))
+    }
+
+    fn sumcheck_evaluations(&self) -> &[Fr] {
+        &self.sumcheck_evaluations
+    }
+
+    fn gemini_fold_comms(&self) -> &[G1ProofPoint] {
+        &self.gemini_fold_comms
+    }
+
+    fn gemini_a_evaluations(&self) -> &[Fr] {
+        &self.gemini_a_evaluations
+    }
 }
 
 impl TryFrom<&[u8]> for ZKProof {
@@ -372,7 +448,7 @@ impl TryFrom<&[u8]> for ZKProof {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub struct Proof {
+pub struct PlainProof {
     // Commitments to wire polynomials
     pub w1: G1ProofPoint,
     pub w2: G1ProofPoint,
@@ -394,7 +470,65 @@ pub struct Proof {
     pub kzg_quotient: G1ProofPoint,
 }
 
-impl TryFrom<&[u8]> for Proof {
+impl HasCommonProofData for PlainProof {
+    fn w1(&self) -> &G1ProofPoint {
+        &self.w1
+    }
+
+    fn w2(&self) -> &G1ProofPoint {
+        &self.w2
+    }
+
+    fn w3(&self) -> &G1ProofPoint {
+        &self.w3
+    }
+
+    fn w4(&self) -> &G1ProofPoint {
+        &self.w4
+    }
+
+    fn lookup_read_counts(&self) -> &G1ProofPoint {
+        &self.lookup_read_counts
+    }
+
+    fn lookup_read_tags(&self) -> &G1ProofPoint {
+        &self.lookup_read_tags
+    }
+
+    fn lookup_inverses(&self) -> &G1ProofPoint {
+        &self.lookup_inverses
+    }
+
+    fn z_perm(&self) -> &G1ProofPoint {
+        &self.z_perm
+    }
+
+    fn shplonk_q(&self) -> &G1ProofPoint {
+        &self.shplonk_q
+    }
+
+    fn kzg_quotient(&self) -> &G1ProofPoint {
+        &self.kzg_quotient
+    }
+
+    fn sumcheck_univariates<'a>(&'a self) -> Box<dyn Iterator<Item = &'a [Fr]> + 'a> {
+        Box::new(self.sumcheck_univariates.iter().map(|row| &row[..]))
+    }
+
+    fn sumcheck_evaluations(&self) -> &[Fr] {
+        &self.sumcheck_evaluations
+    }
+
+    fn gemini_fold_comms(&self) -> &[G1ProofPoint] {
+        &self.gemini_fold_comms
+    }
+
+    fn gemini_a_evaluations(&self) -> &[Fr] {
+        &self.gemini_a_evaluations
+    }
+}
+
+impl TryFrom<&[u8]> for PlainProof {
     type Error = ProofError;
 
     fn try_from(mut proof_bytes: &[u8]) -> Result<Self, Self::Error> {
@@ -465,6 +599,112 @@ impl TryFrom<&[u8]> for Proof {
             shplonk_q,
             kzg_quotient,
         })
+    }
+}
+
+#[derive(Debug)]
+pub(crate) enum ParsedProof {
+    Plain(PlainProof),
+    ZK(ZKProof),
+}
+
+impl HasCommonProofData for ParsedProof {
+    fn w1(&self) -> &G1ProofPoint {
+        match self {
+            Self::Plain(p) => p.w1(),
+            Self::ZK(p) => p.w1(),
+        }
+    }
+
+    fn w2(&self) -> &G1ProofPoint {
+        match self {
+            Self::Plain(p) => p.w2(),
+            Self::ZK(p) => p.w2(),
+        }
+    }
+
+    fn w3(&self) -> &G1ProofPoint {
+        match self {
+            Self::Plain(p) => p.w3(),
+            Self::ZK(p) => p.w3(),
+        }
+    }
+
+    fn w4(&self) -> &G1ProofPoint {
+        match self {
+            Self::Plain(p) => p.w4(),
+            Self::ZK(p) => p.w4(),
+        }
+    }
+
+    fn lookup_read_counts(&self) -> &G1ProofPoint {
+        match self {
+            Self::Plain(p) => p.lookup_read_counts(),
+            Self::ZK(p) => p.lookup_read_counts(),
+        }
+    }
+
+    fn lookup_read_tags(&self) -> &G1ProofPoint {
+        match self {
+            Self::Plain(p) => p.lookup_read_tags(),
+            Self::ZK(p) => p.lookup_read_tags(),
+        }
+    }
+
+    fn lookup_inverses(&self) -> &G1ProofPoint {
+        match self {
+            Self::Plain(p) => p.lookup_inverses(),
+            Self::ZK(p) => p.lookup_inverses(),
+        }
+    }
+
+    fn z_perm(&self) -> &G1ProofPoint {
+        match self {
+            Self::Plain(p) => p.z_perm(),
+            Self::ZK(p) => p.z_perm(),
+        }
+    }
+
+    fn shplonk_q(&self) -> &G1ProofPoint {
+        match self {
+            Self::Plain(p) => p.shplonk_q(),
+            Self::ZK(p) => p.shplonk_q(),
+        }
+    }
+
+    fn kzg_quotient(&self) -> &G1ProofPoint {
+        match self {
+            Self::Plain(p) => p.kzg_quotient(),
+            Self::ZK(p) => p.kzg_quotient(),
+        }
+    }
+
+    fn sumcheck_univariates<'a>(&'a self) -> Box<dyn Iterator<Item = &'a [Fr]> + 'a> {
+        match self {
+            Self::Plain(p) => p.sumcheck_univariates(),
+            Self::ZK(p) => p.sumcheck_univariates(),
+        }
+    }
+
+    fn sumcheck_evaluations(&self) -> &[Fr] {
+        match self {
+            Self::Plain(p) => p.sumcheck_evaluations(),
+            Self::ZK(p) => p.sumcheck_evaluations(),
+        }
+    }
+
+    fn gemini_fold_comms(&self) -> &[G1ProofPoint] {
+        match self {
+            Self::Plain(p) => p.gemini_fold_comms(),
+            Self::ZK(p) => p.gemini_fold_comms(),
+        }
+    }
+
+    fn gemini_a_evaluations(&self) -> &[Fr] {
+        match self {
+            Self::Plain(p) => p.gemini_a_evaluations(),
+            Self::ZK(p) => p.gemini_a_evaluations(),
+        }
     }
 }
 
@@ -1427,7 +1667,7 @@ mod should {
 
     #[rstest]
     fn parse_valid_proof(valid_proof: [u8; PROOF_SIZE]) {
-        assert!(Proof::try_from(&valid_proof[..]).is_ok());
+        assert!(PlainProof::try_from(&valid_proof[..]).is_ok());
     }
 
     mod reject {
@@ -1449,7 +1689,7 @@ mod should {
         fn a_proof_from_a_short_buffer(valid_proof: [u8; PROOF_SIZE]) {
             let invalid_proof = &valid_proof[..PROOF_SIZE - 1];
             assert_eq!(
-                Proof::try_from(invalid_proof),
+                PlainProof::try_from(invalid_proof),
                 Err(ProofError::IncorrectBufferSize {
                     expected_size: PROOF_SIZE,
                     actual_size: invalid_proof.len()
