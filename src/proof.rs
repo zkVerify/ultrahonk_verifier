@@ -30,7 +30,7 @@ use alloc::{
     string::{String, ToString},
 };
 use ark_bn254_ext::{CurveHooks, Fq};
-use ark_ff::{AdditiveGroup, PrimeField};
+use ark_ff::{AdditiveGroup, MontFp, PrimeField};
 use core::{
     array::from_fn,
     fmt,
@@ -253,9 +253,9 @@ pub(crate) trait HasCommonProofData {
     fn lookup_inverses(&self) -> &G1ProofPoint;
     fn z_perm(&self) -> &G1ProofPoint;
     fn sumcheck_univariates<'a>(&'a self) -> Box<dyn Iterator<Item = &'a [Fr]> + 'a>; // varies
-    fn sumcheck_evaluations(&self) -> &[Fr];
+    fn sumcheck_evaluations(&self) -> &[Fr; NUMBER_OF_ENTITIES];
     fn gemini_fold_comms(&self) -> &[G1ProofPoint];
-    fn gemini_a_evaluations(&self) -> &[Fr];
+    fn gemini_a_evaluations(&self) -> &[Fr; CONST_PROOF_SIZE_LOG_N];
     fn shplonk_q(&self) -> &G1ProofPoint;
     fn kzg_quotient(&self) -> &G1ProofPoint;
 }
@@ -335,7 +335,7 @@ impl HasCommonProofData for ZKProof {
         Box::new(self.sumcheck_univariates.iter().map(|row| &row[..]))
     }
 
-    fn sumcheck_evaluations(&self) -> &[Fr] {
+    fn sumcheck_evaluations(&self) -> &[Fr; NUMBER_OF_ENTITIES] {
         &self.sumcheck_evaluations
     }
 
@@ -343,8 +343,28 @@ impl HasCommonProofData for ZKProof {
         &self.gemini_fold_comms
     }
 
-    fn gemini_a_evaluations(&self) -> &[Fr] {
+    fn gemini_a_evaluations(&self) -> &[Fr; CONST_PROOF_SIZE_LOG_N] {
         &self.gemini_a_evaluations
+    }
+}
+
+impl ZKProof {
+    pub(crate) fn get_baricentric_lagrange_denominators(&self) -> Box<[Fr]> {
+        Box::new([
+            MontFp!("0x0000000000000000000000000000000000000000000000000000000000009d80"),
+            MontFp!("0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593efffec51"),
+            MontFp!("0x00000000000000000000000000000000000000000000000000000000000005a0"),
+            MontFp!("0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593effffd31"),
+            MontFp!("0x0000000000000000000000000000000000000000000000000000000000000240"),
+            MontFp!("0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593effffd31"),
+            MontFp!("0x00000000000000000000000000000000000000000000000000000000000005a0"),
+            MontFp!("0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593efffec51"),
+            MontFp!("0x0000000000000000000000000000000000000000000000000000000000009d80"),
+        ])
+    }
+
+    pub(crate) fn get_batched_relation_partial_length(&self) -> usize {
+        ZK_BATCHED_RELATION_PARTIAL_LENGTH
     }
 }
 
@@ -515,7 +535,7 @@ impl HasCommonProofData for PlainProof {
         Box::new(self.sumcheck_univariates.iter().map(|row| &row[..]))
     }
 
-    fn sumcheck_evaluations(&self) -> &[Fr] {
+    fn sumcheck_evaluations(&self) -> &[Fr; NUMBER_OF_ENTITIES] {
         &self.sumcheck_evaluations
     }
 
@@ -523,8 +543,27 @@ impl HasCommonProofData for PlainProof {
         &self.gemini_fold_comms
     }
 
-    fn gemini_a_evaluations(&self) -> &[Fr] {
+    fn gemini_a_evaluations(&self) -> &[Fr; CONST_PROOF_SIZE_LOG_N] {
         &self.gemini_a_evaluations
+    }
+}
+
+impl PlainProof {
+    pub(crate) fn get_baricentric_lagrange_denominators(&self) -> Box<[Fr]> {
+        Box::new([
+            MontFp!("0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593efffec51"),
+            MontFp!("0x00000000000000000000000000000000000000000000000000000000000002d0"),
+            MontFp!("0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593efffff11"),
+            MontFp!("0x0000000000000000000000000000000000000000000000000000000000000090"),
+            MontFp!("0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593efffff71"),
+            MontFp!("0x00000000000000000000000000000000000000000000000000000000000000f0"),
+            MontFp!("0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593effffd31"),
+            MontFp!("0x00000000000000000000000000000000000000000000000000000000000013b0"),
+        ])
+    }
+
+    pub(crate) fn get_batched_relation_partial_length(&self) -> usize {
+        BATCHED_RELATION_PARTIAL_LENGTH
     }
 }
 
@@ -608,102 +647,118 @@ pub(crate) enum ParsedProof {
     ZK(ZKProof),
 }
 
+impl ParsedProof {
+    pub(crate) fn get_baricentric_lagrange_denominators(&self) -> Box<[Fr]> {
+        match self {
+            ParsedProof::ZK(zkp) => zkp.get_baricentric_lagrange_denominators(),
+            ParsedProof::Plain(p) => p.get_baricentric_lagrange_denominators(),
+        }
+    }
+
+    pub(crate) fn get_batched_relation_partial_length(&self) -> usize {
+        match self {
+            ParsedProof::ZK(zkp) => zkp.get_batched_relation_partial_length(),
+            ParsedProof::Plain(p) => p.get_batched_relation_partial_length(),
+        }
+    }
+}
+
 impl HasCommonProofData for ParsedProof {
     fn w1(&self) -> &G1ProofPoint {
         match self {
-            Self::Plain(p) => p.w1(),
             Self::ZK(p) => p.w1(),
+            Self::Plain(p) => p.w1(),
         }
     }
 
     fn w2(&self) -> &G1ProofPoint {
         match self {
-            Self::Plain(p) => p.w2(),
             Self::ZK(p) => p.w2(),
+            Self::Plain(p) => p.w2(),
         }
     }
 
     fn w3(&self) -> &G1ProofPoint {
         match self {
-            Self::Plain(p) => p.w3(),
             Self::ZK(p) => p.w3(),
+            Self::Plain(p) => p.w3(),
         }
     }
 
     fn w4(&self) -> &G1ProofPoint {
         match self {
-            Self::Plain(p) => p.w4(),
             Self::ZK(p) => p.w4(),
+            Self::Plain(p) => p.w4(),
         }
     }
 
     fn lookup_read_counts(&self) -> &G1ProofPoint {
         match self {
-            Self::Plain(p) => p.lookup_read_counts(),
             Self::ZK(p) => p.lookup_read_counts(),
+            Self::Plain(p) => p.lookup_read_counts(),
         }
     }
 
     fn lookup_read_tags(&self) -> &G1ProofPoint {
         match self {
-            Self::Plain(p) => p.lookup_read_tags(),
             Self::ZK(p) => p.lookup_read_tags(),
+            Self::Plain(p) => p.lookup_read_tags(),
         }
     }
 
     fn lookup_inverses(&self) -> &G1ProofPoint {
         match self {
-            Self::Plain(p) => p.lookup_inverses(),
             Self::ZK(p) => p.lookup_inverses(),
+            Self::Plain(p) => p.lookup_inverses(),
         }
     }
 
     fn z_perm(&self) -> &G1ProofPoint {
         match self {
-            Self::Plain(p) => p.z_perm(),
             Self::ZK(p) => p.z_perm(),
+            Self::Plain(p) => p.z_perm(),
         }
     }
 
     fn shplonk_q(&self) -> &G1ProofPoint {
         match self {
-            Self::Plain(p) => p.shplonk_q(),
             Self::ZK(p) => p.shplonk_q(),
+            Self::Plain(p) => p.shplonk_q(),
         }
     }
 
     fn kzg_quotient(&self) -> &G1ProofPoint {
         match self {
-            Self::Plain(p) => p.kzg_quotient(),
             Self::ZK(p) => p.kzg_quotient(),
+            Self::Plain(p) => p.kzg_quotient(),
         }
     }
 
     fn sumcheck_univariates<'a>(&'a self) -> Box<dyn Iterator<Item = &'a [Fr]> + 'a> {
         match self {
-            Self::Plain(p) => p.sumcheck_univariates(),
             Self::ZK(p) => p.sumcheck_univariates(),
+            Self::Plain(p) => p.sumcheck_univariates(),
         }
     }
 
-    fn sumcheck_evaluations(&self) -> &[Fr] {
+    fn sumcheck_evaluations(&self) -> &[Fr; NUMBER_OF_ENTITIES] {
         match self {
-            Self::Plain(p) => p.sumcheck_evaluations(),
             Self::ZK(p) => p.sumcheck_evaluations(),
+            Self::Plain(p) => p.sumcheck_evaluations(),
         }
     }
 
     fn gemini_fold_comms(&self) -> &[G1ProofPoint] {
         match self {
-            Self::Plain(p) => p.gemini_fold_comms(),
             Self::ZK(p) => p.gemini_fold_comms(),
+            Self::Plain(p) => p.gemini_fold_comms(),
         }
     }
 
-    fn gemini_a_evaluations(&self) -> &[Fr] {
+    fn gemini_a_evaluations(&self) -> &[Fr; CONST_PROOF_SIZE_LOG_N] {
         match self {
-            Self::Plain(p) => p.gemini_a_evaluations(),
             Self::ZK(p) => p.gemini_a_evaluations(),
+            Self::Plain(p) => p.gemini_a_evaluations(),
         }
     }
 }

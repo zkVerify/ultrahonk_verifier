@@ -15,10 +15,7 @@
 // limitations under the License.
 
 use crate::{
-    constants::{
-        CONST_PROOF_SIZE_LOG_N, NUMBER_OF_ALPHAS, NUMBER_OF_ENTITIES,
-        ZK_BATCHED_RELATION_PARTIAL_LENGTH,
-    },
+    constants::{CONST_PROOF_SIZE_LOG_N, NUMBER_OF_ALPHAS, NUMBER_OF_ENTITIES},
     proof::{HasCommonProofData, ZKProof},
     utils::IntoBEBytes32,
     ParsedProof, Pubs,
@@ -62,6 +59,144 @@ pub(crate) struct ZKTranscript {
     pub(crate) gemini_r: Fr,
     pub(crate) shplonk_nu: Fr,
     pub(crate) shplonk_z: Fr,
+}
+
+pub(crate) trait HasCommonTranscriptData {
+    // getters
+    fn relation_parameters_challenges(&self) -> &RelationParametersChallenges;
+    fn alphas(&self) -> &[Fr; NUMBER_OF_ALPHAS];
+    fn gate_challenges(&self) -> &[Fr; CONST_PROOF_SIZE_LOG_N];
+    fn sumcheck_u_challenges(&self) -> &[Fr; CONST_PROOF_SIZE_LOG_N];
+    fn rho(&self) -> Fr;
+    fn gemini_r(&self) -> Fr;
+    fn shplonk_nu(&self) -> Fr;
+    fn shplonk_z(&self) -> Fr;
+}
+
+impl HasCommonTranscriptData for PlainTranscript {
+    fn relation_parameters_challenges(&self) -> &RelationParametersChallenges {
+        &self.relation_parameters_challenges
+    }
+
+    fn alphas(&self) -> &[Fr; NUMBER_OF_ALPHAS] {
+        &self.alphas
+    }
+
+    fn gate_challenges(&self) -> &[Fr; CONST_PROOF_SIZE_LOG_N] {
+        &self.gate_challenges
+    }
+
+    fn sumcheck_u_challenges(&self) -> &[Fr; CONST_PROOF_SIZE_LOG_N] {
+        &self.sumcheck_u_challenges
+    }
+
+    fn rho(&self) -> Fr {
+        self.rho
+    }
+
+    fn gemini_r(&self) -> Fr {
+        self.gemini_r
+    }
+
+    fn shplonk_nu(&self) -> Fr {
+        self.shplonk_nu
+    }
+
+    fn shplonk_z(&self) -> Fr {
+        self.shplonk_z
+    }
+}
+
+impl HasCommonTranscriptData for ZKTranscript {
+    fn relation_parameters_challenges(&self) -> &RelationParametersChallenges {
+        &self.relation_parameters_challenges
+    }
+
+    fn alphas(&self) -> &[Fr; NUMBER_OF_ALPHAS] {
+        &self.alphas
+    }
+
+    fn gate_challenges(&self) -> &[Fr; CONST_PROOF_SIZE_LOG_N] {
+        &self.gate_challenges
+    }
+
+    fn sumcheck_u_challenges(&self) -> &[Fr; CONST_PROOF_SIZE_LOG_N] {
+        &self.sumcheck_u_challenges
+    }
+
+    fn rho(&self) -> Fr {
+        self.rho
+    }
+
+    fn gemini_r(&self) -> Fr {
+        self.gemini_r
+    }
+
+    fn shplonk_nu(&self) -> Fr {
+        self.shplonk_nu
+    }
+
+    fn shplonk_z(&self) -> Fr {
+        self.shplonk_z
+    }
+}
+
+impl HasCommonTranscriptData for Transcript {
+    fn relation_parameters_challenges(&self) -> &RelationParametersChallenges {
+        match self {
+            Transcript::ZK(zkt) => zkt.relation_parameters_challenges(),
+            Transcript::Plain(pt) => pt.relation_parameters_challenges(),
+        }
+    }
+
+    fn alphas(&self) -> &[Fr; NUMBER_OF_ALPHAS] {
+        match self {
+            Transcript::ZK(zkt) => &zkt.alphas(),
+            Transcript::Plain(pt) => pt.alphas(),
+        }
+    }
+
+    fn gate_challenges(&self) -> &[Fr; CONST_PROOF_SIZE_LOG_N] {
+        match self {
+            Transcript::ZK(zkt) => &zkt.gate_challenges(),
+            Transcript::Plain(pt) => pt.gate_challenges(),
+        }
+    }
+
+    fn sumcheck_u_challenges(&self) -> &[Fr; CONST_PROOF_SIZE_LOG_N] {
+        match self {
+            Transcript::ZK(zkt) => &zkt.sumcheck_u_challenges(),
+            Transcript::Plain(pt) => pt.sumcheck_u_challenges(),
+        }
+    }
+
+    fn rho(&self) -> Fr {
+        match self {
+            Transcript::ZK(zkt) => zkt.rho(),
+            Transcript::Plain(pt) => pt.rho(),
+        }
+    }
+
+    fn gemini_r(&self) -> Fr {
+        match self {
+            Transcript::ZK(zkt) => zkt.gemini_r(),
+            Transcript::Plain(pt) => pt.gemini_r(),
+        }
+    }
+
+    fn shplonk_nu(&self) -> Fr {
+        match self {
+            Transcript::ZK(zkt) => zkt.shplonk_nu(),
+            Transcript::Plain(pt) => pt.shplonk_nu(),
+        }
+    }
+
+    fn shplonk_z(&self) -> Fr {
+        match self {
+            Transcript::ZK(zkt) => zkt.shplonk_z(),
+            Transcript::Plain(pt) => pt.shplonk_z(),
+        }
+    }
 }
 
 // NOTE: This type simply isolates the challenges in the `RelationParameters` type.
@@ -133,9 +268,9 @@ pub(crate) fn generate_transcript(
 
     let mut libra_challenge = Fr::ZERO;
     let mut previous_challenge = previous_challenge;
-    if matches!(parsed_proof, ParsedProof::ZK(_)) {
+    if let ParsedProof::ZK(zk_proof) = parsed_proof {
         (libra_challenge, previous_challenge) =
-            generate_libra_challenge(previous_challenge, parsed_proof);
+            generate_libra_challenge(previous_challenge, zk_proof);
     }
 
     let (sumcheck_u_challenges, previous_challenge) =
@@ -348,6 +483,7 @@ fn generate_gate_challenges(previous_challenge: Fr) -> ([Fr; CONST_PROOF_SIZE_LO
     (gate_challenges, next_previous_challenge)
 }
 
+// Function exclusive to `ZKProof`
 fn generate_libra_challenge(previous_challenge: Fr, zk_proof: &ZKProof) -> (Fr, Fr) {
     // 4 commitments, 1 sum, 1 challenge
     let hash: [u8; 32] = Keccak256::new()
@@ -367,15 +503,14 @@ fn generate_libra_challenge(previous_challenge: Fr, zk_proof: &ZKProof) -> (Fr, 
 }
 
 fn generate_sumcheck_challenges(
-    proof: &ZKProof,
+    parsed_proof: &ParsedProof,
     previous_challenge: Fr,
 ) -> ([Fr; CONST_PROOF_SIZE_LOG_N], Fr) {
     let mut sumcheck_challenges = [Fr::ZERO; CONST_PROOF_SIZE_LOG_N];
     let mut previous_challenge = previous_challenge;
 
-    for (i, sumcheck_univariate) in proof
-        .sumcheck_univariates
-        .iter()
+    for (i, sumcheck_univariate) in parsed_proof
+        .sumcheck_univariates()
         .enumerate()
         .take(CONST_PROOF_SIZE_LOG_N)
     {
@@ -383,10 +518,7 @@ fn generate_sumcheck_challenges(
 
         hasher = hasher.chain_update(previous_challenge.into_be_bytes32());
 
-        for su in sumcheck_univariate
-            .iter()
-            .take(ZK_BATCHED_RELATION_PARTIAL_LENGTH)
-        {
+        for su in sumcheck_univariate.iter() {
             hasher = hasher.chain_update(su.into_be_bytes32());
         }
         let hash: [u8; 32] = hasher.finalize().into();
@@ -399,34 +531,37 @@ fn generate_sumcheck_challenges(
     (sumcheck_challenges, next_previous_challenge)
 }
 
-// We add Libra claimed eval + 3 commitments + 1 more eval
-fn generate_rho_challenge(proof: &ZKProof, previous_challenge: Fr) -> (Fr, Fr) {
+// For ZKProofs, we add Libra claimed eval + 3 commitments + 1 more eval
+fn generate_rho_challenge(parsed_proof: &ParsedProof, previous_challenge: Fr) -> (Fr, Fr) {
     let mut hasher = Keccak256::new();
 
     hasher.update(previous_challenge.into_be_bytes32());
 
     for i in 0..NUMBER_OF_ENTITIES {
-        hasher.update(proof.sumcheck_evaluations[i].into_be_bytes32());
+        hasher.update(parsed_proof.sumcheck_evaluations()[i].into_be_bytes32());
     }
 
-    hasher.update(proof.libra_evaluation.into_be_bytes32());
+    // ZKProof only
+    if let ParsedProof::ZK(zk_proof) = parsed_proof {
+        hasher.update(zk_proof.libra_evaluation.into_be_bytes32());
 
-    hasher.update(proof.libra_commitments[1].x_0.into_be_bytes32());
-    hasher.update(proof.libra_commitments[1].x_1.into_be_bytes32());
-    hasher.update(proof.libra_commitments[1].y_0.into_be_bytes32());
-    hasher.update(proof.libra_commitments[1].y_1.into_be_bytes32());
+        hasher.update(zk_proof.libra_commitments[1].x_0.into_be_bytes32());
+        hasher.update(zk_proof.libra_commitments[1].x_1.into_be_bytes32());
+        hasher.update(zk_proof.libra_commitments[1].y_0.into_be_bytes32());
+        hasher.update(zk_proof.libra_commitments[1].y_1.into_be_bytes32());
 
-    hasher.update(proof.libra_commitments[2].x_0.into_be_bytes32());
-    hasher.update(proof.libra_commitments[2].x_1.into_be_bytes32());
-    hasher.update(proof.libra_commitments[2].y_0.into_be_bytes32());
-    hasher.update(proof.libra_commitments[2].y_1.into_be_bytes32());
+        hasher.update(zk_proof.libra_commitments[2].x_0.into_be_bytes32());
+        hasher.update(zk_proof.libra_commitments[2].x_1.into_be_bytes32());
+        hasher.update(zk_proof.libra_commitments[2].y_0.into_be_bytes32());
+        hasher.update(zk_proof.libra_commitments[2].y_1.into_be_bytes32());
 
-    hasher.update(proof.gemini_masking_poly.x_0.into_be_bytes32());
-    hasher.update(proof.gemini_masking_poly.x_1.into_be_bytes32());
-    hasher.update(proof.gemini_masking_poly.y_0.into_be_bytes32());
-    hasher.update(proof.gemini_masking_poly.y_1.into_be_bytes32());
+        hasher.update(zk_proof.gemini_masking_poly.x_0.into_be_bytes32());
+        hasher.update(zk_proof.gemini_masking_poly.x_1.into_be_bytes32());
+        hasher.update(zk_proof.gemini_masking_poly.y_0.into_be_bytes32());
+        hasher.update(zk_proof.gemini_masking_poly.y_1.into_be_bytes32());
 
-    hasher.update(proof.gemini_masking_eval.into_be_bytes32());
+        hasher.update(zk_proof.gemini_masking_eval.into_be_bytes32());
+    }
 
     let hash: [u8; 32] = hasher.finalize().into();
     let next_previous_challenge = Fr::from_be_bytes_mod_order(&hash);
@@ -435,16 +570,16 @@ fn generate_rho_challenge(proof: &ZKProof, previous_challenge: Fr) -> (Fr, Fr) {
     (rho, next_previous_challenge)
 }
 
-fn generate_gemini_r_challenge(proof: &ZKProof, previous_challenge: Fr) -> (Fr, Fr) {
+fn generate_gemini_r_challenge(parsed_proof: &ParsedProof, previous_challenge: Fr) -> (Fr, Fr) {
     let mut hasher = Keccak256::new();
 
     hasher.update(previous_challenge.into_be_bytes32());
 
     for i in 0..(CONST_PROOF_SIZE_LOG_N - 1) {
-        hasher.update(proof.gemini_fold_comms[i].x_0.into_be_bytes32());
-        hasher.update(proof.gemini_fold_comms[i].x_1.into_be_bytes32());
-        hasher.update(proof.gemini_fold_comms[i].y_0.into_be_bytes32());
-        hasher.update(proof.gemini_fold_comms[i].y_1.into_be_bytes32());
+        hasher.update(parsed_proof.gemini_fold_comms()[i].x_0.into_be_bytes32());
+        hasher.update(parsed_proof.gemini_fold_comms()[i].x_1.into_be_bytes32());
+        hasher.update(parsed_proof.gemini_fold_comms()[i].y_0.into_be_bytes32());
+        hasher.update(parsed_proof.gemini_fold_comms()[i].y_1.into_be_bytes32());
     }
 
     let hash: [u8; 32] = hasher.finalize().into();
@@ -456,17 +591,20 @@ fn generate_gemini_r_challenge(proof: &ZKProof, previous_challenge: Fr) -> (Fr, 
     (gemini_r, next_previous_challenge)
 }
 
-fn generate_shplonk_nu_challenge(proof: &ZKProof, prev_challenge: Fr) -> (Fr, Fr) {
+fn generate_shplonk_nu_challenge(parsed_proof: &ParsedProof, prev_challenge: Fr) -> (Fr, Fr) {
     let mut hasher = Keccak256::new();
 
     hasher.update(prev_challenge.into_be_bytes32());
 
     for i in 0..CONST_PROOF_SIZE_LOG_N {
-        hasher.update(proof.gemini_a_evaluations[i].into_be_bytes32());
+        hasher.update(parsed_proof.gemini_a_evaluations()[i].into_be_bytes32());
     }
 
-    for lpe in proof.libra_poly_evals {
-        hasher.update(lpe.into_be_bytes32());
+    // ZProof only
+    if let ParsedProof::ZK(zk_proof) = parsed_proof {
+        for lpe in zk_proof.libra_poly_evals {
+            hasher.update(lpe.into_be_bytes32());
+        }
     }
 
     let hash: [u8; 32] = hasher.finalize().into();
@@ -477,13 +615,13 @@ fn generate_shplonk_nu_challenge(proof: &ZKProof, prev_challenge: Fr) -> (Fr, Fr
     (shplonk_nu, next_previous_challenge)
 }
 
-fn generate_shplonk_z_challenge(proof: &ZKProof, previous_challenge: Fr) -> (Fr, Fr) {
+fn generate_shplonk_z_challenge(parsed_proof: &ParsedProof, previous_challenge: Fr) -> (Fr, Fr) {
     let hash: [u8; 32] = Keccak256::new()
         .chain_update(previous_challenge.into_be_bytes32())
-        .chain_update(proof.shplonk_q.x_0.into_be_bytes32())
-        .chain_update(proof.shplonk_q.x_1.into_be_bytes32())
-        .chain_update(proof.shplonk_q.y_0.into_be_bytes32())
-        .chain_update(proof.shplonk_q.y_1.into_be_bytes32())
+        .chain_update(parsed_proof.shplonk_q().x_0.into_be_bytes32())
+        .chain_update(parsed_proof.shplonk_q().x_1.into_be_bytes32())
+        .chain_update(parsed_proof.shplonk_q().y_0.into_be_bytes32())
+        .chain_update(parsed_proof.shplonk_q().y_1.into_be_bytes32())
         .finalize()
         .into();
 
