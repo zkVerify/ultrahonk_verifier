@@ -292,38 +292,44 @@ fn verify_shplemini<H: CurveHooks>(
         .expect("Inversion should work w.h.p.")
         * (pos_inverted_denominator - tp.shplonk_nu() * neg_inverted_denominator);
 
-    scalars[0] = Fr::ONE;
-    commitments[0] = convert_proof_point::<H>(*parsed_proof.shplonk_q()).map_err(|_| {
-        ProofError::PointNotOnCurve {
-            field: ZKProofCommitmentField::SHPLONK_Q.to_string(),
+    scalars.push(Fr::ONE);
+    commitments.push(
+        convert_proof_point::<H>(*parsed_proof.shplonk_q()).map_err(|_| {
+            ProofError::PointNotOnCurve {
+                field: ZKProofCommitmentField::SHPLONK_Q.to_string(),
+            }
+        })?,
+    );
+
+    let (mut batched_evaluation, mut batching_challenge, offset) = {
+        if let ParsedProof::ZK(zkp) = parsed_proof {
+            scalars.push(-unshifted_scalar);
+            (zkp.gemini_masking_eval, tp.rho(), 1)
+        } else {
+            (Fr::ZERO, Fr::ONE, 0)
         }
-    })?;
+    };
 
-    let mut batched_evaluation;
-    let mut batching_challenge;
-    if let ParsedProof::ZK(zkp) = parsed_proof {
-        batched_evaluation = zkp.gemini_masking_eval;
-        batching_challenge = tp.rho();
-        scalars[1] = -unshifted_scalar;
-    } else {
-        batched_evaluation = Fr::ZERO;
-        batching_challenge = Fr::ONE;
-        scalars[1] = -unshifted_scalar * batching_challenge;
-        batched_evaluation += parsed_proof.sumcheck_evaluations()[0] * batching_challenge;
+    println!("Check#0");
+    dbg!(offset);
+
+    for i in (1 - offset)..=(NUMBER_UNSHIFTED - offset) {
+        scalars.push(-unshifted_scalar * batching_challenge);
+        batched_evaluation +=
+            parsed_proof.sumcheck_evaluations()[i + offset - 1] * batching_challenge;
         batching_challenge *= tp.rho();
     }
 
-    for i in 2..NUMBER_UNSHIFTED {
-        scalars[i] = -unshifted_scalar * batching_challenge;
-        batched_evaluation += parsed_proof.sumcheck_evaluations()[i] * batching_challenge;
+    println!("Check#1");
+
+    for i in (NUMBER_UNSHIFTED + 1 - offset)..=(NUMBER_OF_ENTITIES - offset) {
+        scalars.push(-shifted_scalar * batching_challenge);
+        batched_evaluation +=
+            parsed_proof.sumcheck_evaluations()[i + offset - 1] * batching_challenge;
         batching_challenge *= tp.rho();
     }
 
-    for i in NUMBER_UNSHIFTED..NUMBER_OF_ENTITIES {
-        scalars[i + 2] = -shifted_scalar * batching_challenge;
-        batched_evaluation += parsed_proof.sumcheck_evaluations()[i] * batching_challenge;
-        batching_challenge *= tp.rho();
-    }
+    println!("Check#2");
 
     if let ParsedProof::ZK(zkp) = parsed_proof {
         commitments.push(
@@ -414,10 +420,6 @@ fn verify_shplemini<H: CurveHooks>(
 
     // to be Shifted
     // The following 5 points are copied to avoid re-validation.
-    let offset = match parsed_proof {
-        ParsedProof::ZK(_) => 1,
-        _ => 0,
-    };
     commitments.push(commitments[28 + offset]);
     commitments.push(commitments[29 + offset]);
     commitments.push(commitments[30 + offset]);
@@ -481,15 +483,7 @@ fn verify_shplemini<H: CurveHooks>(
                 }
             })?,
         );
-        // commitments[boundary + i] =
-        // convert_proof_point(parsed_proof.gemini_fold_comms()[i]).map_err(|_| {
-        //     ProofError::PointNotOnCurve {
-        //         field: ZKProofCommitmentField::GEMINI_FOLD_COMMS(i).to_string(),
-        //     }
-        // })?;
     }
-
-    // boundary += CONST_PROOF_SIZE_LOG_N - 1;
 
     // Finalize the batch opening claim
     if let Transcript::ZK(zktp) = tp {
@@ -509,12 +503,14 @@ fn verify_shplemini<H: CurveHooks>(
         if let ParsedProof::ZK(zk_proof) = parsed_proof {
             // Artifact of interleaving, see TODO(https://github.com/AztecProtocol/barretenberg/issues/1293): Decouple Gemini from Interleaving
             batching_challenge *= zktp.shplonk_nu.square();
+
             for i in 0..LIBRA_EVALUATIONS {
                 let scaling_factor = denominators[i] * batching_challenge;
                 batching_scalars[i] = -scaling_factor;
                 batching_challenge *= zktp.shplonk_nu;
                 constant_term_accumulator += scaling_factor * zk_proof.libra_poly_evals[i];
             }
+
             scalars.push(batching_scalars[0]);
             scalars.push(batching_scalars[1] + batching_scalars[2]);
             scalars.push(batching_scalars[3]);
@@ -548,6 +544,8 @@ fn verify_shplemini<H: CurveHooks>(
         }
     }
 
+    println!("GOING STRONG!");
+
     let quotient_commitment = convert_proof_point(*parsed_proof.kzg_quotient()).map_err(|_| {
         ProofError::PointNotOnCurve {
             field: PlainProofCommitmentField::KZG_QUOTIENT.to_string(),
@@ -556,6 +554,9 @@ fn verify_shplemini<H: CurveHooks>(
 
     commitments.push(quotient_commitment);
     scalars.push(tp.shplonk_z()); // evaluation challenge
+
+    dbg!(commitments.len());
+    dbg!(scalars.len());
 
     // Pairing Check
     let p_0 = H::bn254_msm_g1(&commitments, &scalars).map_err(|_| ProofError::OtherError {
@@ -577,6 +578,7 @@ fn verify_shplemini<H: CurveHooks>(
     if product.0.is_one() {
         Ok(())
     } else {
+        println!("doh!");
         Err(ProofError::ShpleminiPairingCheckFailed)
     }
 }
