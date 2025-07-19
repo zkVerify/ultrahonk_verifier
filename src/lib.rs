@@ -172,8 +172,11 @@ fn verify_sumcheck(
 
     // We perform sumcheck reductions over log n rounds (i.e., the multivariate degree)
     // for round in 0..log_circuit_size {
-    for (round, round_univariate) in parsed_proof.sumcheck_univariates().enumerate() {
-        // let round_univariate = parsed_proof.sumcheck_univariates()[round];
+    for (round, round_univariate) in parsed_proof
+        .sumcheck_univariates()
+        .enumerate()
+        .take(log_circuit_size)
+    {
         let total_sum = round_univariate[0] + round_univariate[1];
         if total_sum != round_target_sum {
             return Err("Total Sum differs from Round Target Sum.");
@@ -264,14 +267,14 @@ fn verify_shplemini<H: CurveHooks>(
 ) -> Result<(), ProofError> {
     // - Compute vector (r, r², ..., r²⁽ⁿ⁻¹⁾), where n := log_circuit_size
     let powers_of_evaluation_challenge = compute_squares(tp.gemini_r());
-    // Arrays hold values that will be linearly combined for the gemini and shplonk batch openings
+    // Vectors hold values that will be linearly combined for the gemini and shplonk batch openings
     let capacity = if matches!(parsed_proof, ParsedProof::ZK(_)) {
         NUMBER_OF_ENTITIES + CONST_PROOF_SIZE_LOG_N + 3 + 3
     } else {
         NUMBER_OF_ENTITIES + CONST_PROOF_SIZE_LOG_N + 2
     };
-    let mut scalars = Vec::with_capacity(capacity); // [Fr::ZERO; NUMBER_OF_ENTITIES + CONST_PROOF_SIZE_LOG_N + 3 + 3];
-    let mut commitments = Vec::with_capacity(capacity); // [G1::<H>::default(); NUMBER_OF_ENTITIES + CONST_PROOF_SIZE_LOG_N + 3 + 3];
+    let mut scalars = Vec::with_capacity(capacity);
+    let mut commitments = Vec::with_capacity(capacity);
 
     // NOTE: Can use batching here to go from 2 inversions to 1 inversion + 3 multiplications
     // but the benefit should be marginal.
