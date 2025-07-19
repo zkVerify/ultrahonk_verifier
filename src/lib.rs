@@ -274,6 +274,7 @@ fn verify_shplemini<H: CurveHooks>(
         NUMBER_OF_ENTITIES + CONST_PROOF_SIZE_LOG_N + 2
     };
     let mut scalars = Vec::with_capacity(capacity);
+    scalars.resize(capacity, Fr::ZERO);
     let mut commitments = Vec::with_capacity(capacity);
 
     // NOTE: Can use batching here to go from 2 inversions to 1 inversion + 3 multiplications
@@ -292,7 +293,7 @@ fn verify_shplemini<H: CurveHooks>(
         .expect("Inversion should work w.h.p.")
         * (pos_inverted_denominator - tp.shplonk_nu() * neg_inverted_denominator);
 
-    scalars.push(Fr::ONE);
+    scalars[0] = Fr::ONE;
     commitments.push(
         convert_proof_point::<H>(*parsed_proof.shplonk_q()).map_err(|_| {
             ProofError::PointNotOnCurve {
@@ -303,7 +304,7 @@ fn verify_shplemini<H: CurveHooks>(
 
     let (mut batched_evaluation, mut batching_challenge, offset) = {
         if let ParsedProof::ZK(zkp) = parsed_proof {
-            scalars.push(-unshifted_scalar);
+            scalars[1] = -unshifted_scalar;
             (zkp.gemini_masking_eval, tp.rho(), 1)
         } else {
             (Fr::ZERO, Fr::ONE, 0)
@@ -314,7 +315,7 @@ fn verify_shplemini<H: CurveHooks>(
     dbg!(offset);
 
     for i in (1 - offset)..=(NUMBER_UNSHIFTED - offset) {
-        scalars.push(-unshifted_scalar * batching_challenge);
+        scalars[i + 2 * offset] = -unshifted_scalar * batching_challenge;
         batched_evaluation +=
             parsed_proof.sumcheck_evaluations()[i + offset - 1] * batching_challenge;
         batching_challenge *= tp.rho();
@@ -323,7 +324,7 @@ fn verify_shplemini<H: CurveHooks>(
     println!("Check#1");
 
     for i in (NUMBER_UNSHIFTED + 1 - offset)..=(NUMBER_OF_ENTITIES - offset) {
-        scalars.push(-shifted_scalar * batching_challenge);
+        scalars[i + 2 * offset] = -shifted_scalar * batching_challenge;
         batched_evaluation +=
             parsed_proof.sumcheck_evaluations()[i + offset - 1] * batching_challenge;
         batching_challenge *= tp.rho();
@@ -448,6 +449,9 @@ fn verify_shplemini<H: CurveHooks>(
 
     // Compute Shplonk constant term contributions from Aₗ(± r^{2ˡ}) for l = 1, ..., m-1;
     // Compute scalar multipliers for each fold commitment.
+
+    let boundary = NUMBER_OF_ENTITIES + 1 + offset;
+
     for i in 0..(CONST_PROOF_SIZE_LOG_N - 1) {
         let dummy_round = i as u64 >= (vk.log_circuit_size - 1);
 
@@ -463,8 +467,7 @@ fn verify_shplemini<H: CurveHooks>(
             // Compute the scalar multipliers for Aₗ(± r^{2ˡ}) and [Aₗ]
             scaling_factor_pos = batching_challenge * pos_inverted_denominator;
             scaling_factor_neg = batching_challenge * tp.shplonk_nu() * neg_inverted_denominator;
-            scalars.push(-(scaling_factor_neg + scaling_factor_pos));
-            // scalars[boundary + i] = -(scaling_factor_neg + scaling_factor_pos);
+            scalars[boundary + i] = -(scaling_factor_neg + scaling_factor_pos);
 
             // Accumulate the const term contribution given by
             // v^{2l} * Aₗ(r^{2ˡ}) /(z-r^{2^l}) + v^{2l+1} * Aₗ(-r^{2ˡ}) /(z+ r^{2^l})
@@ -486,6 +489,8 @@ fn verify_shplemini<H: CurveHooks>(
     }
 
     // Finalize the batch opening claim
+    let mut boundary = NUMBER_OF_ENTITIES + CONST_PROOF_SIZE_LOG_N; // !!!
+
     if let Transcript::ZK(zktp) = tp {
         let mut denominators = [Fr::ZERO; LIBRA_EVALUATIONS];
 
@@ -511,9 +516,11 @@ fn verify_shplemini<H: CurveHooks>(
                 constant_term_accumulator += scaling_factor * zk_proof.libra_poly_evals[i];
             }
 
-            scalars.push(batching_scalars[0]);
-            scalars.push(batching_scalars[1] + batching_scalars[2]);
-            scalars.push(batching_scalars[3]);
+            scalars[boundary] = batching_scalars[0];
+            scalars[boundary + 1] = batching_scalars[1] + batching_scalars[2];
+            scalars[boundary + 2] = batching_scalars[3];
+
+            boundary += 3;
 
             for i in 0..LIBRA_COMMITMENTS {
                 commitments.push(convert_proof_point(zk_proof.libra_commitments[i]).map_err(
@@ -530,7 +537,7 @@ fn verify_shplemini<H: CurveHooks>(
     }
 
     commitments.push(G1::<H>::generator()); // (1, 2)
-    scalars.push(constant_term_accumulator);
+    scalars[boundary] = constant_term_accumulator;
 
     // ZKProofs only
     if let ParsedProof::ZK(zk_proof) = parsed_proof {
@@ -553,10 +560,12 @@ fn verify_shplemini<H: CurveHooks>(
     })?;
 
     commitments.push(quotient_commitment);
-    scalars.push(tp.shplonk_z()); // evaluation challenge
+    scalars[boundary + 1] = tp.shplonk_z(); // evaluation challenge
 
     dbg!(commitments.len());
     dbg!(scalars.len());
+
+    dbg!(scalars.clone());
 
     // Pairing Check
     let p_0 = H::bn254_msm_g1(&commitments, &scalars).map_err(|_| ProofError::OtherError {
