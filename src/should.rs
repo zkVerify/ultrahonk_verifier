@@ -1050,6 +1050,20 @@ fn verify_valid_zk_proof(
     .is_ok());
 }
 
+#[rstest]
+fn verify_valid_plain_proof(
+    valid_vk: [u8; VK_SIZE],
+    valid_proof: [u8; PROOF_SIZE],
+    valid_pubs: [PublicInput; 2],
+) {
+    assert!(verify::<()>(
+        &valid_vk,
+        &ProofType::Plain(Box::new(valid_proof)),
+        &valid_pubs
+    )
+    .is_ok());
+}
+
 mod reject {
     use super::*;
 
@@ -1065,6 +1079,31 @@ mod reject {
             verify::<()>(
                 &valid_vk,
                 &ProofType::ZK(Box::new(valid_zk_proof)),
+                &invalid_pubs
+            )
+            .unwrap_err(),
+            VerifyError::PublicInputError {
+                message: format!(
+                    "Provided public inputs length does not match value in vk. Expected: {}; Got: {}",
+                    valid_pubs.len(),
+                    invalid_pubs.len()
+                )
+            }
+        );
+    }
+
+    #[rstest]
+    fn a_plain_proof_with_non_matching_number_of_pis(
+        valid_vk: [u8; VK_SIZE],
+        valid_proof: [u8; PROOF_SIZE],
+        valid_pubs: [PublicInput; 2],
+    ) {
+        let invalid_pubs: [PublicInput; 0] = [];
+
+        assert_eq!(
+            verify::<()>(
+                &valid_vk,
+                &ProofType::Plain(Box::new(valid_proof)),
                 &invalid_pubs
             )
             .unwrap_err(),
