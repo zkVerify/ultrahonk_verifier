@@ -151,21 +151,21 @@ impl HasCommonTranscriptData for Transcript {
 
     fn alphas(&self) -> &[Fr; NUMBER_OF_ALPHAS] {
         match self {
-            Transcript::ZK(zkt) => &zkt.alphas(),
+            Transcript::ZK(zkt) => zkt.alphas(),
             Transcript::Plain(pt) => pt.alphas(),
         }
     }
 
     fn gate_challenges(&self) -> &[Fr; CONST_PROOF_SIZE_LOG_N] {
         match self {
-            Transcript::ZK(zkt) => &zkt.gate_challenges(),
+            Transcript::ZK(zkt) => zkt.gate_challenges(),
             Transcript::Plain(pt) => pt.gate_challenges(),
         }
     }
 
     fn sumcheck_u_challenges(&self) -> &[Fr; CONST_PROOF_SIZE_LOG_N] {
         match self {
-            Transcript::ZK(zkt) => &zkt.sumcheck_u_challenges(),
+            Transcript::ZK(zkt) => zkt.sumcheck_u_challenges(),
             Transcript::Plain(pt) => pt.sumcheck_u_challenges(),
         }
     }

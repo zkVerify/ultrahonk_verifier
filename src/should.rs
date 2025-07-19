@@ -518,7 +518,7 @@ fn valid_zk_proof() -> [u8; ZK_PROOF_SIZE] {
 }
 
 #[fixture]
-fn valid_proof() -> [u8; PROOF_SIZE] {
+fn valid_plain_proof() -> [u8; PROOF_SIZE] {
     hex_literal::hex!(
         "
         000000000000000000000000000000a16555b44bbe764b90975aa0d52b0ba43c
@@ -1053,12 +1053,12 @@ fn verify_valid_zk_proof(
 #[rstest]
 fn verify_valid_plain_proof(
     valid_vk: [u8; VK_SIZE],
-    valid_proof: [u8; PROOF_SIZE],
+    valid_plain_proof: [u8; PROOF_SIZE],
     valid_pubs: [PublicInput; 2],
 ) {
     assert!(verify::<()>(
         &valid_vk,
-        &ProofType::Plain(Box::new(valid_proof)),
+        &ProofType::Plain(Box::new(valid_plain_proof)),
         &valid_pubs
     )
     .is_ok());
@@ -1095,7 +1095,7 @@ mod reject {
     #[rstest]
     fn a_plain_proof_with_non_matching_number_of_pis(
         valid_vk: [u8; VK_SIZE],
-        valid_proof: [u8; PROOF_SIZE],
+        valid_plain_proof: [u8; PROOF_SIZE],
         valid_pubs: [PublicInput; 2],
     ) {
         let invalid_pubs: [PublicInput; 0] = [];
@@ -1103,7 +1103,7 @@ mod reject {
         assert_eq!(
             verify::<()>(
                 &valid_vk,
-                &ProofType::Plain(Box::new(valid_proof)),
+                &ProofType::Plain(Box::new(valid_plain_proof)),
                 &invalid_pubs
             )
             .unwrap_err(),

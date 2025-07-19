@@ -76,17 +76,17 @@ pub fn verify<H: CurveHooks + Default>(
     let vk = VerificationKey::<H>::try_from(vk_bytes).map_err(|_| VerifyError::KeyError)?;
 
     if let ProofType::ZK(proof_bytes) = proof_type {
-        let proof = ParsedProof::ZK(
+        let proof = ParsedProof::ZK(Box::new(
             ZKProof::try_from(&proof_bytes[..]).map_err(|_| VerifyError::InvalidProofError)?,
-        );
+        ));
 
         check_public_input_number(&vk, pubs)?;
 
         verify_inner(&vk, &proof, pubs)
     } else if let ProofType::Plain(proof_bytes) = proof_type {
-        let proof = ParsedProof::Plain(
+        let proof = ParsedProof::Plain(Box::new(
             PlainProof::try_from(&proof_bytes[..]).map_err(|_| VerifyError::InvalidProofError)?,
-        );
+        ));
 
         check_public_input_number(&vk, pubs)?;
 
@@ -194,8 +194,8 @@ fn verify_sumcheck(
     // Final round
     let mut grand_honk_relation_sum = accumulate_relation_evaluations(
         parsed_proof.sumcheck_evaluations(),
-        &tp.relation_parameters_challenges(),
-        &tp.alphas(),
+        tp.relation_parameters_challenges(),
+        tp.alphas(),
         public_inputs_delta,
         pow_partial_evaluation,
     );
@@ -412,9 +412,9 @@ fn verify_shplemini<H: CurveHooks>(
     // Add contributions from A₀(r) and A₀(-r) to constant_term_accumulator:
     // Compute the evaluations Aₗ(r^{2ˡ}) for l = 0, ..., logN - 1.
     let fold_pos_evaluations: [Fr; CONST_PROOF_SIZE_LOG_N] = compute_fold_pos_evaluations(
-        &tp.sumcheck_u_challenges(),
+        tp.sumcheck_u_challenges(),
         &mut batched_evaluation,
-        &parsed_proof.gemini_a_evaluations(),
+        parsed_proof.gemini_a_evaluations(),
         &powers_of_evaluation_challenge,
         vk.log_circuit_size,
     );
@@ -520,7 +520,7 @@ fn verify_shplemini<H: CurveHooks>(
         if let Err(msg) = check_evals_consistency(
             &zk_proof.libra_poly_evals,
             tp.gemini_r(),
-            &tp.sumcheck_u_challenges(),
+            tp.sumcheck_u_challenges(),
             zk_proof.libra_evaluation,
         ) {
             return Err(ProofError::ConsistencyCheckFailed { message: msg });

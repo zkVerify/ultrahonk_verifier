@@ -643,8 +643,8 @@ impl TryFrom<&[u8]> for PlainProof {
 
 #[derive(Debug)]
 pub(crate) enum ParsedProof {
-    Plain(PlainProof),
-    ZK(ZKProof),
+    Plain(Box<PlainProof>),
+    ZK(Box<ZKProof>),
 }
 
 impl ParsedProof {
