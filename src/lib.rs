@@ -276,6 +276,7 @@ fn verify_shplemini<H: CurveHooks>(
     let mut scalars = Vec::with_capacity(capacity);
     scalars.resize(capacity, Fr::ZERO);
     let mut commitments = Vec::with_capacity(capacity);
+    commitments.resize(capacity, G1::<H>::default());
 
     // NOTE: Can use batching here to go from 2 inversions to 1 inversion + 3 multiplications
     // but the benefit should be marginal.
@@ -294,13 +295,11 @@ fn verify_shplemini<H: CurveHooks>(
         * (pos_inverted_denominator - tp.shplonk_nu() * neg_inverted_denominator);
 
     scalars[0] = Fr::ONE;
-    commitments.push(
-        convert_proof_point::<H>(*parsed_proof.shplonk_q()).map_err(|_| {
-            ProofError::PointNotOnCurve {
-                field: ZKProofCommitmentField::SHPLONK_Q.to_string(),
-            }
-        })?,
-    );
+    commitments[0] = convert_proof_point::<H>(*parsed_proof.shplonk_q()).map_err(|_| {
+        ProofError::PointNotOnCurve {
+            field: ZKProofCommitmentField::SHPLONK_Q.to_string(),
+        }
+    })?;
 
     let (mut batched_evaluation, mut batching_challenge, offset) = {
         if let ParsedProof::ZK(zkp) = parsed_proof {
@@ -311,17 +310,12 @@ fn verify_shplemini<H: CurveHooks>(
         }
     };
 
-    println!("Check#0");
-    dbg!(offset);
-
     for i in (1 - offset)..=(NUMBER_UNSHIFTED - offset) {
         scalars[i + 2 * offset] = -unshifted_scalar * batching_challenge;
         batched_evaluation +=
             parsed_proof.sumcheck_evaluations()[i + offset - 1] * batching_challenge;
         batching_challenge *= tp.rho();
     }
-
-    println!("Check#1");
 
     for i in (NUMBER_UNSHIFTED + 1 - offset)..=(NUMBER_OF_ENTITIES - offset) {
         scalars[i + 2 * offset] = -shifted_scalar * batching_challenge;
@@ -330,102 +324,90 @@ fn verify_shplemini<H: CurveHooks>(
         batching_challenge *= tp.rho();
     }
 
-    println!("Check#2");
-
     if let ParsedProof::ZK(zkp) = parsed_proof {
-        commitments.push(
-            convert_proof_point::<H>(zkp.gemini_masking_poly).map_err(|_| {
-                ProofError::PointNotOnCurve {
-                    field: ZKProofCommitmentField::GEMINI_MASKING_POLY.to_string(),
-                }
-            })?,
-        );
+        commitments[1] = convert_proof_point::<H>(zkp.gemini_masking_poly).map_err(|_| {
+            ProofError::PointNotOnCurve {
+                field: ZKProofCommitmentField::GEMINI_MASKING_POLY.to_string(),
+            }
+        })?;
     }
 
-    commitments.push(vk.q_m);
-    commitments.push(vk.q_c);
-    commitments.push(vk.q_l);
-    commitments.push(vk.q_r);
-    commitments.push(vk.q_o);
-    commitments.push(vk.q_4);
-    commitments.push(vk.q_lookup);
-    commitments.push(vk.q_arith);
-    commitments.push(vk.q_deltarange);
-    commitments.push(vk.q_elliptic);
-    commitments.push(vk.q_aux);
-    commitments.push(vk.q_poseidon2external);
-    commitments.push(vk.q_poseidon2internal);
-    commitments.push(vk.s_1);
-    commitments.push(vk.s_2);
-    commitments.push(vk.s_3);
-    commitments.push(vk.s_4);
-    commitments.push(vk.id_1);
-    commitments.push(vk.id_2);
-    commitments.push(vk.id_3);
-    commitments.push(vk.id_4);
-    commitments.push(vk.t_1);
-    commitments.push(vk.t_2);
-    commitments.push(vk.t_3);
-    commitments.push(vk.t_4);
-    commitments.push(vk.lagrange_first);
-    commitments.push(vk.lagrange_last);
+    commitments[1 + offset] = vk.q_m;
+    commitments[2 + offset] = vk.q_c;
+    commitments[3 + offset] = vk.q_l;
+    commitments[4 + offset] = vk.q_r;
+    commitments[5 + offset] = vk.q_o;
+    commitments[6 + offset] = vk.q_4;
+    commitments[7 + offset] = vk.q_lookup;
+    commitments[8 + offset] = vk.q_arith;
+    commitments[9 + offset] = vk.q_deltarange;
+    commitments[10 + offset] = vk.q_elliptic;
+    commitments[11 + offset] = vk.q_aux;
+    commitments[12 + offset] = vk.q_poseidon2external;
+    commitments[13 + offset] = vk.q_poseidon2internal;
+    commitments[14 + offset] = vk.s_1;
+    commitments[15 + offset] = vk.s_2;
+    commitments[16 + offset] = vk.s_3;
+    commitments[17 + offset] = vk.s_4;
+    commitments[18 + offset] = vk.id_1;
+    commitments[19 + offset] = vk.id_2;
+    commitments[20 + offset] = vk.id_3;
+    commitments[21 + offset] = vk.id_4;
+    commitments[22 + offset] = vk.t_1;
+    commitments[23 + offset] = vk.t_2;
+    commitments[24 + offset] = vk.t_3;
+    commitments[25 + offset] = vk.t_4;
+    commitments[26 + offset] = vk.lagrange_first;
+    commitments[27 + offset] = vk.lagrange_last;
 
     // Accumulate proof points
-    commitments.push(convert_proof_point(*parsed_proof.w1()).map_err(|_| {
-        ProofError::PointNotOnCurve {
+    commitments[28 + offset] =
+        convert_proof_point(*parsed_proof.w1()).map_err(|_| ProofError::PointNotOnCurve {
             field: ZKProofCommitmentField::W_1.to_string(),
-        }
-    })?);
-    commitments.push(convert_proof_point(*parsed_proof.w2()).map_err(|_| {
-        ProofError::PointNotOnCurve {
+        })?;
+    commitments[29 + offset] =
+        convert_proof_point(*parsed_proof.w2()).map_err(|_| ProofError::PointNotOnCurve {
             field: ZKProofCommitmentField::W_2.to_string(),
-        }
-    })?);
-    commitments.push(convert_proof_point(*parsed_proof.w3()).map_err(|_| {
-        ProofError::PointNotOnCurve {
+        })?;
+    commitments[30 + offset] =
+        convert_proof_point(*parsed_proof.w3()).map_err(|_| ProofError::PointNotOnCurve {
             field: ZKProofCommitmentField::W_3.to_string(),
-        }
-    })?);
-    commitments.push(convert_proof_point(*parsed_proof.w4()).map_err(|_| {
-        ProofError::PointNotOnCurve {
+        })?;
+    commitments[31 + offset] =
+        convert_proof_point(*parsed_proof.w4()).map_err(|_| ProofError::PointNotOnCurve {
             field: ZKProofCommitmentField::W_4.to_string(),
-        }
-    })?);
+        })?;
 
-    commitments.push(convert_proof_point(*parsed_proof.z_perm()).map_err(|_| {
-        ProofError::PointNotOnCurve {
+    commitments[32 + offset] =
+        convert_proof_point(*parsed_proof.z_perm()).map_err(|_| ProofError::PointNotOnCurve {
             field: ZKProofCommitmentField::Z_PERM.to_string(),
-        }
-    })?);
-    commitments.push(
+        })?;
+    commitments[33 + offset] =
         convert_proof_point(*parsed_proof.lookup_inverses()).map_err(|_| {
             ProofError::PointNotOnCurve {
                 field: ZKProofCommitmentField::LOOKUP_INVERSES.to_string(),
             }
-        })?,
-    );
-    commitments.push(
+        })?;
+    commitments[34 + offset] =
         convert_proof_point(*parsed_proof.lookup_read_counts()).map_err(|_| {
             ProofError::PointNotOnCurve {
                 field: ZKProofCommitmentField::LOOKUP_READ_COUNTS.to_string(),
             }
-        })?,
-    );
-    commitments.push(
+        })?;
+    commitments[35 + offset] =
         convert_proof_point(*parsed_proof.lookup_read_tags()).map_err(|_| {
             ProofError::PointNotOnCurve {
                 field: ZKProofCommitmentField::LOOKUP_READ_TAGS.to_string(),
             }
-        })?,
-    );
+        })?;
 
     // to be Shifted
     // The following 5 points are copied to avoid re-validation.
-    commitments.push(commitments[28 + offset]);
-    commitments.push(commitments[29 + offset]);
-    commitments.push(commitments[30 + offset]);
-    commitments.push(commitments[31 + offset]);
-    commitments.push(commitments[32 + offset]);
+    commitments[36 + offset] = commitments[28 + offset];
+    commitments[37 + offset] = commitments[29 + offset];
+    commitments[38 + offset] = commitments[30 + offset];
+    commitments[39 + offset] = commitments[31 + offset];
+    commitments[40 + offset] = commitments[32 + offset];
 
     // Add contributions from A₀(r) and A₀(-r) to constant_term_accumulator:
     // Compute the evaluations Aₗ(r^{2ˡ}) for l = 0, ..., logN - 1.
@@ -442,15 +424,12 @@ fn verify_shplemini<H: CurveHooks>(
         parsed_proof.gemini_a_evaluations()[0] * tp.shplonk_nu() * neg_inverted_denominator;
 
     batching_challenge = tp.shplonk_nu().square();
-    // let mut boundary = if matches!(parsed_proof, ParsedProof::ZK(_)) { NUMBER_OF_ENTITIES + 2 } else { NUMBER_OF_ENTITIES + 1 };
-
-    let mut scaling_factor_pos: Fr;
-    let mut scaling_factor_neg: Fr;
 
     // Compute Shplonk constant term contributions from Aₗ(± r^{2ˡ}) for l = 1, ..., m-1;
     // Compute scalar multipliers for each fold commitment.
-
-    let boundary = NUMBER_OF_ENTITIES + 1 + offset;
+    let mut scaling_factor_pos: Fr;
+    let mut scaling_factor_neg: Fr;
+    let mut boundary = NUMBER_OF_ENTITIES + 1 + offset;
 
     for i in 0..(CONST_PROOF_SIZE_LOG_N - 1) {
         let dummy_round = i as u64 >= (vk.log_circuit_size - 1);
@@ -479,18 +458,16 @@ fn verify_shplemini<H: CurveHooks>(
         // Update the running power of v
         batching_challenge *= tp.shplonk_nu().square();
 
-        commitments.push(
-            convert_proof_point(parsed_proof.gemini_fold_comms()[i]).map_err(|_| {
-                ProofError::PointNotOnCurve {
-                    field: ZKProofCommitmentField::GEMINI_FOLD_COMMS(i).to_string(),
-                }
-            })?,
-        );
+        commitments[boundary + i] = convert_proof_point(parsed_proof.gemini_fold_comms()[i])
+            .map_err(|_| ProofError::PointNotOnCurve {
+                field: ZKProofCommitmentField::GEMINI_FOLD_COMMS(i).to_string(),
+            })?;
     }
 
-    // Finalize the batch opening claim
-    let mut boundary = NUMBER_OF_ENTITIES + CONST_PROOF_SIZE_LOG_N; // !!!
+    boundary += CONST_PROOF_SIZE_LOG_N - 1;
+    // let mut boundary = NUMBER_OF_ENTITIES + CONST_PROOF_SIZE_LOG_N; // !!!
 
+    // Finalize the batch opening claim
     if let Transcript::ZK(zktp) = tp {
         let mut denominators = [Fr::ZERO; LIBRA_EVALUATIONS];
 
@@ -520,14 +497,12 @@ fn verify_shplemini<H: CurveHooks>(
             scalars[boundary + 1] = batching_scalars[1] + batching_scalars[2];
             scalars[boundary + 2] = batching_scalars[3];
 
-            boundary += 3;
-
             for i in 0..LIBRA_COMMITMENTS {
-                commitments.push(convert_proof_point(zk_proof.libra_commitments[i]).map_err(
-                    |_| ProofError::PointNotOnCurve {
+                commitments[boundary] = convert_proof_point(zk_proof.libra_commitments[i])
+                    .map_err(|_| ProofError::PointNotOnCurve {
                         field: ZKProofCommitmentField::LIBRA_COMMITMENTS(i).to_string(),
-                    },
-                )?);
+                    })?;
+                boundary += 1;
             }
         } else {
             return Err(ProofError::OtherError {
@@ -536,8 +511,9 @@ fn verify_shplemini<H: CurveHooks>(
         }
     }
 
-    commitments.push(G1::<H>::generator()); // (1, 2)
+    commitments[boundary] = G1::<H>::generator(); // (1, 2)
     scalars[boundary] = constant_term_accumulator;
+    boundary += 1;
 
     // ZKProofs only
     if let ParsedProof::ZK(zk_proof) = parsed_proof {
@@ -551,21 +527,14 @@ fn verify_shplemini<H: CurveHooks>(
         }
     }
 
-    println!("GOING STRONG!");
-
     let quotient_commitment = convert_proof_point(*parsed_proof.kzg_quotient()).map_err(|_| {
         ProofError::PointNotOnCurve {
             field: PlainProofCommitmentField::KZG_QUOTIENT.to_string(),
         }
     })?;
 
-    commitments.push(quotient_commitment);
-    scalars[boundary + 1] = tp.shplonk_z(); // evaluation challenge
-
-    dbg!(commitments.len());
-    dbg!(scalars.len());
-
-    dbg!(scalars.clone());
+    commitments[boundary] = quotient_commitment;
+    scalars[boundary] = tp.shplonk_z(); // evaluation challenge
 
     // Pairing Check
     let p_0 = H::bn254_msm_g1(&commitments, &scalars).map_err(|_| ProofError::OtherError {
@@ -587,7 +556,6 @@ fn verify_shplemini<H: CurveHooks>(
     if product.0.is_one() {
         Ok(())
     } else {
-        println!("doh!");
         Err(ProofError::ShpleminiPairingCheckFailed)
     }
 }
