@@ -4,7 +4,7 @@ The UltraHonk zk-SNARK verifier is a Rust-based implementation of Noir's UltraHo
 
 ## Usage
 
-Below, we present a basic use case of verifying an UltraHonk zk-SNARK proof using our implementation. 
+Below, we present a basic use case of verifying an UltraHonk zk-SNARK proof using our implementation:
 
 ```rust
 extern crate alloc;
@@ -585,7 +585,7 @@ assert!(verify::<()>(&vk, &proof, &pubs).is_ok()); // success
 ```
 
 > **Note:** Please note that this verifier currently only supports the following configuration:
-- **ZK vs Plain:** Noir is able to generate "plain" proofs where there is no guarantee for witness privacy and zero-knowledge (ZK) proofs for a given circuit. Our verifier is compatible with *both* types of proofs,
+- **ZK vs Plain:** Noir is able to generate "plain" proofs where there is no guarantee for witness privacy, as well as zero-knowledge (ZK) proofs for a given circuit. Our verifier is compatible with *both* types of proofs,
 - **Transcript generation:** Keccak256 is used as the hash function,
 - **Recursive proofs:** currently not supported.
 
