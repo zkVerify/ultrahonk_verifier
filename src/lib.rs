@@ -92,7 +92,7 @@ pub fn verify<H: CurveHooks + Default>(
 
         verify_inner(&vk, &proof, pubs)
     } else {
-        unimplemented!("Unreachable for now.");
+        unimplemented!("Unreachable.");
     }
 }
 
@@ -465,7 +465,6 @@ fn verify_shplemini<H: CurveHooks>(
     }
 
     boundary += CONST_PROOF_SIZE_LOG_N - 1;
-    // let mut boundary = NUMBER_OF_ENTITIES + CONST_PROOF_SIZE_LOG_N; // !!!
 
     // Finalize the batch opening claim
     if let Transcript::ZK(zktp) = tp {

@@ -1143,6 +1143,31 @@ mod reject {
     }
 
     #[rstest]
+    fn a_plain_proof_failing_sumcheck(
+        valid_vk: [u8; VK_SIZE],
+        valid_plain_proof: [u8; PLAIN_PROOF_SIZE],
+        valid_pubs: [PublicInput; 2],
+    ) {
+        let mut invalid_plain_proof = [0u8; PLAIN_PROOF_SIZE];
+        invalid_plain_proof.copy_from_slice(&valid_plain_proof);
+        invalid_plain_proof[0x400..0x400 + 0x20].fill(0); // Alter sumcheck_univariates[0]
+
+        assert_eq!(
+            verify::<()>(
+                &valid_vk,
+                &ProofType::Plain(Box::new(invalid_plain_proof)),
+                &valid_pubs
+            )
+            .unwrap_err(),
+            VerifyError::VerificationError {
+                message: format!(
+                    "Sumcheck Failed. Cause: Total Sum differs from Round Target Sum."
+                )
+            }
+        );
+    }
+
+    #[rstest]
     fn a_zk_proof_failing_sumcheck_v2(
         valid_vk: [u8; VK_SIZE],
         valid_zk_proof: [u8; ZK_PROOF_SIZE],
@@ -1150,10 +1175,30 @@ mod reject {
     ) {
         let mut invalid_zk_proof = [0u8; ZK_PROOF_SIZE];
         invalid_zk_proof.copy_from_slice(&valid_zk_proof);
-        invalid_zk_proof[(8 * 128 + 28 * 8 * 32)..(8 * 128 + 28 * 8 * 32 + 40 * 32)].fill(0); // Alter sumcheck_evaluations
+        invalid_zk_proof[0x2000..(0x2000 + 40 * 0x20)].fill(0); // Alter sumcheck_evaluations
 
         assert_eq!(
             verify::<()>(&valid_vk, &ProofType::ZK(Box::new(invalid_zk_proof)), &valid_pubs).unwrap_err(),
+            VerifyError::VerificationError {
+                message: format!(
+                    "Sumcheck Failed. Cause: Grand Honk Relation Sum does not match Round Target Sum."
+                )
+            }
+        );
+    }
+
+    #[rstest]
+    fn a_plain_proof_failing_sumcheck_v2(
+        valid_vk: [u8; VK_SIZE],
+        valid_plain_proof: [u8; PLAIN_PROOF_SIZE],
+        valid_pubs: [PublicInput; 2],
+    ) {
+        let mut invalid_plain_proof = [0u8; PLAIN_PROOF_SIZE];
+        invalid_plain_proof.copy_from_slice(&valid_plain_proof);
+        invalid_plain_proof[0x2000..(0x2000 + 40 * 0x20)].fill(0); // Alter sumcheck_evaluations
+
+        assert_eq!(
+            verify::<()>(&valid_vk, &ProofType::Plain(Box::new(invalid_plain_proof)), &valid_pubs).unwrap_err(),
             VerifyError::VerificationError {
                 message: format!(
                     "Sumcheck Failed. Cause: Grand Honk Relation Sum does not match Round Target Sum."
@@ -1235,12 +1280,67 @@ mod reject {
     }
 
     #[rstest]
+    fn a_plain_proof_failing_shplemini_because_of_points_not_on_curve(
+        valid_vk: [u8; VK_SIZE],
+        valid_plain_proof: [u8; PLAIN_PROOF_SIZE],
+        valid_pubs: [PublicInput; 2],
+    ) {
+        let field_offset = [
+            (PlainProofCommitmentField::GEMINI_FOLD_COMMS(0), 0x2500),
+            (PlainProofCommitmentField::GEMINI_FOLD_COMMS(1), 0x2580),
+            (PlainProofCommitmentField::GEMINI_FOLD_COMMS(2), 0x2600),
+            (PlainProofCommitmentField::GEMINI_FOLD_COMMS(3), 0x2680),
+            (PlainProofCommitmentField::GEMINI_FOLD_COMMS(4), 0x2700),
+            (PlainProofCommitmentField::GEMINI_FOLD_COMMS(5), 0x2780),
+            (PlainProofCommitmentField::GEMINI_FOLD_COMMS(6), 0x2800),
+            (PlainProofCommitmentField::GEMINI_FOLD_COMMS(7), 0x2880),
+            (PlainProofCommitmentField::GEMINI_FOLD_COMMS(8), 0x2900),
+            (PlainProofCommitmentField::GEMINI_FOLD_COMMS(9), 0x2980),
+            (PlainProofCommitmentField::GEMINI_FOLD_COMMS(10), 0x2a00),
+            (PlainProofCommitmentField::GEMINI_FOLD_COMMS(11), 0x2a80),
+            (PlainProofCommitmentField::GEMINI_FOLD_COMMS(12), 0x2b00),
+            (PlainProofCommitmentField::GEMINI_FOLD_COMMS(13), 0x2b80),
+            (PlainProofCommitmentField::GEMINI_FOLD_COMMS(14), 0x2c00),
+            (PlainProofCommitmentField::GEMINI_FOLD_COMMS(15), 0x2c80),
+            (PlainProofCommitmentField::GEMINI_FOLD_COMMS(16), 0x2d00),
+            (PlainProofCommitmentField::GEMINI_FOLD_COMMS(17), 0x2d80),
+            (PlainProofCommitmentField::GEMINI_FOLD_COMMS(18), 0x2e00),
+            (PlainProofCommitmentField::GEMINI_FOLD_COMMS(19), 0x2e80),
+            (PlainProofCommitmentField::GEMINI_FOLD_COMMS(20), 0x2f00),
+            (PlainProofCommitmentField::GEMINI_FOLD_COMMS(21), 0x2f80),
+            (PlainProofCommitmentField::GEMINI_FOLD_COMMS(22), 0x3000),
+            (PlainProofCommitmentField::GEMINI_FOLD_COMMS(23), 0x3080),
+            (PlainProofCommitmentField::GEMINI_FOLD_COMMS(24), 0x3100),
+            (PlainProofCommitmentField::GEMINI_FOLD_COMMS(25), 0x3180),
+            (PlainProofCommitmentField::GEMINI_FOLD_COMMS(26), 0x3200),
+            (PlainProofCommitmentField::SHPLONK_Q, 0x3600),
+            (PlainProofCommitmentField::KZG_QUOTIENT, 0x3680),
+        ];
+
+        for (field, offset) in field_offset {
+            let mut invalid_plain_proof = [0u8; PLAIN_PROOF_SIZE];
+            invalid_plain_proof.copy_from_slice(&valid_plain_proof);
+            // Alter current field; notice that (1, 3) ∉ G1
+            invalid_plain_proof[offset..offset + 128].fill(0);
+            invalid_plain_proof[offset + 31] = 1;
+            invalid_plain_proof[offset + 64 + 31] = 3;
+
+            assert_eq!(
+                verify::<()>(&valid_vk, &ProofType::Plain(Box::new(invalid_plain_proof)), &valid_pubs).unwrap_err(),
+                VerifyError::VerificationError {
+                    message: format!("Shplemini Failed. Cause: Point for proof commitment field '\"{field}\"' is not on curve")
+            });
+        }
+    }
+
+    #[rstest]
     fn a_zk_proof_failing_shplemini_pairing_check(
         valid_vk: [u8; VK_SIZE],
         valid_zk_proof: [u8; ZK_PROOF_SIZE],
         valid_pubs: [PublicInput; 2],
     ) {
-        let offset = 0x3860; // offset for gemini_fold_comms[27]
+        let offset =
+            ZK_PROOF_SIZE - 2 * 0x80 - 32 * LIBRA_EVALUATIONS - 32 * CONST_PROOF_SIZE_LOG_N; // offset for gemini_a_evaluations[0]
         let mut invalid_zk_proof = [0u8; ZK_PROOF_SIZE];
         invalid_zk_proof.copy_from_slice(&valid_zk_proof);
         // Alter field; notice that (1, 3) ∉ G1
@@ -1256,7 +1356,34 @@ mod reject {
             )
             .unwrap_err(),
             VerifyError::VerificationError {
-                message: format!("Shplemini Failed. Cause: Shpleminy pairing check failed")
+                message: format!("Shplemini Failed. Cause: Shplemini pairing check failed")
+            }
+        );
+    }
+
+    #[rstest]
+    fn a_plain_proof_failing_shplemini_pairing_check(
+        valid_vk: [u8; VK_SIZE],
+        valid_plain_proof: [u8; PLAIN_PROOF_SIZE],
+        valid_pubs: [PublicInput; 2],
+    ) {
+        let offset = PLAIN_PROOF_SIZE - 2 * 0x80 - 32 * CONST_PROOF_SIZE_LOG_N; // offset for gemini_a_evaluations[0]
+        let mut invalid_plain_proof = [0u8; PLAIN_PROOF_SIZE];
+        invalid_plain_proof.copy_from_slice(&valid_plain_proof);
+        // Alter field; notice that (1, 3) ∉ G1
+        invalid_plain_proof[offset..offset + 128].fill(0);
+        invalid_plain_proof[offset + 31] = 1;
+        invalid_plain_proof[offset + 64 + 31] = 3;
+
+        assert_eq!(
+            verify::<()>(
+                &valid_vk,
+                &ProofType::Plain(Box::new(invalid_plain_proof)),
+                &valid_pubs
+            )
+            .unwrap_err(),
+            VerifyError::VerificationError {
+                message: format!("Shplemini Failed. Cause: Shplemini pairing check failed")
             }
         );
     }

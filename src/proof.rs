@@ -67,7 +67,7 @@ pub enum ProofError {
     // NotMember,
     #[snafu(display("Other error: {message:?}"))]
     OtherError { message: String },
-    #[snafu(display("Shpleminy pairing check failed"))]
+    #[snafu(display("Shplemini pairing check failed"))]
     ShpleminiPairingCheckFailed,
     #[snafu(display("Consistency check failed. Cause: {message:?}"))]
     ConsistencyCheckFailed { message: &'static str },
@@ -619,6 +619,7 @@ impl TryFrom<&[u8]> for PlainProof {
 
         // Shplonk
         let shplonk_q = read_g1_proof_point(&mut proof_bytes)?;
+
         // KZG
         let kzg_quotient = read_g1_proof_point(&mut proof_bytes)?;
 
