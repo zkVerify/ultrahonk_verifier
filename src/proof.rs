@@ -252,9 +252,9 @@ pub(crate) trait HasCommonProofData {
     fn lookup_read_tags(&self) -> &G1ProofPoint;
     fn lookup_inverses(&self) -> &G1ProofPoint;
     fn z_perm(&self) -> &G1ProofPoint;
-    fn sumcheck_univariates<'a>(&'a self) -> Box<dyn Iterator<Item = &'a [Fr]> + 'a>; // varies
+    fn sumcheck_univariates<'a>(&'a self) -> Box<dyn Iterator<Item = &'a [Fr]> + 'a>;
     fn sumcheck_evaluations(&self) -> &[Fr; NUMBER_OF_ENTITIES];
-    fn gemini_fold_comms(&self) -> &[G1ProofPoint];
+    fn gemini_fold_comms(&self) -> &[G1ProofPoint; CONST_PROOF_SIZE_LOG_N - 1];
     fn gemini_a_evaluations(&self) -> &[Fr; CONST_PROOF_SIZE_LOG_N];
     fn shplonk_q(&self) -> &G1ProofPoint;
     fn kzg_quotient(&self) -> &G1ProofPoint;
@@ -339,7 +339,7 @@ impl HasCommonProofData for ZKProof {
         &self.sumcheck_evaluations
     }
 
-    fn gemini_fold_comms(&self) -> &[G1ProofPoint] {
+    fn gemini_fold_comms(&self) -> &[G1ProofPoint; CONST_PROOF_SIZE_LOG_N - 1] {
         &self.gemini_fold_comms
     }
 
@@ -539,7 +539,7 @@ impl HasCommonProofData for PlainProof {
         &self.sumcheck_evaluations
     }
 
-    fn gemini_fold_comms(&self) -> &[G1ProofPoint] {
+    fn gemini_fold_comms(&self) -> &[G1ProofPoint; CONST_PROOF_SIZE_LOG_N - 1] {
         &self.gemini_fold_comms
     }
 
@@ -748,7 +748,7 @@ impl HasCommonProofData for ParsedProof {
         }
     }
 
-    fn gemini_fold_comms(&self) -> &[G1ProofPoint] {
+    fn gemini_fold_comms(&self) -> &[G1ProofPoint; CONST_PROOF_SIZE_LOG_N - 1] {
         match self {
             Self::ZK(p) => p.gemini_fold_comms(),
             Self::Plain(p) => p.gemini_fold_comms(),

@@ -589,11 +589,7 @@ assert!(verify::<()>(&vk, &proof, &pubs).is_ok()); // success
 - **Transcript generation:** Keccak256 is used as the hash function,
 - **Recursive proofs:** currently not supported.
 
-> When working with a plain proof, wrap its bytes in the `ProofType::Plain` variant, as shown below:
-
-```rust
-let proof: ProofType = ProofType::Plain(Box::new(plain_proof_data));
-```
+> When working with a plain proof, wrap its bytes in the `ProofType::Plain` variant, like so: `let proof: ProofType = ProofType::Plain(Box::new(plain_proof_data));`
 
 ## Generate an UltraHonk proof with Noir toolchain
 
