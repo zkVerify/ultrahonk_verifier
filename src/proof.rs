@@ -23,7 +23,7 @@ use crate::{
     },
     errors::GroupError,
     utils::read_u256,
-    Fr, G1, PROOF_SIZE, U256, ZK_PROOF_SIZE,
+    Fr, G1, PLAIN_PROOF_SIZE, U256, ZK_PROOF_SIZE,
 };
 use alloc::{
     boxed::Box,
@@ -75,7 +75,7 @@ pub enum ProofError {
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum ProofType {
-    Plain(Box<[u8; PROOF_SIZE]>),
+    Plain(Box<[u8; PLAIN_PROOF_SIZE]>),
     ZK(Box<[u8; ZK_PROOF_SIZE]>),
 }
 
@@ -571,9 +571,9 @@ impl TryFrom<&[u8]> for PlainProof {
     type Error = ProofError;
 
     fn try_from(mut proof_bytes: &[u8]) -> Result<Self, Self::Error> {
-        if proof_bytes.len() != PROOF_SIZE {
+        if proof_bytes.len() != PLAIN_PROOF_SIZE {
             return Err(ProofError::IncorrectBufferSize {
-                expected_size: PROOF_SIZE,
+                expected_size: PLAIN_PROOF_SIZE,
                 actual_size: proof_bytes.len(),
             });
         }
@@ -1268,7 +1268,7 @@ mod should {
     }
 
     #[fixture]
-    fn valid_proof() -> [u8; PROOF_SIZE] {
+    fn valid_proof() -> [u8; PLAIN_PROOF_SIZE] {
         hex_literal::hex!(
             "
         000000000000000000000000000000a16555b44bbe764b90975aa0d52b0ba43c
@@ -1721,7 +1721,7 @@ mod should {
     }
 
     #[rstest]
-    fn parse_valid_proof(valid_proof: [u8; PROOF_SIZE]) {
+    fn parse_valid_proof(valid_proof: [u8; PLAIN_PROOF_SIZE]) {
         assert!(PlainProof::try_from(&valid_proof[..]).is_ok());
     }
 
@@ -1741,12 +1741,12 @@ mod should {
         }
 
         #[rstest]
-        fn a_proof_from_a_short_buffer(valid_proof: [u8; PROOF_SIZE]) {
-            let invalid_proof = &valid_proof[..PROOF_SIZE - 1];
+        fn a_proof_from_a_short_buffer(valid_proof: [u8; PLAIN_PROOF_SIZE]) {
+            let invalid_proof = &valid_proof[..PLAIN_PROOF_SIZE - 1];
             assert_eq!(
                 PlainProof::try_from(invalid_proof),
                 Err(ProofError::IncorrectBufferSize {
-                    expected_size: PROOF_SIZE,
+                    expected_size: PLAIN_PROOF_SIZE,
                     actual_size: invalid_proof.len()
                 })
             );

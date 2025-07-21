@@ -61,7 +61,7 @@ extern crate core;
 
 pub const VK_SIZE: usize = 1760;
 pub const PUB_SIZE: usize = 32;
-pub use constants::PROOF_SIZE;
+pub use constants::PLAIN_PROOF_SIZE;
 pub use constants::ZK_PROOF_SIZE;
 
 /// A single public input.
