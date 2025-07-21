@@ -29,6 +29,9 @@ mod transcript;
 mod types;
 mod utils;
 
+extern crate alloc;
+extern crate core;
+
 use crate::{
     commitment::{compute_fold_pos_evaluations, compute_squares},
     constants::{
@@ -45,7 +48,7 @@ use crate::{
     transcript::{generate_transcript, HasCommonTranscriptData, Transcript},
     utils::read_g2,
 };
-use alloc::{format, string::ToString};
+use alloc::{boxed::Box, format, string::ToString, vec::Vec};
 use ark_bn254_ext::CurveHooks;
 use ark_ec::{pairing::Pairing, AffineRepr, CurveGroup};
 use ark_ff::{batch_inversion, AdditiveGroup, Field, One};
@@ -55,9 +58,6 @@ use errors::VerifyError;
 
 pub use proof::ProofType;
 pub use types::*;
-
-extern crate alloc;
-extern crate core;
 
 pub const VK_SIZE: usize = 1760;
 pub const PUB_SIZE: usize = 32;
