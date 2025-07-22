@@ -169,7 +169,6 @@ fn verify_sumcheck(
     let mut pow_partial_evaluation = Fr::ONE;
 
     // We perform sumcheck reductions over log n rounds (i.e., the multivariate degree)
-    // for round in 0..log_circuit_size {
     for (round, round_univariate) in parsed_proof
         .sumcheck_univariates()
         .enumerate()
