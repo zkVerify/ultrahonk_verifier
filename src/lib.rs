@@ -75,20 +75,18 @@ pub fn verify<H: CurveHooks + Default>(
 ) -> Result<(), VerifyError> {
     let vk = VerificationKey::<H>::try_from(vk_bytes).map_err(|_| VerifyError::KeyError)?;
 
+    check_public_input_number(&vk, pubs)?;
+
     if let ProofType::ZK(proof_bytes) = proof_type {
         let proof = ParsedProof::ZK(Box::new(
             ZKProof::try_from(&proof_bytes[..]).map_err(|_| VerifyError::InvalidProofError)?,
         ));
-
-        check_public_input_number(&vk, pubs)?;
 
         verify_inner(&vk, &proof, pubs)
     } else if let ProofType::Plain(proof_bytes) = proof_type {
         let proof = ParsedProof::Plain(Box::new(
             PlainProof::try_from(&proof_bytes[..]).map_err(|_| VerifyError::InvalidProofError)?,
         ));
-
-        check_public_input_number(&vk, pubs)?;
 
         verify_inner(&vk, &proof, pubs)
     } else {
