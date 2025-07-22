@@ -19,7 +19,7 @@ use ark_ff::MontFp;
 
 pub const CONST_PROOF_SIZE_LOG_N: usize = 28;
 pub const NUMBER_OF_SUBRELATIONS: usize = 26;
-pub const BATCHED_RELATION_PARTIAL_LENGTH: usize = 8; // for Standard (i.e., non-ZK) case
+pub const BATCHED_RELATION_PARTIAL_LENGTH: usize = 8; // for Plain case (i.e., non-ZK)
 pub const ZK_BATCHED_RELATION_PARTIAL_LENGTH: usize = 9; // for ZK case
 pub const NUMBER_OF_ENTITIES: usize = 40;
 pub const NUMBER_UNSHIFTED: usize = 35;
@@ -43,7 +43,7 @@ pub const ZK_PROOF_SIZE: usize = 4 * G1_PROOF_POINT_SIZE   // 1. Commitments to 
     + G1_PROOF_POINT_SIZE + SCALAR_SIZE // 5. ZK
     + (2 + CONST_PROOF_SIZE_LOG_N - 1) * G1_PROOF_POINT_SIZE + (CONST_PROOF_SIZE_LOG_N + 4) * SCALAR_SIZE; // 6. Shplemini
 
-pub const PROOF_SIZE: usize = 4 * G1_PROOF_POINT_SIZE   // 1. Commitments to wire polynomials
+pub const PLAIN_PROOF_SIZE: usize = 4 * G1_PROOF_POINT_SIZE   // 1. Commitments to wire polynomials
     + G1_PROOF_POINT_SIZE // 2. Lookup helpers - Permutations
     + 3 * G1_PROOF_POINT_SIZE // 3. Lookup helpers - logup
     + (NUMBER_OF_ENTITIES + BATCHED_RELATION_PARTIAL_LENGTH * CONST_PROOF_SIZE_LOG_N) * SCALAR_SIZE  // 4. Sumcheck
