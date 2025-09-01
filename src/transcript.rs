@@ -16,7 +16,7 @@
 
 use crate::{
     constants::{CONST_PROOF_SIZE_LOG_N, NUMBER_OF_ALPHAS, NUMBER_OF_ENTITIES},
-    proof::{HasCommonProofData, ZKProof},
+    proof::{CommonProofData, ZKProof},
     utils::IntoBEBytes32,
     ParsedProof, Pubs,
 };
@@ -61,7 +61,7 @@ pub(crate) struct ZKTranscript {
     pub(crate) shplonk_z: Fr,
 }
 
-pub(crate) trait HasCommonTranscriptData {
+pub(crate) trait CommonTranscriptData {
     // getters
     fn relation_parameters_challenges(&self) -> &RelationParametersChallenges;
     fn alphas(&self) -> &[Fr; NUMBER_OF_ALPHAS];
@@ -73,7 +73,7 @@ pub(crate) trait HasCommonTranscriptData {
     fn shplonk_z(&self) -> Fr;
 }
 
-impl HasCommonTranscriptData for PlainTranscript {
+impl CommonTranscriptData for PlainTranscript {
     fn relation_parameters_challenges(&self) -> &RelationParametersChallenges {
         &self.relation_parameters_challenges
     }
@@ -107,7 +107,7 @@ impl HasCommonTranscriptData for PlainTranscript {
     }
 }
 
-impl HasCommonTranscriptData for ZKTranscript {
+impl CommonTranscriptData for ZKTranscript {
     fn relation_parameters_challenges(&self) -> &RelationParametersChallenges {
         &self.relation_parameters_challenges
     }
@@ -141,7 +141,7 @@ impl HasCommonTranscriptData for ZKTranscript {
     }
 }
 
-impl HasCommonTranscriptData for Transcript {
+impl CommonTranscriptData for Transcript {
     fn relation_parameters_challenges(&self) -> &RelationParametersChallenges {
         match self {
             Transcript::ZK(zkt) => zkt.relation_parameters_challenges(),

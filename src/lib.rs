@@ -40,12 +40,12 @@ use crate::{
     },
     key::VerificationKey,
     proof::{
-        convert_proof_point, HasCommonProofData, ParsedProof, PlainProof,
-        PlainProofCommitmentField, ProofError, ZKProof, ZKProofCommitmentField,
+        convert_proof_point, CommonProofData, ParsedProof, PlainProof, PlainProofCommitmentField,
+        ProofError, ZKProof, ZKProofCommitmentField,
     },
     relations::accumulate_relation_evaluations,
     srs::{SRS_G2, SRS_G2_VK},
-    transcript::{generate_transcript, HasCommonTranscriptData, Transcript},
+    transcript::{generate_transcript, CommonTranscriptData, Transcript},
     utils::read_g2,
 };
 use alloc::{boxed::Box, format, string::ToString, vec::Vec};
@@ -70,28 +70,23 @@ pub type Pubs = [PublicInput];
 
 pub fn verify<H: CurveHooks + Default>(
     vk_bytes: &[u8],
-    proof_type: &ProofType,
+    proof: &ProofType,
     pubs: &Pubs,
 ) -> Result<(), VerifyError> {
     let vk = VerificationKey::<H>::try_from(vk_bytes).map_err(|_| VerifyError::KeyError)?;
 
     check_public_input_number(&vk, pubs)?;
 
-    if let ProofType::ZK(proof_bytes) = proof_type {
-        let proof = ParsedProof::ZK(Box::new(
+    let proof = match proof {
+        ProofType::ZK(proof_bytes) => ParsedProof::ZK(Box::new(
             ZKProof::try_from(&proof_bytes[..]).map_err(|_| VerifyError::InvalidProofError)?,
-        ));
-
-        verify_inner(&vk, &proof, pubs)
-    } else if let ProofType::Plain(proof_bytes) = proof_type {
-        let proof = ParsedProof::Plain(Box::new(
+        )),
+        ProofType::Plain(proof_bytes) => ParsedProof::Plain(Box::new(
             PlainProof::try_from(&proof_bytes[..]).map_err(|_| VerifyError::InvalidProofError)?,
-        ));
+        )),
+    };
 
-        verify_inner(&vk, &proof, pubs)
-    } else {
-        unimplemented!("Unreachable.");
-    }
+    verify_inner(&vk, &proof, pubs)
 }
 
 fn verify_inner<H: CurveHooks>(

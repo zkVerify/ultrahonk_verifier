@@ -242,7 +242,7 @@ pub(crate) fn convert_proof_point<H: CurveHooks>(
     Ok(point)
 }
 
-pub(crate) trait HasCommonProofData {
+pub(crate) trait CommonProofData {
     // getters
     fn w1(&self) -> &G1ProofPoint;
     fn w2(&self) -> &G1ProofPoint;
@@ -290,7 +290,7 @@ pub struct ZKProof {
     pub kzg_quotient: G1ProofPoint,
 }
 
-impl HasCommonProofData for ZKProof {
+impl CommonProofData for ZKProof {
     fn w1(&self) -> &G1ProofPoint {
         &self.w1
     }
@@ -490,7 +490,7 @@ pub struct PlainProof {
     pub kzg_quotient: G1ProofPoint,
 }
 
-impl HasCommonProofData for PlainProof {
+impl CommonProofData for PlainProof {
     fn w1(&self) -> &G1ProofPoint {
         &self.w1
     }
@@ -664,7 +664,7 @@ impl ParsedProof {
     }
 }
 
-impl HasCommonProofData for ParsedProof {
+impl CommonProofData for ParsedProof {
     fn w1(&self) -> &G1ProofPoint {
         match self {
             Self::ZK(p) => p.w1(),
