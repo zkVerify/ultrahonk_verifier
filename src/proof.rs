@@ -23,14 +23,14 @@ use crate::{
     },
     errors::GroupError,
     utils::read_u256,
-    Fr, G1, PROOF_SIZE, U256, ZK_PROOF_SIZE,
+    Fr, G1, PLAIN_PROOF_SIZE, U256, ZK_PROOF_SIZE,
 };
 use alloc::{
     boxed::Box,
     string::{String, ToString},
 };
 use ark_bn254_ext::{CurveHooks, Fq};
-use ark_ff::{AdditiveGroup, PrimeField};
+use ark_ff::{AdditiveGroup, MontFp, PrimeField};
 use core::{
     array::from_fn,
     fmt,
@@ -67,7 +67,7 @@ pub enum ProofError {
     // NotMember,
     #[snafu(display("Other error: {message:?}"))]
     OtherError { message: String },
-    #[snafu(display("Shpleminy pairing check failed"))]
+    #[snafu(display("Shplemini pairing check failed"))]
     ShpleminiPairingCheckFailed,
     #[snafu(display("Consistency check failed. Cause: {message:?}"))]
     ConsistencyCheckFailed { message: &'static str },
@@ -75,7 +75,7 @@ pub enum ProofError {
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum ProofType {
-    Standard(Box<[u8; PROOF_SIZE]>),
+    Plain(Box<[u8; PLAIN_PROOF_SIZE]>),
     ZK(Box<[u8; ZK_PROOF_SIZE]>),
 }
 
@@ -182,7 +182,7 @@ impl fmt::Display for ZKProofCommitmentField {
 }
 
 #[derive(Debug, Hash, Eq, PartialEq)]
-pub enum ProofCommitmentField {
+pub enum PlainProofCommitmentField {
     SHPLONK_Q,
     W_1,
     W_2,
@@ -196,22 +196,22 @@ pub enum ProofCommitmentField {
     KZG_QUOTIENT,
 }
 
-impl fmt::Display for ProofCommitmentField {
+impl fmt::Display for PlainProofCommitmentField {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ProofCommitmentField::SHPLONK_Q => write!(f, "SHPLONK_Q"),
-            ProofCommitmentField::W_1 => write!(f, "W_1"),
-            ProofCommitmentField::W_2 => write!(f, "W_2"),
-            ProofCommitmentField::W_3 => write!(f, "W_3"),
-            ProofCommitmentField::W_4 => write!(f, "W_4"),
-            ProofCommitmentField::Z_PERM => write!(f, "Z_PERM"),
-            ProofCommitmentField::LOOKUP_INVERSES => write!(f, "LOOKUP_INVERSES"),
-            ProofCommitmentField::LOOKUP_READ_COUNTS => write!(f, "LOOKUP_READ_COUNTS"),
-            ProofCommitmentField::LOOKUP_READ_TAGS => write!(f, "LOOKUP_READ_TAGS"),
-            ProofCommitmentField::GEMINI_FOLD_COMMS(i) => {
+            PlainProofCommitmentField::SHPLONK_Q => write!(f, "SHPLONK_Q"),
+            PlainProofCommitmentField::W_1 => write!(f, "W_1"),
+            PlainProofCommitmentField::W_2 => write!(f, "W_2"),
+            PlainProofCommitmentField::W_3 => write!(f, "W_3"),
+            PlainProofCommitmentField::W_4 => write!(f, "W_4"),
+            PlainProofCommitmentField::Z_PERM => write!(f, "Z_PERM"),
+            PlainProofCommitmentField::LOOKUP_INVERSES => write!(f, "LOOKUP_INVERSES"),
+            PlainProofCommitmentField::LOOKUP_READ_COUNTS => write!(f, "LOOKUP_READ_COUNTS"),
+            PlainProofCommitmentField::LOOKUP_READ_TAGS => write!(f, "LOOKUP_READ_TAGS"),
+            PlainProofCommitmentField::GEMINI_FOLD_COMMS(i) => {
                 write!(f, "GEMINI_FOLD_COMMS_{i}")
             }
-            ProofCommitmentField::KZG_QUOTIENT => write!(f, "KZG_QUOTIENT"),
+            PlainProofCommitmentField::KZG_QUOTIENT => write!(f, "KZG_QUOTIENT"),
         }
     }
 }
@@ -242,6 +242,24 @@ pub(crate) fn convert_proof_point<H: CurveHooks>(
     Ok(point)
 }
 
+pub(crate) trait CommonProofData {
+    // getters
+    fn w1(&self) -> &G1ProofPoint;
+    fn w2(&self) -> &G1ProofPoint;
+    fn w3(&self) -> &G1ProofPoint;
+    fn w4(&self) -> &G1ProofPoint;
+    fn lookup_read_counts(&self) -> &G1ProofPoint;
+    fn lookup_read_tags(&self) -> &G1ProofPoint;
+    fn lookup_inverses(&self) -> &G1ProofPoint;
+    fn z_perm(&self) -> &G1ProofPoint;
+    fn sumcheck_univariates<'a>(&'a self) -> Box<dyn Iterator<Item = &'a [Fr]> + 'a>;
+    fn sumcheck_evaluations(&self) -> &[Fr; NUMBER_OF_ENTITIES];
+    fn gemini_fold_comms(&self) -> &[G1ProofPoint; CONST_PROOF_SIZE_LOG_N - 1];
+    fn gemini_a_evaluations(&self) -> &[Fr; CONST_PROOF_SIZE_LOG_N];
+    fn shplonk_q(&self) -> &G1ProofPoint;
+    fn kzg_quotient(&self) -> &G1ProofPoint;
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub struct ZKProof {
     // Commitments to wire polynomials
@@ -270,6 +288,84 @@ pub struct ZKProof {
     pub libra_poly_evals: [Fr; LIBRA_EVALUATIONS],
     pub shplonk_q: G1ProofPoint,
     pub kzg_quotient: G1ProofPoint,
+}
+
+impl CommonProofData for ZKProof {
+    fn w1(&self) -> &G1ProofPoint {
+        &self.w1
+    }
+
+    fn w2(&self) -> &G1ProofPoint {
+        &self.w2
+    }
+
+    fn w3(&self) -> &G1ProofPoint {
+        &self.w3
+    }
+
+    fn w4(&self) -> &G1ProofPoint {
+        &self.w4
+    }
+
+    fn lookup_read_counts(&self) -> &G1ProofPoint {
+        &self.lookup_read_counts
+    }
+
+    fn lookup_read_tags(&self) -> &G1ProofPoint {
+        &self.lookup_read_tags
+    }
+
+    fn lookup_inverses(&self) -> &G1ProofPoint {
+        &self.lookup_inverses
+    }
+
+    fn z_perm(&self) -> &G1ProofPoint {
+        &self.z_perm
+    }
+
+    fn shplonk_q(&self) -> &G1ProofPoint {
+        &self.shplonk_q
+    }
+
+    fn kzg_quotient(&self) -> &G1ProofPoint {
+        &self.kzg_quotient
+    }
+
+    fn sumcheck_univariates<'a>(&'a self) -> Box<dyn Iterator<Item = &'a [Fr]> + 'a> {
+        Box::new(self.sumcheck_univariates.iter().map(|row| &row[..]))
+    }
+
+    fn sumcheck_evaluations(&self) -> &[Fr; NUMBER_OF_ENTITIES] {
+        &self.sumcheck_evaluations
+    }
+
+    fn gemini_fold_comms(&self) -> &[G1ProofPoint; CONST_PROOF_SIZE_LOG_N - 1] {
+        &self.gemini_fold_comms
+    }
+
+    fn gemini_a_evaluations(&self) -> &[Fr; CONST_PROOF_SIZE_LOG_N] {
+        &self.gemini_a_evaluations
+    }
+}
+
+impl ZKProof {
+    pub(crate) fn get_baricentric_lagrange_denominators(&self) -> Box<[Fr]> {
+        Box::new([
+            MontFp!("0x0000000000000000000000000000000000000000000000000000000000009d80"),
+            MontFp!("0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593efffec51"),
+            MontFp!("0x00000000000000000000000000000000000000000000000000000000000005a0"),
+            MontFp!("0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593effffd31"),
+            MontFp!("0x0000000000000000000000000000000000000000000000000000000000000240"),
+            MontFp!("0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593effffd31"),
+            MontFp!("0x00000000000000000000000000000000000000000000000000000000000005a0"),
+            MontFp!("0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593efffec51"),
+            MontFp!("0x0000000000000000000000000000000000000000000000000000000000009d80"),
+        ])
+    }
+
+    pub(crate) fn get_batched_relation_partial_length(&self) -> usize {
+        ZK_BATCHED_RELATION_PARTIAL_LENGTH
+    }
 }
 
 impl TryFrom<&[u8]> for ZKProof {
@@ -372,7 +468,7 @@ impl TryFrom<&[u8]> for ZKProof {
 }
 
 #[derive(Debug, Eq, PartialEq)]
-pub struct Proof {
+pub struct PlainProof {
     // Commitments to wire polynomials
     pub w1: G1ProofPoint,
     pub w2: G1ProofPoint,
@@ -394,13 +490,90 @@ pub struct Proof {
     pub kzg_quotient: G1ProofPoint,
 }
 
-impl TryFrom<&[u8]> for Proof {
+impl CommonProofData for PlainProof {
+    fn w1(&self) -> &G1ProofPoint {
+        &self.w1
+    }
+
+    fn w2(&self) -> &G1ProofPoint {
+        &self.w2
+    }
+
+    fn w3(&self) -> &G1ProofPoint {
+        &self.w3
+    }
+
+    fn w4(&self) -> &G1ProofPoint {
+        &self.w4
+    }
+
+    fn lookup_read_counts(&self) -> &G1ProofPoint {
+        &self.lookup_read_counts
+    }
+
+    fn lookup_read_tags(&self) -> &G1ProofPoint {
+        &self.lookup_read_tags
+    }
+
+    fn lookup_inverses(&self) -> &G1ProofPoint {
+        &self.lookup_inverses
+    }
+
+    fn z_perm(&self) -> &G1ProofPoint {
+        &self.z_perm
+    }
+
+    fn shplonk_q(&self) -> &G1ProofPoint {
+        &self.shplonk_q
+    }
+
+    fn kzg_quotient(&self) -> &G1ProofPoint {
+        &self.kzg_quotient
+    }
+
+    fn sumcheck_univariates<'a>(&'a self) -> Box<dyn Iterator<Item = &'a [Fr]> + 'a> {
+        Box::new(self.sumcheck_univariates.iter().map(|row| &row[..]))
+    }
+
+    fn sumcheck_evaluations(&self) -> &[Fr; NUMBER_OF_ENTITIES] {
+        &self.sumcheck_evaluations
+    }
+
+    fn gemini_fold_comms(&self) -> &[G1ProofPoint; CONST_PROOF_SIZE_LOG_N - 1] {
+        &self.gemini_fold_comms
+    }
+
+    fn gemini_a_evaluations(&self) -> &[Fr; CONST_PROOF_SIZE_LOG_N] {
+        &self.gemini_a_evaluations
+    }
+}
+
+impl PlainProof {
+    pub(crate) fn get_baricentric_lagrange_denominators(&self) -> Box<[Fr]> {
+        Box::new([
+            MontFp!("0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593efffec51"),
+            MontFp!("0x00000000000000000000000000000000000000000000000000000000000002d0"),
+            MontFp!("0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593efffff11"),
+            MontFp!("0x0000000000000000000000000000000000000000000000000000000000000090"),
+            MontFp!("0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593efffff71"),
+            MontFp!("0x00000000000000000000000000000000000000000000000000000000000000f0"),
+            MontFp!("0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593effffd31"),
+            MontFp!("0x00000000000000000000000000000000000000000000000000000000000013b0"),
+        ])
+    }
+
+    pub(crate) fn get_batched_relation_partial_length(&self) -> usize {
+        BATCHED_RELATION_PARTIAL_LENGTH
+    }
+}
+
+impl TryFrom<&[u8]> for PlainProof {
     type Error = ProofError;
 
     fn try_from(mut proof_bytes: &[u8]) -> Result<Self, Self::Error> {
-        if proof_bytes.len() != PROOF_SIZE {
+        if proof_bytes.len() != PLAIN_PROOF_SIZE {
             return Err(ProofError::IncorrectBufferSize {
-                expected_size: PROOF_SIZE,
+                expected_size: PLAIN_PROOF_SIZE,
                 actual_size: proof_bytes.len(),
             });
         }
@@ -446,6 +619,7 @@ impl TryFrom<&[u8]> for Proof {
 
         // Shplonk
         let shplonk_q = read_g1_proof_point(&mut proof_bytes)?;
+
         // KZG
         let kzg_quotient = read_g1_proof_point(&mut proof_bytes)?;
 
@@ -465,6 +639,128 @@ impl TryFrom<&[u8]> for Proof {
             shplonk_q,
             kzg_quotient,
         })
+    }
+}
+
+#[derive(Debug)]
+pub(crate) enum ParsedProof {
+    Plain(Box<PlainProof>),
+    ZK(Box<ZKProof>),
+}
+
+impl ParsedProof {
+    pub(crate) fn get_baricentric_lagrange_denominators(&self) -> Box<[Fr]> {
+        match self {
+            ParsedProof::ZK(zkp) => zkp.get_baricentric_lagrange_denominators(),
+            ParsedProof::Plain(p) => p.get_baricentric_lagrange_denominators(),
+        }
+    }
+
+    pub(crate) fn get_batched_relation_partial_length(&self) -> usize {
+        match self {
+            ParsedProof::ZK(zkp) => zkp.get_batched_relation_partial_length(),
+            ParsedProof::Plain(p) => p.get_batched_relation_partial_length(),
+        }
+    }
+}
+
+impl CommonProofData for ParsedProof {
+    fn w1(&self) -> &G1ProofPoint {
+        match self {
+            Self::ZK(p) => p.w1(),
+            Self::Plain(p) => p.w1(),
+        }
+    }
+
+    fn w2(&self) -> &G1ProofPoint {
+        match self {
+            Self::ZK(p) => p.w2(),
+            Self::Plain(p) => p.w2(),
+        }
+    }
+
+    fn w3(&self) -> &G1ProofPoint {
+        match self {
+            Self::ZK(p) => p.w3(),
+            Self::Plain(p) => p.w3(),
+        }
+    }
+
+    fn w4(&self) -> &G1ProofPoint {
+        match self {
+            Self::ZK(p) => p.w4(),
+            Self::Plain(p) => p.w4(),
+        }
+    }
+
+    fn lookup_read_counts(&self) -> &G1ProofPoint {
+        match self {
+            Self::ZK(p) => p.lookup_read_counts(),
+            Self::Plain(p) => p.lookup_read_counts(),
+        }
+    }
+
+    fn lookup_read_tags(&self) -> &G1ProofPoint {
+        match self {
+            Self::ZK(p) => p.lookup_read_tags(),
+            Self::Plain(p) => p.lookup_read_tags(),
+        }
+    }
+
+    fn lookup_inverses(&self) -> &G1ProofPoint {
+        match self {
+            Self::ZK(p) => p.lookup_inverses(),
+            Self::Plain(p) => p.lookup_inverses(),
+        }
+    }
+
+    fn z_perm(&self) -> &G1ProofPoint {
+        match self {
+            Self::ZK(p) => p.z_perm(),
+            Self::Plain(p) => p.z_perm(),
+        }
+    }
+
+    fn shplonk_q(&self) -> &G1ProofPoint {
+        match self {
+            Self::ZK(p) => p.shplonk_q(),
+            Self::Plain(p) => p.shplonk_q(),
+        }
+    }
+
+    fn kzg_quotient(&self) -> &G1ProofPoint {
+        match self {
+            Self::ZK(p) => p.kzg_quotient(),
+            Self::Plain(p) => p.kzg_quotient(),
+        }
+    }
+
+    fn sumcheck_univariates<'a>(&'a self) -> Box<dyn Iterator<Item = &'a [Fr]> + 'a> {
+        match self {
+            Self::ZK(p) => p.sumcheck_univariates(),
+            Self::Plain(p) => p.sumcheck_univariates(),
+        }
+    }
+
+    fn sumcheck_evaluations(&self) -> &[Fr; NUMBER_OF_ENTITIES] {
+        match self {
+            Self::ZK(p) => p.sumcheck_evaluations(),
+            Self::Plain(p) => p.sumcheck_evaluations(),
+        }
+    }
+
+    fn gemini_fold_comms(&self) -> &[G1ProofPoint; CONST_PROOF_SIZE_LOG_N - 1] {
+        match self {
+            Self::ZK(p) => p.gemini_fold_comms(),
+            Self::Plain(p) => p.gemini_fold_comms(),
+        }
+    }
+
+    fn gemini_a_evaluations(&self) -> &[Fr; CONST_PROOF_SIZE_LOG_N] {
+        match self {
+            Self::ZK(p) => p.gemini_a_evaluations(),
+            Self::Plain(p) => p.gemini_a_evaluations(),
+        }
     }
 }
 
@@ -973,7 +1269,7 @@ mod should {
     }
 
     #[fixture]
-    fn valid_proof() -> [u8; PROOF_SIZE] {
+    fn valid_proof() -> [u8; PLAIN_PROOF_SIZE] {
         hex_literal::hex!(
             "
         000000000000000000000000000000a16555b44bbe764b90975aa0d52b0ba43c
@@ -1426,8 +1722,8 @@ mod should {
     }
 
     #[rstest]
-    fn parse_valid_proof(valid_proof: [u8; PROOF_SIZE]) {
-        assert!(Proof::try_from(&valid_proof[..]).is_ok());
+    fn parse_valid_proof(valid_proof: [u8; PLAIN_PROOF_SIZE]) {
+        assert!(PlainProof::try_from(&valid_proof[..]).is_ok());
     }
 
     mod reject {
@@ -1446,12 +1742,12 @@ mod should {
         }
 
         #[rstest]
-        fn a_proof_from_a_short_buffer(valid_proof: [u8; PROOF_SIZE]) {
-            let invalid_proof = &valid_proof[..PROOF_SIZE - 1];
+        fn a_proof_from_a_short_buffer(valid_proof: [u8; PLAIN_PROOF_SIZE]) {
+            let invalid_proof = &valid_proof[..PLAIN_PROOF_SIZE - 1];
             assert_eq!(
-                Proof::try_from(invalid_proof),
+                PlainProof::try_from(invalid_proof),
                 Err(ProofError::IncorrectBufferSize {
-                    expected_size: PROOF_SIZE,
+                    expected_size: PLAIN_PROOF_SIZE,
                     actual_size: invalid_proof.len()
                 })
             );
