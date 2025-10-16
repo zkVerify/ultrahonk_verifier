@@ -573,22 +573,27 @@ fn check_evals_consistency(
         }
     }
 
-    let mut denominators = [Fr::ZERO; SUBGROUP_SIZE as usize];
-
+    let mut denominators = Vec::with_capacity(SUBGROUP_SIZE as usize);
     let mut root_power = Fr::ONE;
-    let mut challenge_poly_eval = Fr::ZERO;
-    for idx in 0..denominators.len() {
-        // Pr[root_power * gemini_r - 1 is invertible]
-        //   = Pr[root_power * gemini_r - 1 != 0]
-        //   = 1 - Pr[root_power * gemini_r - 1 = 0]
-        //   = 1 - Pr[gemini_r = root_power^{-1}]
-        //   >= 1 - 1/2^128 because gemini_r is the 128 lower-significance bits output by Keccak256
-        denominators[idx] = (root_power * gemini_r - Fr::ONE)
-            .inverse()
-            .expect("With overwhelming probability, inversion succeeds");
-        challenge_poly_eval += challenge_poly_lagrange[idx] * denominators[idx];
+
+    for _ in 0..SUBGROUP_SIZE {
+        denominators.push(root_power * gemini_r - Fr::ONE);
         root_power *= SUBGROUP_GENERATOR_INVERSE;
     }
+
+    // For each i, we have:
+    // Pr[SUBGROUP_GENERATOR_INVERSE^i * gemini_r - 1 is invertible]
+    //   = Pr[SUBGROUP_GENERATOR_INVERSE^i * gemini_r - 1 != 0]
+    //   = 1 - Pr[SUBGROUP_GENERATOR_INVERSE^i * gemini_r - 1 = 0]
+    //   = 1 - Pr[gemini_r = (SUBGROUP_GENERATOR_INVERSE^i)^{-1}]
+    //   >= 1 - 1/2^128 because gemini_r is the 128 lower-significance bits output by Keccak256
+    batch_inversion(&mut denominators);
+
+    let mut challenge_poly_eval = denominators
+        .iter()
+        .zip(challenge_poly_lagrange)
+        .map(|(ai, bi)| *ai * bi)
+        .fold(Fr::ZERO, |acc, x| acc + x);
 
     let numerator = vanishing_poly_eval
         * Fr::from(SUBGROUP_SIZE)
