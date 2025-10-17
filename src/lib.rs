@@ -589,11 +589,11 @@ fn check_evals_consistency(
     //   >= 1 - 1/2^128 because gemini_r is the 128 lower-significance bits output by Keccak256
     batch_inversion(&mut denominators);
 
-    let mut challenge_poly_eval = denominators
+    let mut challenge_poly_eval: Fr = denominators
         .iter()
         .zip(challenge_poly_lagrange)
         .map(|(ai, bi)| *ai * bi)
-        .fold(Fr::ZERO, |acc, x| acc + x);
+        .sum();
 
     let numerator = vanishing_poly_eval
         * Fr::from(SUBGROUP_SIZE)
