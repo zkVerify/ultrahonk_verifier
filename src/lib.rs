@@ -573,13 +573,12 @@ fn check_evals_consistency(
         }
     }
 
-    let mut denominators = Vec::with_capacity(SUBGROUP_SIZE as usize);
     let mut root_power = Fr::ONE;
-
-    for _ in 0..SUBGROUP_SIZE {
-        denominators.push(root_power * gemini_r - Fr::ONE);
+    let mut denominators: [_; SUBGROUP_SIZE as usize] = core::array::from_fn(|_| {
+        let result = root_power * gemini_r - Fr::ONE;
         root_power *= SUBGROUP_GENERATOR_INVERSE;
-    }
+        result
+    });
 
     // For each i, we have:
     // Pr[SUBGROUP_GENERATOR_INVERSE^i * gemini_r - 1 is invertible]
