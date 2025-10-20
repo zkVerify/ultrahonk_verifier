@@ -623,13 +623,20 @@ ZKV_PUBS_HEX_FILE_PATH="./target/zkv_pubs.hex"
 {
   PROOF_BYTES=$(xxd -p -c 256 "$PROOF_FILE_PATH" | tr -d '\n')
   printf '`{\n    "proof_type": "%s",\n    "proof_bytes": "0x%s"\n}`\n' "$PROOF_TYPE" "$PROOF_BYTES" > "$ZKV_PROOF_HEX_FILE_PATH"
+  echo "✅ 'proof' hex file generated at ${ZKV_PROOF_HEX_FILE_PATH}."
 }
 
 # Convert vk to hexadecimal format
-printf "\"0x%s\"\n" "$(xxd -p -c 0 "$VK_FILE_PATH")" > "$ZKV_VK_HEX_FILE_PATH"
+{
+  printf "\"0x%s\"\n" "$(xxd -p -c 0 "$VK_FILE_PATH")" > "$ZKV_VK_HEX_FILE_PATH"
+  echo "✅ 'vk' hex file generated at ${ZKV_VK_HEX_FILE_PATH}."
+}
 
 # Convert public inputs to hexadecimal format
-xxd -p -c 32 "$PUBS_FILE_PATH" | sed 's/.*/"0x&"/' | paste -sd, - | sed 's/.*/[&]/' > "$ZKV_PUBS_HEX_FILE_PATH"
+{
+  xxd -p -c 32 "$PUBS_FILE_PATH" | sed 's/.*/"0x&"/' | paste -sd, - | sed 's/.*/[&]/' > "$ZKV_PUBS_HEX_FILE_PATH"
+  echo "✅ 'pubs' hex file generated at ${ZKV_PUBS_HEX_FILE_PATH}."
+}
 ```
 
 And with that, you're all set!
