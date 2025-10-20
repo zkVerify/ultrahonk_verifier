@@ -621,15 +621,15 @@ ZKV_PUBS_HEX_FILE_PATH="./target/zkv_pubs.hex"
 
 # Convert proof to hexadecimal format
 {
-  PROOF_BYTES=$(xxd -p -c 256 "./target/proof" | tr -d '\n')
-  printf '`{\n    "proof_type": "%s",\n    "proof_bytes": "0x%s"\n}`\n' "$PROOF_TYPE" "$PROOF_BYTES" > zkv_proof.hex
+  PROOF_BYTES=$(xxd -p -c 256 "$PROOF_FILE_PATH" | tr -d '\n')
+  printf '`{\n    "proof_type": "%s",\n    "proof_bytes": "0x%s"\n}`\n' "$PROOF_TYPE" "$PROOF_BYTES" > "$ZKV_PROOF_HEX_FILE_PATH"
 }
 
 # Convert vk to hexadecimal format
-printf "\"0x%s\"\n" "$(xxd -p -c 0 "./target/vk")" > ./target/zkv_vk.hex
+printf "\"0x%s\"\n" "$(xxd -p -c 0 "$VK_FILE_PATH")" > "$ZKV_VK_HEX_FILE_PATH"
 
 # Convert public inputs to hexadecimal format
-xxd -p -c 32 ./target/public_inputs | sed 's/.*/"0x&"/' | paste -sd, - | sed 's/.*/[&]/' > ./target/zkv_pubs.hex
+xxd -p -c 32 "$PUBS_FILE_PATH" | sed 's/.*/"0x&"/' | paste -sd, - | sed 's/.*/[&]/' > "$ZKV_PUBS_HEX_FILE_PATH"
 ```
 
 And with that, you're all set!
