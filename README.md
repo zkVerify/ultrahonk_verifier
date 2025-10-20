@@ -609,7 +609,7 @@ Please run the following script, adjusting the path to the proof, vk, and public
 ```bash
 #!/usr/bin/env bash
 
-PROOF_TYPE="ZK"                          # Set to Plain if you are using the non-zk variant of UltraHonk
+PROOF_TYPE="ZK"                          # Set to "Plain" if you are using the non-zk variant of UltraHonk
 PROOF_FILE_PATH="./target/proof"         # Adjust path depending on where the Noir-generated proof file is
 VK_FILE_PATH="./target/vk"               # Adjust path depending on where the Noir-generated vk file is
 PUBS_FILE_PATH="./target/public_inputs"  # Adjust path depending on where the Noir-generated public_inputs file is
