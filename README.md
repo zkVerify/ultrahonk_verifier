@@ -621,21 +621,33 @@ ZKV_PUBS_HEX_FILE_PATH="./target/zkv_pubs.hex"
 
 # Convert proof to hexadecimal format
 {
-  PROOF_BYTES=$(xxd -p -c 256 "$PROOF_FILE_PATH" | tr -d '\n')
-  printf '`{\n    "proof_type": "%s",\n    "proof_bytes": "0x%s"\n}`\n' "$PROOF_TYPE" "$PROOF_BYTES" > "$ZKV_PROOF_HEX_FILE_PATH"
-  echo "✅ 'proof' hex file generated at ${ZKV_PROOF_HEX_FILE_PATH}."
+  if [ -f "$PROOF_FILE_PATH" ]; then
+    PROOF_BYTES=$(xxd -p -c 256 "$PROOF_FILE_PATH" | tr -d '\n')
+    printf '`{\n    "proof_type": "%s",\n    "proof_bytes": "0x%s"\n}`\n' "$PROOF_TYPE" "$PROOF_BYTES" > "$ZKV_PROOF_HEX_FILE_PATH"
+    echo "✅ 'proof' hex file generated at ${ZKV_PROOF_HEX_FILE_PATH}."
+  else
+    echo "❌ Error: Proof file '$PROOF_FILE_PATH' not found. Skipping." >&2
+  fi
 }
 
 # Convert vk to hexadecimal format
 {
-  printf "\"0x%s\"\n" "$(xxd -p -c 0 "$VK_FILE_PATH")" > "$ZKV_VK_HEX_FILE_PATH"
-  echo "✅ 'vk' hex file generated at ${ZKV_VK_HEX_FILE_PATH}."
+  if [ -f "$VK_FILE_PATH" ]; then
+    printf "\"0x%s\"\n" "$(xxd -p -c 0 "$VK_FILE_PATH")" > "$ZKV_VK_HEX_FILE_PATH"
+    echo "✅ 'vk' hex file generated at ${ZKV_VK_HEX_FILE_PATH}."
+  else
+    echo "❌ Error: Verification key file '$VK_FILE_PATH' not found. Skipping." >&2
+  fi
 }
 
 # Convert public inputs to hexadecimal format
 {
-  xxd -p -c 32 "$PUBS_FILE_PATH" | sed 's/.*/"0x&"/' | paste -sd, - | sed 's/.*/[&]/' > "$ZKV_PUBS_HEX_FILE_PATH"
-  echo "✅ 'pubs' hex file generated at ${ZKV_PUBS_HEX_FILE_PATH}."
+  if [ -f "$PUBS_FILE_PATH" ]; then
+    xxd -p -c 32 "$PUBS_FILE_PATH" | sed 's/.*/"0x&"/' | paste -sd, - | sed 's/.*/[&]/' > "$ZKV_PUBS_HEX_FILE_PATH"
+    echo "✅ 'pubs' hex file generated at ${ZKV_PUBS_HEX_FILE_PATH}."
+  else
+    echo "❌ Error: Public inputs file '$PUBS_FILE_PATH' not found. Skipping." >&2
+  fi
 }
 ```
 
