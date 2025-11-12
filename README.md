@@ -609,42 +609,46 @@ Please run the following script, adjusting the path to the proof, vk, and public
 ```bash
 #!/usr/bin/env bash
 
+PROOF_TYPE="ZK"                          # Set to "Plain" if you are using the non-zk variant of UltraHonk
 PROOF_FILE_PATH="./target/proof"         # Adjust path depending on where the Noir-generated proof file is
 VK_FILE_PATH="./target/vk"               # Adjust path depending on where the Noir-generated vk file is
 PUBS_FILE_PATH="./target/public_inputs"  # Adjust path depending on where the Noir-generated public_inputs file is
 
 # You may ignore these:
-ZKV_PROOF_HEX_FILE_PATH="./zkv_proof.hex"
-ZKV_VK_HEX_FILE_PATH="./zkv_vk.hex"
-ZKV_PUBS_HEX_FILE_PATH="./zkv_pubs.hex"
+ZKV_PROOF_HEX_FILE_PATH="./target/zkv_proof.hex"
+ZKV_VK_HEX_FILE_PATH="./target/zkv_vk.hex"
+ZKV_PUBS_HEX_FILE_PATH="./target/zkv_pubs.hex"
 
-# A function to check for a binary file, convert it to a prefixed hex file,
-# and log the process.
-#
-# Usage: convert_to_hex_and_write <input_bin_path> <output_hex_path> <data_name>
-#
-convert_to_hex_and_write() {
-  # Assign arguments to descriptive local variables
-  local input_path="$1"
-  local output_path="$2"
-  local data_name="$3" # e.g., "proof", "vk", "public inputs"
-
-  # Check if input binary file exists
-  if [ ! -f "$input_path" ]; then
-    echo "Error: Input file for '$data_name' not found at '$input_path'. Terminating." >&2
-    exit 1
+# Convert proof to hexadecimal format
+{
+  if [ -f "$PROOF_FILE_PATH" ]; then
+    PROOF_BYTES=$(xxd -p -c 256 "$PROOF_FILE_PATH" | tr -d '\n')
+    printf '`{\n    "%s:" "0x%s"\n}`\n' "$PROOF_TYPE" "$PROOF_BYTES" > "$ZKV_PROOF_HEX_FILE_PATH"
+    echo "✅ 'proof' hex file generated at ${ZKV_PROOF_HEX_FILE_PATH}."
+  else
+    echo "❌ Error: Proof file '$PROOF_FILE_PATH' not found. Skipping." >&2
   fi
-
-  echo "✍️  Writing $data_name (hex) data to ${output_path}..."
-  { printf "0x"; xxd -p -c 256 "$input_path" | tr -d '\n'; echo; } > "$output_path"
-  echo "✅ '$data_name' hex file generated at ${output_path}."
-  echo # Add a blank line for better log readability
 }
 
-# Process each file type by calling the reusable function
-convert_to_hex_and_write "$PROOF_FILE_PATH" "$ZKV_PROOF_HEX_FILE_PATH" "proof"
-convert_to_hex_and_write "$VK_FILE_PATH" "$ZKV_VK_HEX_FILE_PATH" "vk"
-convert_to_hex_and_write "$PUBS_FILE_PATH" "$ZKV_PUBS_HEX_FILE_PATH" "public inputs"
+# Convert vk to hexadecimal format
+{
+  if [ -f "$VK_FILE_PATH" ]; then
+    printf "\"0x%s\"\n" "$(xxd -p -c 0 "$VK_FILE_PATH")" > "$ZKV_VK_HEX_FILE_PATH"
+    echo "✅ 'vk' hex file generated at ${ZKV_VK_HEX_FILE_PATH}."
+  else
+    echo "❌ Error: Verification key file '$VK_FILE_PATH' not found. Skipping." >&2
+  fi
+}
+
+# Convert public inputs to hexadecimal format
+{
+  if [ -f "$PUBS_FILE_PATH" ]; then
+    xxd -p -c 32 "$PUBS_FILE_PATH" | sed 's/.*/"0x&"/' | paste -sd, - | sed 's/.*/[&]/' > "$ZKV_PUBS_HEX_FILE_PATH"
+    echo "✅ 'pubs' hex file generated at ${ZKV_PUBS_HEX_FILE_PATH}."
+  else
+    echo "❌ Error: Public inputs file '$PUBS_FILE_PATH' not found. Skipping." >&2
+  fi
+}
 ```
 
 And with that, you're all set!
