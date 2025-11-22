@@ -69,6 +69,8 @@ fn verify_valid_plain_proof(
 }
 
 mod reject {
+    use crate::constants::{EVM_WORD_SIZE, SCALAR_SIZE};
+
     use super::*;
 
     #[rstest]
@@ -129,7 +131,9 @@ mod reject {
     ) {
         let mut invalid_zk_proof = [0u8; ZK_PROOF_SIZE];
         invalid_zk_proof.copy_from_slice(&valid_zk_proof);
-        invalid_zk_proof[1184..1184 + 32].fill(0); // Alter sumcheck_univariates[0]
+        invalid_zk_proof[PAIRING_POINTS_SIZE * EVM_WORD_SIZE + 1184
+            ..PAIRING_POINTS_SIZE * EVM_WORD_SIZE + 1184 + EVM_WORD_SIZE]
+            .fill(0); // Alter sumcheck_univariates[0]
 
         assert_eq!(
             verify::<()>(
@@ -154,7 +158,9 @@ mod reject {
     ) {
         let mut invalid_plain_proof = [0u8; PLAIN_PROOF_SIZE];
         invalid_plain_proof.copy_from_slice(&valid_plain_proof);
-        invalid_plain_proof[0x400..0x400 + 0x20].fill(0); // Alter sumcheck_univariates[0]
+        invalid_plain_proof[PAIRING_POINTS_SIZE * EVM_WORD_SIZE + 0x400
+            ..PAIRING_POINTS_SIZE * EVM_WORD_SIZE + 0x400 + EVM_WORD_SIZE]
+            .fill(0); // Alter sumcheck_univariates[0]
 
         assert_eq!(
             verify::<()>(
@@ -179,7 +185,9 @@ mod reject {
     ) {
         let mut invalid_zk_proof = [0u8; ZK_PROOF_SIZE];
         invalid_zk_proof.copy_from_slice(&valid_zk_proof);
-        invalid_zk_proof[0x2000..(0x2000 + 40 * 0x20)].fill(0); // Alter sumcheck_evaluations
+        invalid_zk_proof[PAIRING_POINTS_SIZE * EVM_WORD_SIZE + 0x2000
+            ..(PAIRING_POINTS_SIZE * EVM_WORD_SIZE + 0x2000 + 40 * EVM_WORD_SIZE)]
+            .fill(0); // Alter sumcheck_evaluations
 
         assert_eq!(
             verify::<()>(&valid_vk, &ProofType::ZK(Box::new(invalid_zk_proof)), &valid_pubs).unwrap_err(),
@@ -199,7 +207,9 @@ mod reject {
     ) {
         let mut invalid_plain_proof = [0u8; PLAIN_PROOF_SIZE];
         invalid_plain_proof.copy_from_slice(&valid_plain_proof);
-        invalid_plain_proof[0x2000..(0x2000 + 40 * 0x20)].fill(0); // Alter sumcheck_evaluations
+        invalid_plain_proof[PAIRING_POINTS_SIZE * EVM_WORD_SIZE + 0x2000
+            ..PAIRING_POINTS_SIZE * EVM_WORD_SIZE + 0x2000 + 40 * EVM_WORD_SIZE]
+            .fill(0); // Alter sumcheck_evaluations
 
         assert_eq!(
             verify::<()>(&valid_vk, &ProofType::Plain(Box::new(invalid_plain_proof)), &valid_pubs).unwrap_err(),
@@ -265,7 +275,8 @@ mod reject {
             // libra_poly_evals 0x3c00, ..., 0x3c80
             (ZKProofCommitmentField::SHPLONK_Q, 0x3ca0),
             (ZKProofCommitmentField::KZG_QUOTIENT, 0x3ce0), // 0x3d20
-        ];
+        ]
+        .map(|(cf, idx)| (cf, idx + PAIRING_POINTS_SIZE * EVM_WORD_SIZE));
 
         for (field, offset) in field_offset {
             let mut invalid_zk_proof = [0u8; ZK_PROOF_SIZE];
@@ -319,7 +330,8 @@ mod reject {
             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(26), 0x3200),
             (PlainProofCommitmentField::SHPLONK_Q, 0x3600),
             (PlainProofCommitmentField::KZG_QUOTIENT, 0x3680),
-        ];
+        ]
+        .map(|(cf, idx)| (cf, idx + PAIRING_POINTS_SIZE * EVM_WORD_SIZE));
 
         for (field, offset) in field_offset {
             let mut invalid_plain_proof = [0u8; PLAIN_PROOF_SIZE];
@@ -343,8 +355,10 @@ mod reject {
         valid_zk_proof: [u8; ZK_PROOF_SIZE],
         valid_pubs: [PublicInput; 1],
     ) {
-        let offset =
-            ZK_PROOF_SIZE - 2 * 0x80 - 32 * LIBRA_EVALUATIONS - 32 * CONST_PROOF_SIZE_LOG_N; // offset for gemini_a_evaluations[0]
+        let offset = ZK_PROOF_SIZE
+            - 2 * 0x80
+            - SCALAR_SIZE * LIBRA_EVALUATIONS
+            - SCALAR_SIZE * CONST_PROOF_SIZE_LOG_N; // offset for gemini_a_evaluations[0]
         let mut invalid_zk_proof = [0u8; ZK_PROOF_SIZE];
         invalid_zk_proof.copy_from_slice(&valid_zk_proof);
         // Alter field; notice that (1, 3) ∉ G1
@@ -371,7 +385,7 @@ mod reject {
         valid_plain_proof: [u8; PLAIN_PROOF_SIZE],
         valid_pubs: [PublicInput; 1],
     ) {
-        let offset = PLAIN_PROOF_SIZE - 2 * 0x80 - 32 * CONST_PROOF_SIZE_LOG_N; // offset for gemini_a_evaluations[0]
+        let offset = PLAIN_PROOF_SIZE - 2 * 0x80 - SCALAR_SIZE * CONST_PROOF_SIZE_LOG_N; // offset for gemini_a_evaluations[0]
         let mut invalid_plain_proof = [0u8; PLAIN_PROOF_SIZE];
         invalid_plain_proof.copy_from_slice(&valid_plain_proof);
         // Alter field; notice that (1, 3) ∉ G1
