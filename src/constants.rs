@@ -30,24 +30,37 @@ pub const NUMBER_OF_ALPHAS: usize = NUMBER_OF_SUBRELATIONS - 1; // 25
 
 pub const LIBRA_COMMITMENTS: usize = 3;
 pub const LIBRA_EVALUATIONS: usize = 4;
+pub const LIBRA_UNIVARIATES_LENGTH: usize = 9;
 
 // Scalar size (in bytes)
-const SCALAR_SIZE: usize = 32;
+pub(crate) const SCALAR_SIZE: usize = 32;
 // G1ProofPoint size (in bytes)
 const G1_PROOF_POINT_SIZE: usize = 32 * 4;
+// G1 Point Size
+const G1_PROOF_SIZE: usize = 64;
+
+pub(crate) const EVM_WORD_SIZE: usize = 32;
+
+pub const PAIRING_POINTS_SIZE: usize = 16;
 
 pub const ZK_PROOF_SIZE: usize = 4 * G1_PROOF_POINT_SIZE   // 1. Commitments to wire polynomials
     + 3 * G1_PROOF_POINT_SIZE // 2. Commitments to logup witness polynomials
     + 4 * G1_PROOF_POINT_SIZE // 3. Commitment to grand permutation polynomial
     + (2 + NUMBER_OF_ENTITIES + ZK_BATCHED_RELATION_PARTIAL_LENGTH * CONST_PROOF_SIZE_LOG_N) * SCALAR_SIZE // 4. Sumcheck
     + G1_PROOF_POINT_SIZE + SCALAR_SIZE // 5. ZK
-    + (2 + CONST_PROOF_SIZE_LOG_N - 1) * G1_PROOF_POINT_SIZE + (CONST_PROOF_SIZE_LOG_N + 4) * SCALAR_SIZE; // 6. Shplemini
+    + (2 + CONST_PROOF_SIZE_LOG_N - 1) * G1_PROOF_POINT_SIZE + (CONST_PROOF_SIZE_LOG_N + 4) * SCALAR_SIZE // 6. Shplemini
+    + PAIRING_POINTS_SIZE * SCALAR_SIZE; // 7. Pairing Point Object
 
 pub const PLAIN_PROOF_SIZE: usize = 4 * G1_PROOF_POINT_SIZE   // 1. Commitments to wire polynomials
     + G1_PROOF_POINT_SIZE // 2. Lookup helpers - Permutations
     + 3 * G1_PROOF_POINT_SIZE // 3. Lookup helpers - logup
     + (NUMBER_OF_ENTITIES + BATCHED_RELATION_PARTIAL_LENGTH * CONST_PROOF_SIZE_LOG_N) * SCALAR_SIZE  // 4. Sumcheck
-    + (CONST_PROOF_SIZE_LOG_N - 1 + 2) * G1_PROOF_POINT_SIZE + CONST_PROOF_SIZE_LOG_N * SCALAR_SIZE; // 5. Shplemini
+    + (CONST_PROOF_SIZE_LOG_N - 1 + 2) * G1_PROOF_POINT_SIZE + CONST_PROOF_SIZE_LOG_N * SCALAR_SIZE // 5. Shplemini
+    + PAIRING_POINTS_SIZE * SCALAR_SIZE; // 6. Pairing Point Object
+
+pub const VK_SIZE: usize = 27 * G1_PROOF_SIZE + EVM_WORD_SIZE;
+
+pub const PUB_SIZE: usize = 32;
 
 pub(crate) const SUBGROUP_SIZE: u32 = 256;
 pub(crate) const SUBGROUP_GENERATOR: Fr =

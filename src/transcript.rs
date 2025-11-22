@@ -15,7 +15,9 @@
 // limitations under the License.
 
 use crate::{
-    constants::{CONST_PROOF_SIZE_LOG_N, NUMBER_OF_ALPHAS, NUMBER_OF_ENTITIES},
+    constants::{
+        CONST_PROOF_SIZE_LOG_N, NUMBER_OF_ALPHAS, NUMBER_OF_ENTITIES, PAIRING_POINTS_SIZE,
+    },
     proof::{CommonProofData, ZKProof},
     utils::IntoBEBytes32,
     ParsedProof, Pubs,
@@ -225,6 +227,7 @@ impl RelationParametersChallenges {
     pub(crate) fn public_inputs_delta(
         &self,
         public_inputs: &Pubs,
+        pairing_point_object: &[Fr; PAIRING_POINTS_SIZE],
         circuit_size: u64,
         offset: u64,
     ) -> Fr {
@@ -244,6 +247,14 @@ impl RelationParametersChallenges {
             denominator_acc -= self.beta;
         }
 
+        for ppo in pairing_point_object {
+            numerator *= numerator_acc + ppo;
+            denominator *= denominator_acc + ppo;
+
+            numerator_acc += self.beta;
+            denominator_acc -= self.beta;
+        }
+
         numerator / denominator
     }
 }
@@ -252,14 +263,14 @@ pub(crate) fn generate_transcript(
     parsed_proof: &ParsedProof,
     public_inputs: &Pubs,
     circuit_size: u64,
-    public_inputs_size: u64,
+    combined_input_size: u64,
     pub_inputs_offset: u64,
 ) -> Transcript {
     let (rp_challenges, previous_challenge) = generate_relation_parameters_challenges(
         parsed_proof,
         public_inputs,
         circuit_size,
-        public_inputs_size,
+        combined_input_size,
         pub_inputs_offset,
     );
 
@@ -323,7 +334,7 @@ fn generate_relation_parameters_challenges(
     parsed_proof: &ParsedProof,
     public_inputs: &Pubs,
     circuit_size: u64,
-    public_inputs_size: u64,
+    combined_input_size: u64,
     pub_inputs_offset: u64,
 ) -> (RelationParametersChallenges, Fr) {
     // Round 0
@@ -331,9 +342,14 @@ fn generate_relation_parameters_challenges(
         parsed_proof,
         public_inputs,
         circuit_size,
-        public_inputs_size,
+        combined_input_size,
         pub_inputs_offset,
     );
+
+    // eta challenges should be:
+    // eta:			0x00000000000000000000000000000000f59a70b3bf1fad36f7dd350fa8c0dc8b
+    // etaTwo:		0x00000000000000000000000000000000173d17cb41f3c4323d30b44ffb66bc2a
+    // etaThree:	0x00000000000000000000000000000000d9e6c5d0ebe54284ca13519651ab4cf8
 
     // Round 1
     let [beta, gamma, next_previous_challenge] =
@@ -349,16 +365,20 @@ fn generate_eta_challenge(
     parsed_proof: &ParsedProof,
     public_inputs: &Pubs,
     circuit_size: u64,
-    public_inputs_size: u64,
+    combined_input_size: u64,
     pub_inputs_offset: u64,
 ) -> [Fr; 4] {
     let mut round0 = Keccak256::new()
         .chain_update(circuit_size.into_be_bytes32())
-        .chain_update(public_inputs_size.into_be_bytes32())
+        .chain_update(combined_input_size.into_be_bytes32())
         .chain_update(pub_inputs_offset.into_be_bytes32());
 
-    for pi in public_inputs {
-        round0 = round0.chain_update(*pi);
+    for elem in public_inputs.iter().chain(
+        &parsed_proof
+            .pairing_point_object()
+            .map(|ppo| ppo.into_be_bytes32()),
+    ) {
+        round0 = round0.chain_update(elem);
     }
 
     // Create the first challenge
@@ -380,6 +400,7 @@ fn generate_eta_challenge(
         .into();
 
     let mut previous_challenge = Fr::from_be_bytes_mod_order(&hash);
+
     let (eta, eta_two) = split_challenge(previous_challenge);
 
     let hash: [u8; 32] = Keccak256::new()

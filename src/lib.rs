@@ -36,7 +36,7 @@ use crate::{
     commitment::{compute_fold_pos_evaluations, compute_squares},
     constants::{
         CONST_PROOF_SIZE_LOG_N, LIBRA_COMMITMENTS, LIBRA_EVALUATIONS, NUMBER_OF_ENTITIES,
-        NUMBER_UNSHIFTED, SUBGROUP_SIZE,
+        NUMBER_UNSHIFTED, PAIRING_POINTS_SIZE, SUBGROUP_SIZE,
     },
     key::VerificationKey,
     proof::{
@@ -56,13 +56,9 @@ use ark_models_ext::bn::{G1Prepared, G2Prepared};
 use constants::{SUBGROUP_GENERATOR, SUBGROUP_GENERATOR_INVERSE};
 use errors::VerifyError;
 
+pub use constants::{PLAIN_PROOF_SIZE, PUB_SIZE, VK_SIZE, ZK_PROOF_SIZE};
 pub use proof::ProofType;
 pub use types::*;
-
-pub const VK_SIZE: usize = 1760;
-pub const PUB_SIZE: usize = 32;
-pub use constants::PLAIN_PROOF_SIZE;
-pub use constants::ZK_PROOF_SIZE;
 
 /// A single public input.
 pub type PublicInput = [u8; PUB_SIZE];
@@ -99,12 +95,13 @@ fn verify_inner<H: CurveHooks>(
         parsed_proof,
         public_inputs,
         vk.circuit_size,
-        public_inputs.len() as u64,
-        /*pubInputsOffset=*/ 1,
+        vk.num_public_inputs as u64, // in bb 0.86.0, this is num_public_inputs + PAIRING_OBJECT_SIZE
+        1,
     );
 
     let public_inputs_delta = t.relation_parameters_challenges().public_inputs_delta(
         public_inputs,
+        parsed_proof.pairing_point_object(),
         vk.circuit_size,
         vk.pub_inputs_offset,
     );
@@ -129,11 +126,13 @@ fn check_public_input_number<H: CurveHooks>(
     vk: &VerificationKey<H>,
     pubs: &Pubs,
 ) -> Result<(), VerifyError> {
-    if vk.num_public_inputs != pubs.len() as u64 {
+    // In bb 0.86.0, public inputs and the pairing point object are combined under the hood.
+    // see: https://github.com/AztecProtocol/barretenberg/issues/1331
+    if vk.num_public_inputs - PAIRING_POINTS_SIZE as u64 != pubs.len() as u64 {
         Err(VerifyError::PublicInputError {
             message: format!(
                 "Provided public inputs length does not match value in vk. Expected: {}; Got: {}",
-                vk.num_public_inputs,
+                vk.num_public_inputs - PAIRING_POINTS_SIZE as u64,
                 pubs.len()
             ),
         })
@@ -151,16 +150,17 @@ fn verify_sumcheck(
     let log_circuit_size: usize = log_circuit_size
         .try_into()
         .map_err(|_| "Given log_circuit_size does not fit in a u64.")?;
-    let mut round_target_sum =
-        match tp {
-            Transcript::ZK(zktp) => match parsed_proof {
-                ParsedProof::ZK(zk_proof) => zktp.libra_challenge * zk_proof.libra_sum,
-                _ => return Err(
-                    "parsed_proof and transcript must both be of the same type (i.e., Plain or ZK)",
-                ),
-            },
-            Transcript::Plain(_) => Fr::ZERO,
-        };
+    let mut round_target_sum = match (tp, parsed_proof) {
+        (Transcript::ZK(zktp), ParsedProof::ZK(zk_proof)) => {
+            zktp.libra_challenge * zk_proof.libra_sum
+        }
+        (Transcript::Plain(_), ParsedProof::Plain(_)) => Fr::ZERO,
+        _ => {
+            return Err(
+                "parsed_proof and transcript must both be of the same type (i.e., Plain or ZK)",
+            )
+        }
+    };
     let mut pow_partial_evaluation = Fr::ONE;
 
     // We perform sumcheck reductions over log n rounds (i.e., the multivariate degree)
