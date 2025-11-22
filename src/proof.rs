@@ -389,9 +389,7 @@ impl TryFrom<&[u8]> for ZKProof {
 
         // Pairing Point Object
         let pairing_point_object = from_fn(|_| {
-            let tmp = read_fr(&mut proof_bytes)
-                .expect("Should always be able to read a field element here");
-            tmp
+            read_fr(&mut proof_bytes).expect("Should always be able to read a field element here")
         });
 
         // Commitments
