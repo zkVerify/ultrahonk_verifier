@@ -18,13 +18,13 @@ extern crate alloc;
 
 use crate::{
     constants::{
-        BATCHED_RELATION_PARTIAL_LENGTH, CONST_PROOF_SIZE_LOG_N, LIBRA_COMMITMENTS,
+        BATCHED_RELATION_PARTIAL_LENGTH, CONST_PROOF_SIZE_LOG_N, EVM_WORD_SIZE, LIBRA_COMMITMENTS,
         LIBRA_EVALUATIONS, NUMBER_OF_ENTITIES, PAIRING_POINTS_SIZE,
         ZK_BATCHED_RELATION_PARTIAL_LENGTH,
     },
     errors::GroupError,
     utils::read_u256,
-    Fr, G1, PLAIN_PROOF_SIZE, U256, ZK_PROOF_SIZE,
+    EVMWord, Fr, G1, PLAIN_PROOF_SIZE, U256, ZK_PROOF_SIZE,
 };
 use alloc::{
     boxed::Box,
@@ -145,6 +145,21 @@ fn read_fr(data: &mut &[u8]) -> Result<Fr, ProofError> {
     Ok(Fr::from_be_bytes_mod_order(chunk))
 }
 
+// Utility function for parsing an EVMWord (raw bytes).
+fn read_evm_word(data: &mut &[u8]) -> Result<EVMWord, ProofError> {
+    const CHUNK_SIZE: usize = EVM_WORD_SIZE;
+    let chunk: EVMWord = data
+        .split_off(..CHUNK_SIZE)
+        .ok_or(ProofError::InvalidSliceLength {
+            expected_length: CHUNK_SIZE,
+            actual_length: data.len(),
+        })?
+        .try_into()
+        .expect("Conversion should work at this point");
+
+    Ok(chunk)
+}
+
 #[derive(Debug, Hash, Eq, PartialEq)]
 pub enum ZKProofCommitmentField {
     SHPLONK_Q,
@@ -245,7 +260,7 @@ pub(crate) fn convert_proof_point<H: CurveHooks>(
 
 pub(crate) trait CommonProofData {
     // getters
-    fn pairing_point_object(&self) -> &[Fr; PAIRING_POINTS_SIZE];
+    fn pairing_point_object(&self) -> &[EVMWord; PAIRING_POINTS_SIZE];
     fn w1(&self) -> &G1ProofPoint;
     fn w2(&self) -> &G1ProofPoint;
     fn w3(&self) -> &G1ProofPoint;
@@ -265,7 +280,7 @@ pub(crate) trait CommonProofData {
 #[derive(Debug, Eq, PartialEq)]
 pub struct ZKProof {
     // Pairing point object
-    pub pairing_point_object: [Fr; PAIRING_POINTS_SIZE],
+    pub pairing_point_object: [EVMWord; PAIRING_POINTS_SIZE],
     // Commitments to wire polynomials
     pub w1: G1ProofPoint,
     pub w2: G1ProofPoint,
@@ -295,7 +310,7 @@ pub struct ZKProof {
 }
 
 impl CommonProofData for ZKProof {
-    fn pairing_point_object(&self) -> &[Fr; PAIRING_POINTS_SIZE] {
+    fn pairing_point_object(&self) -> &[EVMWord; PAIRING_POINTS_SIZE] {
         &self.pairing_point_object
     }
 
@@ -389,7 +404,7 @@ impl TryFrom<&[u8]> for ZKProof {
 
         // Pairing Point Object
         let pairing_point_object = from_fn(|_| {
-            read_fr(&mut proof_bytes).expect("Should always be able to read a field element here")
+            read_evm_word(&mut proof_bytes).expect("Should always be able to read an EVM word here")
         });
 
         // Commitments
@@ -484,7 +499,7 @@ impl TryFrom<&[u8]> for ZKProof {
 #[derive(Debug, Eq, PartialEq)]
 pub struct PlainProof {
     // Pairing point object
-    pub pairing_point_object: [Fr; PAIRING_POINTS_SIZE],
+    pub pairing_point_object: [EVMWord; PAIRING_POINTS_SIZE],
     // Commitments to wire polynomials
     pub w1: G1ProofPoint,
     pub w2: G1ProofPoint,
@@ -507,7 +522,7 @@ pub struct PlainProof {
 }
 
 impl CommonProofData for PlainProof {
-    fn pairing_point_object(&self) -> &[Fr; PAIRING_POINTS_SIZE] {
+    fn pairing_point_object(&self) -> &[EVMWord; PAIRING_POINTS_SIZE] {
         &self.pairing_point_object
     }
 
@@ -600,7 +615,7 @@ impl TryFrom<&[u8]> for PlainProof {
 
         // Pairing Point Object
         let pairing_point_object = from_fn(|_| {
-            read_fr(&mut proof_bytes).expect("Should always be able to read a field element here")
+            read_evm_word(&mut proof_bytes).expect("Should always be able to read an EVM word here")
         });
 
         // Commitments
@@ -691,7 +706,7 @@ impl ParsedProof {
 }
 
 impl CommonProofData for ParsedProof {
-    fn pairing_point_object(&self) -> &[Fr; PAIRING_POINTS_SIZE] {
+    fn pairing_point_object(&self) -> &[EVMWord; PAIRING_POINTS_SIZE] {
         match self {
             Self::ZK(p) => p.pairing_point_object(),
             Self::Plain(p) => p.pairing_point_object(),

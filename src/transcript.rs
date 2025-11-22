@@ -20,7 +20,7 @@ use crate::{
     },
     proof::{CommonProofData, ZKProof},
     utils::IntoBEBytes32,
-    ParsedProof, Pubs,
+    EVMWord, ParsedProof, Pubs,
 };
 use ark_bn254_ext::Fr;
 use ark_ff::{AdditiveGroup, Field, PrimeField};
@@ -227,7 +227,7 @@ impl RelationParametersChallenges {
     pub(crate) fn public_inputs_delta(
         &self,
         public_inputs: &Pubs,
-        pairing_point_object: &[Fr; PAIRING_POINTS_SIZE],
+        pairing_point_object: &[EVMWord; PAIRING_POINTS_SIZE],
         circuit_size: u64,
         offset: u64,
     ) -> Fr {
@@ -237,19 +237,11 @@ impl RelationParametersChallenges {
         let mut numerator_acc = self.gamma + self.beta * Fr::from(circuit_size + offset);
         let mut denominator_acc = self.gamma - self.beta * Fr::from(offset + 1);
 
-        for pi_bytes in public_inputs {
-            let pi = Fr::from_be_bytes_mod_order(pi_bytes);
+        for word in public_inputs.iter().chain(pairing_point_object) {
+            let elem = Fr::from_be_bytes_mod_order(word);
 
-            numerator *= numerator_acc + pi;
-            denominator *= denominator_acc + pi;
-
-            numerator_acc += self.beta;
-            denominator_acc -= self.beta;
-        }
-
-        for ppo in pairing_point_object {
-            numerator *= numerator_acc + ppo;
-            denominator *= denominator_acc + ppo;
+            numerator *= numerator_acc + elem;
+            denominator *= denominator_acc + elem;
 
             numerator_acc += self.beta;
             denominator_acc -= self.beta;
@@ -373,12 +365,11 @@ fn generate_eta_challenge(
         .chain_update(combined_input_size.into_be_bytes32())
         .chain_update(pub_inputs_offset.into_be_bytes32());
 
-    for elem in public_inputs.iter().chain(
-        &parsed_proof
-            .pairing_point_object()
-            .map(|ppo| ppo.into_be_bytes32()),
-    ) {
-        round0 = round0.chain_update(elem);
+    for word in public_inputs
+        .iter()
+        .chain(parsed_proof.pairing_point_object())
+    {
+        round0 = round0.chain_update(word);
     }
 
     // Create the first challenge
