@@ -374,7 +374,7 @@ fn generate_eta_challenge(
 
     // Create the first challenge
     // Note: w4 is added to the challenge later on
-    let hash: [u8; 32] = round0
+    let hash: EVMWord = round0
         .chain_update(parsed_proof.w1().x_0.into_be_bytes32())
         .chain_update(parsed_proof.w1().x_1.into_be_bytes32())
         .chain_update(parsed_proof.w1().y_0.into_be_bytes32())
@@ -394,7 +394,7 @@ fn generate_eta_challenge(
 
     let (eta, eta_two) = split_challenge(previous_challenge);
 
-    let hash: [u8; 32] = Keccak256::new()
+    let hash: EVMWord = Keccak256::new()
         .chain_update(previous_challenge.into_be_bytes32())
         .finalize()
         .into();
@@ -408,7 +408,7 @@ fn generate_beta_and_gamma_challenges(
     previous_challenge: Fr,
     parsed_proof: &ParsedProof,
 ) -> [Fr; 3] {
-    let round1: [u8; 32] = Keccak256::new()
+    let round1: EVMWord = Keccak256::new()
         .chain_update(previous_challenge.into_be_bytes32())
         .chain_update(parsed_proof.lookup_read_counts().x_0.into_be_bytes32())
         .chain_update(parsed_proof.lookup_read_counts().x_1.into_be_bytes32())
@@ -439,7 +439,7 @@ fn generate_alpha_challenges(
     let mut alphas = [Fr::ZERO; NUMBER_OF_ALPHAS];
 
     // Generate the original sumcheck alpha 0 by hashing zPerm and zLookup
-    let alpha0: [u8; 32] = Keccak256::new()
+    let alpha0: EVMWord = Keccak256::new()
         .chain_update(previous_challenge.into_be_bytes32())
         .chain_update(parsed_proof.lookup_inverses().x_0.into_be_bytes32())
         .chain_update(parsed_proof.lookup_inverses().x_1.into_be_bytes32())
@@ -456,7 +456,7 @@ fn generate_alpha_challenges(
     (alphas[0], alphas[1]) = split_challenge(next_previous_challenge);
 
     for i in 1..(NUMBER_OF_ALPHAS / 2) {
-        let hash: [u8; 32] = Keccak256::new()
+        let hash: EVMWord = Keccak256::new()
             .chain_update(next_previous_challenge.into_be_bytes32())
             .finalize()
             .into();
@@ -465,7 +465,7 @@ fn generate_alpha_challenges(
     }
 
     if ((NUMBER_OF_ALPHAS & 1) == 1) && NUMBER_OF_ALPHAS > 2 {
-        let hash: [u8; 32] = Keccak256::new()
+        let hash: EVMWord = Keccak256::new()
             .chain_update(next_previous_challenge.into_be_bytes32())
             .finalize()
             .into();
@@ -482,7 +482,7 @@ fn generate_gate_challenges(previous_challenge: Fr) -> ([Fr; CONST_PROOF_SIZE_LO
     let mut previous_challenge = previous_challenge;
 
     for gc in gate_challenges.iter_mut().take(CONST_PROOF_SIZE_LOG_N) {
-        let hash: [u8; 32] = Keccak256::new()
+        let hash: EVMWord = Keccak256::new()
             .chain_update(previous_challenge.into_be_bytes32())
             .finalize()
             .into();
@@ -498,7 +498,7 @@ fn generate_gate_challenges(previous_challenge: Fr) -> ([Fr; CONST_PROOF_SIZE_LO
 // Function exclusive to `ZKProof`
 fn generate_libra_challenge(previous_challenge: Fr, zk_proof: &ZKProof) -> (Fr, Fr) {
     // 4 commitments, 1 sum, 1 challenge
-    let hash: [u8; 32] = Keccak256::new()
+    let hash: EVMWord = Keccak256::new()
         .chain_update(previous_challenge.into_be_bytes32())
         .chain_update(zk_proof.libra_commitments[0].x_0.into_be_bytes32())
         .chain_update(zk_proof.libra_commitments[0].x_1.into_be_bytes32())
@@ -533,7 +533,7 @@ fn generate_sumcheck_challenges(
         for su in sumcheck_univariate.iter() {
             hasher = hasher.chain_update(su.into_be_bytes32());
         }
-        let hash: [u8; 32] = hasher.finalize().into();
+        let hash: EVMWord = hasher.finalize().into();
         previous_challenge = Fr::from_be_bytes_mod_order(&hash);
 
         (sumcheck_challenges[i], _) = split_challenge(previous_challenge);
@@ -575,7 +575,7 @@ fn generate_rho_challenge(parsed_proof: &ParsedProof, previous_challenge: Fr) ->
         hasher.update(zk_proof.gemini_masking_eval.into_be_bytes32());
     }
 
-    let hash: [u8; 32] = hasher.finalize().into();
+    let hash: EVMWord = hasher.finalize().into();
     let next_previous_challenge = Fr::from_be_bytes_mod_order(&hash);
     let (rho, _) = split_challenge(next_previous_challenge);
 
@@ -594,7 +594,7 @@ fn generate_gemini_r_challenge(parsed_proof: &ParsedProof, previous_challenge: F
         hasher.update(parsed_proof.gemini_fold_comms()[i].y_1.into_be_bytes32());
     }
 
-    let hash: [u8; 32] = hasher.finalize().into();
+    let hash: EVMWord = hasher.finalize().into();
 
     let next_previous_challenge = Fr::from_be_bytes_mod_order(&hash);
 
@@ -619,7 +619,7 @@ fn generate_shplonk_nu_challenge(parsed_proof: &ParsedProof, prev_challenge: Fr)
         }
     }
 
-    let hash: [u8; 32] = hasher.finalize().into();
+    let hash: EVMWord = hasher.finalize().into();
 
     let next_previous_challenge = Fr::from_be_bytes_mod_order(&hash);
     let (shplonk_nu, _) = split_challenge(next_previous_challenge);
@@ -628,7 +628,7 @@ fn generate_shplonk_nu_challenge(parsed_proof: &ParsedProof, prev_challenge: Fr)
 }
 
 fn generate_shplonk_z_challenge(parsed_proof: &ParsedProof, previous_challenge: Fr) -> (Fr, Fr) {
-    let hash: [u8; 32] = Keccak256::new()
+    let hash: EVMWord = Keccak256::new()
         .chain_update(previous_challenge.into_be_bytes32())
         .chain_update(parsed_proof.shplonk_q().x_0.into_be_bytes32())
         .chain_update(parsed_proof.shplonk_q().x_1.into_be_bytes32())

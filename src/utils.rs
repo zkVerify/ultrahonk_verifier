@@ -31,9 +31,10 @@
 // limitations under the License.
 
 use crate::{
-    // errors::{FieldError, GroupError},
     errors::FieldError,
     types::G1,
+    // errors::{FieldError, GroupError},
+    EVMWord,
     Fq,
     Fq2,
     Fr,
@@ -58,7 +59,7 @@ pub(crate) trait IntoU256 {
     fn into_u256(self) -> U256;
 }
 
-impl IntoU256 for &[u8; 32] {
+impl IntoU256 for &EVMWord {
     fn into_u256(self) -> U256 {
         let mut rchunks_iter = self.rchunks_exact(8);
         let limbs: [_; 4] = core::array::from_fn(|_| {
@@ -70,38 +71,38 @@ impl IntoU256 for &[u8; 32] {
     }
 }
 
-impl IntoU256 for [u8; 32] {
+impl IntoU256 for EVMWord {
     fn into_u256(self) -> U256 {
         (&self).into_u256()
     }
 }
 
-/// Trait for returning a big-endian representation of some object as a `[u8; 32]`.
+/// Trait for returning a big-endian representation of some object as an `EVMWord`.
 pub(crate) trait IntoBEBytes32 {
-    fn into_be_bytes32(self) -> [u8; 32];
+    fn into_be_bytes32(self) -> EVMWord;
 }
 
 impl IntoBEBytes32 for U256 {
-    fn into_be_bytes32(self) -> [u8; 32] {
+    fn into_be_bytes32(self) -> EVMWord {
         let mut rev_iter_be = self.0.iter().rev().flat_map(|limb| limb.to_be_bytes());
         core::array::from_fn(|_| rev_iter_be.next().unwrap())
     }
 }
 
 impl IntoBEBytes32 for Fr {
-    fn into_be_bytes32(self) -> [u8; 32] {
+    fn into_be_bytes32(self) -> EVMWord {
         self.into_bigint().into_be_bytes32()
     }
 }
 
 impl IntoBEBytes32 for Fq {
-    fn into_be_bytes32(self) -> [u8; 32] {
+    fn into_be_bytes32(self) -> EVMWord {
         self.into_bigint().into_be_bytes32()
     }
 }
 
 impl IntoBEBytes32 for u64 {
-    fn into_be_bytes32(self) -> [u8; 32] {
+    fn into_be_bytes32(self) -> EVMWord {
         let be = self.to_be_bytes();
         let mut arr = [0u8; 32];
         arr[24..].copy_from_slice(&be);
@@ -115,7 +116,7 @@ pub(crate) fn read_u64(data: &[u8]) -> Result<(u64, &[u8]), ()> {
 }
 
 pub(crate) fn read_u256(bytes: &[u8]) -> Result<U256, ()> {
-    <&[u8; 32]>::try_from(bytes)
+    <&EVMWord>::try_from(bytes)
         .map_err(|_| ())
         .map(IntoU256::into_u256)
 }
