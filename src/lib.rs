@@ -456,21 +456,23 @@ fn verify_shplemini<H: CurveHooks>(
     boundary += CONST_PROOF_SIZE_LOG_N - 1;
 
     // Finalize the batch opening claim
-    if let Transcript::ZK(zktp) = tp {
-        let mut denominators = [Fr::ZERO; LIBRA_EVALUATIONS];
+    match (tp, parsed_proof) {
+        (Transcript::ZK(zktp), ParsedProof::ZK(zk_proof)) => {
+            let mut denominators = [Fr::ZERO; LIBRA_EVALUATIONS];
 
-        denominators[0] = (zktp.shplonk_z - zktp.gemini_r)
-            .inverse()
-            .expect("shplonk_z - gemini_r should be invertible w.h.p.");
-        denominators[1] = (zktp.shplonk_z - SUBGROUP_GENERATOR * zktp.gemini_r)
-            .inverse()
-            .expect("tp.shplonk_z - SUBGROUP_GENERATOR * tp.gemini_r should be invertible w.h.p.");
-        denominators[2] = denominators[0];
-        denominators[3] = denominators[0];
+            denominators[0] = (zktp.shplonk_z - zktp.gemini_r)
+                .inverse()
+                .expect("shplonk_z - gemini_r should be invertible w.h.p.");
+            denominators[1] = (zktp.shplonk_z - SUBGROUP_GENERATOR * zktp.gemini_r)
+                .inverse()
+                .expect(
+                    "tp.shplonk_z - SUBGROUP_GENERATOR * tp.gemini_r should be invertible w.h.p.",
+                );
+            denominators[2] = denominators[0];
+            denominators[3] = denominators[0];
 
-        let mut batching_scalars = [Fr::ZERO; LIBRA_EVALUATIONS];
+            let mut batching_scalars = [Fr::ZERO; LIBRA_EVALUATIONS];
 
-        if let ParsedProof::ZK(zk_proof) = parsed_proof {
             // Artifact of interleaving, see TODO(https://github.com/AztecProtocol/barretenberg/issues/1293): Decouple Gemini from Interleaving
             batching_challenge *= zktp.shplonk_nu.square();
 
@@ -492,10 +494,10 @@ fn verify_shplemini<H: CurveHooks>(
                     })?;
                 boundary += 1;
             }
-        } else {
-            return Err(ProofError::OtherError {
-                message: "parsed_proof and tp must both be of the same type.".to_string(),
-            });
+        }
+        (Transcript::Plain(_), ParsedProof::Plain(_)) => {}
+        _ => {
+            unreachable!("parsed_proof and transcript must always be of the same type");
         }
     }
 
