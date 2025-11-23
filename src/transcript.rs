@@ -247,7 +247,6 @@ impl RelationParametersChallenges {
             denominator_acc -= self.beta;
         }
 
-        // Fr delta = numerator / denominator; // TOOO: batch invert later?
         numerator / denominator
     }
 }
