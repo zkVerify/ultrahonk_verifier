@@ -95,7 +95,7 @@ fn verify_inner<H: CurveHooks>(
         parsed_proof,
         public_inputs,
         vk.circuit_size,
-        vk.num_public_inputs as u64, // in bb 0.86.0, this is num_public_inputs + PAIRING_OBJECT_SIZE
+        vk.combined_input_size,
         1,
     );
 
@@ -128,11 +128,11 @@ fn check_public_input_number<H: CurveHooks>(
 ) -> Result<(), VerifyError> {
     // In bb 0.86.0, public inputs and the pairing point object are combined under the hood.
     // see: https://github.com/AztecProtocol/barretenberg/issues/1331
-    if vk.num_public_inputs - PAIRING_POINTS_SIZE as u64 != pubs.len() as u64 {
+    if vk.combined_input_size - PAIRING_POINTS_SIZE as u64 != pubs.len() as u64 {
         Err(VerifyError::PublicInputError {
             message: format!(
                 "Provided public inputs length does not match value in vk. Expected: {}; Got: {}",
-                vk.num_public_inputs - PAIRING_POINTS_SIZE as u64,
+                vk.combined_input_size - PAIRING_POINTS_SIZE as u64,
                 pubs.len()
             ),
         })

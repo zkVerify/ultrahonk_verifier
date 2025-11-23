@@ -110,8 +110,8 @@ pub struct VerificationKey<H: CurveHooks> {
     // Misc Params
     pub circuit_size: u64,
     pub log_circuit_size: u64,
-    pub num_public_inputs: u64,
-    pub pub_inputs_offset: u64, // NOTE: May end up being removed in the future
+    pub combined_input_size: u64, // Since bb 0.86.0, this is num_public_inputs + PAIRING_OBJECT_SIZE
+    pub pub_inputs_offset: u64,
     // Selectors
     pub q_m: G1<H>,
     pub q_c: G1<H>,
@@ -174,7 +174,7 @@ impl<H: CurveHooks> TryFrom<&[u8]> for VerificationKey<H> {
             return Err(VerificationKeyError::InvalidLogCircuitSize);
         }
 
-        let (num_public_inputs, raw_vk) = match read_u64(raw_vk) {
+        let (combined_input_size, raw_vk) = match read_u64(raw_vk) {
             Ok((num_pubs, raw_vk)) => (num_pubs, raw_vk),
             _ => Err(VerificationKeyError::ParsingError)?,
         };
@@ -296,7 +296,7 @@ impl<H: CurveHooks> TryFrom<&[u8]> for VerificationKey<H> {
         Ok(Self {
             circuit_size,
             log_circuit_size,
-            num_public_inputs,
+            combined_input_size,
             pub_inputs_offset,
             q_m,
             q_c,
