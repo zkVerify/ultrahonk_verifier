@@ -338,11 +338,6 @@ fn generate_relation_parameters_challenges(
         pub_inputs_offset,
     );
 
-    // eta challenges should be:
-    // eta:			0x00000000000000000000000000000000f59a70b3bf1fad36f7dd350fa8c0dc8b
-    // etaTwo:		0x00000000000000000000000000000000173d17cb41f3c4323d30b44ffb66bc2a
-    // etaThree:	0x00000000000000000000000000000000d9e6c5d0ebe54284ca13519651ab4cf8
-
     // Round 1
     let [beta, gamma, next_previous_challenge] =
         generate_beta_and_gamma_challenges(previous_challenge, parsed_proof);
