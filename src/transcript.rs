@@ -464,6 +464,7 @@ fn generate_alpha_challenges(
         (alphas[2 * i], alphas[2 * i + 1]) = split_challenge(next_previous_challenge);
     }
 
+    // If NUMBER_OF_ALPHAS is an odd number > 2, squeeze one more alpha challenge
     if ((NUMBER_OF_ALPHAS & 1) == 1) && NUMBER_OF_ALPHAS > 2 {
         let hash: EVMWord = Keccak256::new()
             .chain_update(next_previous_challenge.into_be_bytes32())

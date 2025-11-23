@@ -30,17 +30,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{
-    errors::FieldError,
-    types::G1,
-    // errors::{FieldError, GroupError},
-    EVMWord,
-    Fq,
-    Fq2,
-    Fr,
-    G2,
-    U256,
-};
+use crate::{errors::FieldError, types::G1, EVMWord, Fq, Fq2, Fr, G2, U256};
 use ark_bn254_ext::CurveHooks;
 use ark_ec::AffineRepr;
 use ark_ff::{AdditiveGroup, PrimeField};
@@ -71,12 +61,6 @@ impl IntoU256 for &EVMWord {
     }
 }
 
-impl IntoU256 for EVMWord {
-    fn into_u256(self) -> U256 {
-        (&self).into_u256()
-    }
-}
-
 /// Trait for returning a big-endian representation of some object as an `EVMWord`.
 pub(crate) trait IntoBEBytes32 {
     fn into_be_bytes32(self) -> EVMWord;
@@ -90,12 +74,6 @@ impl IntoBEBytes32 for U256 {
 }
 
 impl IntoBEBytes32 for Fr {
-    fn into_be_bytes32(self) -> EVMWord {
-        self.into_bigint().into_be_bytes32()
-    }
-}
-
-impl IntoBEBytes32 for Fq {
     fn into_be_bytes32(self) -> EVMWord {
         self.into_bigint().into_be_bytes32()
     }
@@ -183,11 +161,4 @@ pub(crate) fn read_fq_util(data: &[u8]) -> Result<Fq, FieldError> {
     });
 
     Ok(U256::new(limbs).into_fq())
-}
-
-// Utility for debugging.
-#[allow(unused)]
-pub(crate) fn to_hex_string(data: &[u8]) -> String {
-    let hex_string: String = data.iter().map(|b| format!("{b:02x}")).collect();
-    format!("0x{hex_string}")
 }

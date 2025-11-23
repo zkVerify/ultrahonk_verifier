@@ -155,11 +155,7 @@ fn verify_sumcheck(
             zktp.libra_challenge * zk_proof.libra_sum
         }
         (Transcript::Plain(_), ParsedProof::Plain(_)) => Fr::ZERO,
-        _ => {
-            return Err(
-                "parsed_proof and transcript must both be of the same type (i.e., Plain or ZK)",
-            )
-        }
+        _ => unreachable!("parsed_proof and transcript will always have the same type"),
     };
     let mut pow_partial_evaluation = Fr::ONE;
 
