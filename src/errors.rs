@@ -24,13 +24,13 @@ pub enum VerifyError {
     #[snafu(display("Other Error"))]
     OtherError,
     /// Provided data has not valid public inputs.
-    #[snafu(display("Invalid public input: {}", message))]
+    #[snafu(display("Invalid public input: {message}"))]
     PublicInputError { message: String },
     /// Provided data has not valid proof.
     #[snafu(display("Invalid Proof"))]
     InvalidProofError,
     /// Verify proof failed.
-    #[snafu(display("Verification Failed. Message: {}", message))]
+    #[snafu(display("Verification Failed. Message: {message}"))]
     VerificationError { message: String },
     /// Provided an invalid verification key.
     #[snafu(display("Key Error"))]
