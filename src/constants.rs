@@ -18,15 +18,15 @@ use ark_bn254::Fr;
 use ark_ff::MontFp;
 
 pub const CONST_PROOF_SIZE_LOG_N: usize = 28;
-pub const NUMBER_OF_SUBRELATIONS: usize = 26;
+pub const NUMBER_OF_SUBRELATIONS: usize = 27;
 pub const BATCHED_RELATION_PARTIAL_LENGTH: usize = 8; // for Plain case (i.e., non-ZK)
 pub const ZK_BATCHED_RELATION_PARTIAL_LENGTH: usize = 9; // for ZK case
 pub const NUMBER_OF_ENTITIES: usize = 40;
 pub const NUMBER_UNSHIFTED: usize = 35;
 // pub const NUMBER_TO_BE_SHIFTED: usize = 5;
-// pub const PAIRING_POINTS_SIZE: usize = 16;
+
 // Alphas are used as relation separators so there should be NUMBER_OF_SUBRELATIONS - 1
-pub const NUMBER_OF_ALPHAS: usize = NUMBER_OF_SUBRELATIONS - 1; // 25
+pub const NUMBER_OF_ALPHAS: usize = NUMBER_OF_SUBRELATIONS - 1;
 
 pub const LIBRA_COMMITMENTS: usize = 3;
 pub const LIBRA_EVALUATIONS: usize = 4;
@@ -37,12 +37,13 @@ pub(crate) const SCALAR_SIZE: usize = 32;
 // G1ProofPoint size (in bytes)
 const G1_PROOF_POINT_SIZE: usize = 32 * 4;
 // G1 Point Size
-const G1_PROOF_SIZE: usize = 64;
+const G1_POINT_SIZE: usize = 64;
 
 pub(crate) const EVM_WORD_SIZE: usize = 32;
 
 pub const PAIRING_POINTS_SIZE: usize = 16;
 
+// ZK Proof size in bytes
 pub const ZK_PROOF_SIZE: usize = 4 * G1_PROOF_POINT_SIZE   // 1. Commitments to wire polynomials
     + 3 * G1_PROOF_POINT_SIZE // 2. Commitments to logup witness polynomials
     + 4 * G1_PROOF_POINT_SIZE // 3. Commitment to grand permutation polynomial
@@ -51,6 +52,7 @@ pub const ZK_PROOF_SIZE: usize = 4 * G1_PROOF_POINT_SIZE   // 1. Commitments to 
     + (2 + CONST_PROOF_SIZE_LOG_N - 1) * G1_PROOF_POINT_SIZE + (CONST_PROOF_SIZE_LOG_N + 4) * SCALAR_SIZE // 6. Shplemini
     + PAIRING_POINTS_SIZE * SCALAR_SIZE; // 7. Pairing Point Object
 
+// Plain Proof size in bytes
 pub const PLAIN_PROOF_SIZE: usize = 4 * G1_PROOF_POINT_SIZE   // 1. Commitments to wire polynomials
     + G1_PROOF_POINT_SIZE // 2. Lookup helpers - Permutations
     + 3 * G1_PROOF_POINT_SIZE // 3. Lookup helpers - logup
@@ -58,7 +60,7 @@ pub const PLAIN_PROOF_SIZE: usize = 4 * G1_PROOF_POINT_SIZE   // 1. Commitments 
     + (CONST_PROOF_SIZE_LOG_N - 1 + 2) * G1_PROOF_POINT_SIZE + CONST_PROOF_SIZE_LOG_N * SCALAR_SIZE // 5. Shplemini
     + PAIRING_POINTS_SIZE * SCALAR_SIZE; // 6. Pairing Point Object
 
-pub const VK_SIZE: usize = 27 * G1_PROOF_SIZE + EVM_WORD_SIZE;
+pub const VK_SIZE: usize = 27 * G1_POINT_SIZE + EVM_WORD_SIZE;
 
 pub const PUB_SIZE: usize = 32;
 

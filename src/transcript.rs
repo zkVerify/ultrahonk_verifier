@@ -224,7 +224,7 @@ impl RelationParametersChallenges {
         }
     }
 
-    pub(crate) fn public_inputs_delta(
+    pub(crate) fn public_input_delta(
         &self,
         public_inputs: &Pubs,
         pairing_point_object: &[EVMWord; PAIRING_POINTS_SIZE],
@@ -247,6 +247,7 @@ impl RelationParametersChallenges {
             denominator_acc -= self.beta;
         }
 
+        // Fr delta = numerator / denominator; // TOOO: batch invert later?
         numerator / denominator
     }
 }

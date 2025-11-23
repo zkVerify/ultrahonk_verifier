@@ -35,8 +35,8 @@ extern crate core;
 use crate::{
     commitment::{compute_fold_pos_evaluations, compute_squares},
     constants::{
-        CONST_PROOF_SIZE_LOG_N, LIBRA_COMMITMENTS, LIBRA_EVALUATIONS, NUMBER_OF_ENTITIES,
-        NUMBER_UNSHIFTED, PAIRING_POINTS_SIZE, SUBGROUP_SIZE,
+        CONST_PROOF_SIZE_LOG_N, LIBRA_COMMITMENTS, LIBRA_EVALUATIONS, LIBRA_UNIVARIATES_LENGTH,
+        NUMBER_OF_ENTITIES, NUMBER_UNSHIFTED, PAIRING_POINTS_SIZE, SUBGROUP_SIZE,
     },
     key::VerificationKey,
     proof::{
@@ -99,7 +99,7 @@ fn verify_inner<H: CurveHooks>(
         1,
     );
 
-    let public_inputs_delta = t.relation_parameters_challenges().public_inputs_delta(
+    let public_inputs_delta = t.relation_parameters_challenges().public_input_delta(
         public_inputs,
         parsed_proof.pairing_point_object(),
         vk.circuit_size,
@@ -232,7 +232,7 @@ fn compute_next_target_sum(
         numerator_value *= round_challenge - Fr::from(i as u64);
     }
 
-    // Calculate domain size N of inverses using Montgomery's trick for batch inversion.
+    // Calculate domain size N of inverses using Montgomery's trick for simultaneous inversion.
     // This reduces computation of `ZK_BATCHED_RELATION_PARTIAL_LENGTH`-many expensive inverses to
     // computing just 1 inverse + `O(ZK_BATCHED_RELATION_PARTIAL_LENGTH)` modular multiplications.
     // Notice that inversion will w.h.p. succeed because the `BARYCENTRIC_LAGRANGE_DENOMINATORS`
@@ -261,7 +261,7 @@ fn verify_shplemini<H: CurveHooks>(
     let powers_of_evaluation_challenge = compute_squares(tp.gemini_r());
     // Vectors hold values that will be linearly combined for the gemini and shplonk batch openings
     let capacity = if matches!(parsed_proof, ParsedProof::ZK(_)) {
-        NUMBER_OF_ENTITIES + CONST_PROOF_SIZE_LOG_N + 3 + 3
+        NUMBER_OF_ENTITIES + CONST_PROOF_SIZE_LOG_N + LIBRA_COMMITMENTS + 3
     } else {
         NUMBER_OF_ENTITIES + CONST_PROOF_SIZE_LOG_N + 2
     };
@@ -309,6 +309,7 @@ fn verify_shplemini<H: CurveHooks>(
         batching_challenge *= tp.rho();
     }
 
+    // g commitments are accumulated at r
     for i in (NUMBER_UNSHIFTED + 1 - offset)..=(NUMBER_OF_ENTITIES - offset) {
         scalars[i + 2 * offset] = -shifted_scalar * batching_challenge;
         batched_evaluation +=
@@ -566,9 +567,9 @@ fn check_evals_consistency(
 
     challenge_poly_lagrange[0] = Fr::ONE;
     for (round, u_ch) in u_challenges.iter().enumerate().take(CONST_PROOF_SIZE_LOG_N) {
-        let curr_idx = 1 + 9 * round;
+        let curr_idx = 1 + LIBRA_UNIVARIATES_LENGTH * round;
         challenge_poly_lagrange[curr_idx] = Fr::ONE;
-        for idx in (curr_idx + 1)..(curr_idx + 9) {
+        for idx in (curr_idx + 1)..(curr_idx + LIBRA_UNIVARIATES_LENGTH) {
             challenge_poly_lagrange[idx] = challenge_poly_lagrange[idx - 1] * u_ch;
         }
     }
