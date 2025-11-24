@@ -21,6 +21,8 @@ use crate::constants::CONST_PROOF_SIZE_LOG_N;
 
 const TWO: Fr = MontFp!("2");
 
+// Compute an array containing r's powers of two:
+// [r, r^2, r^4, ..., r^(2*(CONST_PROOF_SIZE_LOG_N-1))].
 pub(crate) fn compute_squares(r: Fr) -> [Fr; CONST_PROOF_SIZE_LOG_N] {
     let mut squares = [r; CONST_PROOF_SIZE_LOG_N];
 
@@ -31,7 +33,7 @@ pub(crate) fn compute_squares(r: Fr) -> [Fr; CONST_PROOF_SIZE_LOG_N] {
     squares
 }
 
-// Compute the evaluations  Aₗ(r^{2ˡ}) for l = 0, ..., m-1.
+// Compute the evaluations  Aₗ(r^{2ˡ}) for l = 0, 1, ..., m-1.
 pub(crate) fn compute_fold_pos_evaluations(
     sumcheck_u_challenges: &[Fr; CONST_PROOF_SIZE_LOG_N],
     batched_eval_accumulator: &mut Fr,
