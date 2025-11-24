@@ -15,7 +15,7 @@
 // limitations under the License.
 
 use ark_bn254_ext::Fr;
-use ark_ff::{AdditiveGroup, Field, MontFp};
+use ark_ff::{batch_inversion, AdditiveGroup, Field, MontFp};
 
 use crate::constants::CONST_PROOF_SIZE_LOG_N;
 
@@ -41,6 +41,14 @@ pub(crate) fn compute_fold_pos_evaluations(
 ) -> [Fr; CONST_PROOF_SIZE_LOG_N] {
     let mut fold_pos_evaluations = [Fr::ZERO; CONST_PROOF_SIZE_LOG_N];
 
+    let mut denominators: [_; CONST_PROOF_SIZE_LOG_N] = core::array::from_fn(|i| {
+        let j = CONST_PROOF_SIZE_LOG_N - i - 1;
+        gemini_eval_challenge_powers[j] * (Fr::ONE - sumcheck_u_challenges[j])
+            + sumcheck_u_challenges[j] // invertible w.h.p.
+    });
+
+    batch_inversion(&mut denominators);
+
     for i in (1..=CONST_PROOF_SIZE_LOG_N).rev() {
         let challenge_power = gemini_eval_challenge_powers[i - 1];
         let u = sumcheck_u_challenges[i - 1];
@@ -48,9 +56,7 @@ pub(crate) fn compute_fold_pos_evaluations(
         let mut batched_eval_round_acc = challenge_power * (*batched_eval_accumulator) * TWO
             - gemini_evaluations[i - 1] * (challenge_power * (Fr::ONE - u) - u);
         // Divide by the denominator
-        batched_eval_round_acc *= (challenge_power * (Fr::ONE - u) + u)
-            .inverse()
-            .expect("challenge_power * (Fr::ONE - u) + u should be invertible w.h.p.");
+        batched_eval_round_acc *= denominators[CONST_PROOF_SIZE_LOG_N - i];
         if i as u64 <= log_size {
             *batched_eval_accumulator = batched_eval_round_acc;
             fold_pos_evaluations[i - 1] = batched_eval_round_acc;
