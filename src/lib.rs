@@ -424,9 +424,10 @@ fn verify_shplemini<H: CurveHooks>(
     let mut inverted_denominators: Vec<Fr> = (0..num_non_dummy_rounds)
         .flat_map(|i| {
             // Both invertible w.h.p.
-            let pos_inverted_denominator = tp.shplonk_z() - powers_of_evaluation_challenge[i + 1];
-            let neg_inverted_denominator = tp.shplonk_z() + powers_of_evaluation_challenge[i + 1];
-            [pos_inverted_denominator, neg_inverted_denominator]
+            [
+                tp.shplonk_z() - powers_of_evaluation_challenge[i + 1],
+                tp.shplonk_z() + powers_of_evaluation_challenge[i + 1],
+            ]
         })
         .collect();
 
