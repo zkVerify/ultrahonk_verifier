@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![cfg_attr(not(feature = "std"), no_std)]
+// #![cfg_attr(not(feature = "std"), no_std)]
 #![doc = include_str!("../README.md")]
 #![allow(non_camel_case_types)]
 
@@ -267,11 +267,11 @@ fn verify_shplemini<H: CurveHooks>(
     commitments.resize(capacity, G1::<H>::default());
 
     // NOTE: Can use batching here to go from 2 inversions to 1 inversion + 3 multiplications
-    // but the benefit should be marginal.
-    let mut pos_inverted_denominator = (tp.shplonk_z() - powers_of_evaluation_challenge[0])
+    // but the benefit is probably not worth it.
+    let pos_inverted_denominator = (tp.shplonk_z() - powers_of_evaluation_challenge[0])
         .inverse()
         .expect("Inversion should work w.h.p.");
-    let mut neg_inverted_denominator = (tp.shplonk_z() + powers_of_evaluation_challenge[0])
+    let neg_inverted_denominator = (tp.shplonk_z() + powers_of_evaluation_challenge[0])
         .inverse()
         .expect("Inversion should work w.h.p.");
 
@@ -420,17 +420,24 @@ fn verify_shplemini<H: CurveHooks>(
     let mut scaling_factor_neg: Fr;
     let mut boundary = NUMBER_OF_ENTITIES + 1 + offset;
 
+    let num_non_dummy_rounds = vk.log_circuit_size as usize - 1;
+    let mut inverted_denominators: Vec<Fr> = (0..num_non_dummy_rounds)
+        .flat_map(|i| {
+            // Both invertible w.h.p.
+            let pos_inverted_denominator = tp.shplonk_z() - powers_of_evaluation_challenge[i + 1];
+            let neg_inverted_denominator = tp.shplonk_z() + powers_of_evaluation_challenge[i + 1];
+            [pos_inverted_denominator, neg_inverted_denominator]
+        })
+        .collect();
+
+    batch_inversion(&mut inverted_denominators);
+
     for i in 0..(CONST_PROOF_SIZE_LOG_N - 1) {
         let dummy_round = i as u64 >= (vk.log_circuit_size - 1);
 
         if !dummy_round {
-            // Update inverted denominators
-            pos_inverted_denominator = (tp.shplonk_z() - powers_of_evaluation_challenge[i + 1])
-                .inverse()
-                .expect("Inversion should work w.h.p.");
-            neg_inverted_denominator = (tp.shplonk_z() + powers_of_evaluation_challenge[i + 1])
-                .inverse()
-                .expect("Inversion should work w.h.p.");
+            let pos_inverted_denominator = inverted_denominators[2 * i];
+            let neg_inverted_denominator = inverted_denominators[2 * i + 1];
 
             // Compute the scalar multipliers for Aₗ(± r^{2ˡ}) and [Aₗ]
             scaling_factor_pos = batching_challenge * pos_inverted_denominator;
