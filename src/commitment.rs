@@ -22,7 +22,7 @@ use crate::constants::CONST_PROOF_SIZE_LOG_N;
 const TWO: Fr = MontFp!("2");
 
 // Compute an array containing r raised to powers of two:
-// [r, r^2, r^4, ..., r^(2*(CONST_PROOF_SIZE_LOG_N-1))].
+// [r, r^2, r^4, ..., r^(2^(CONST_PROOF_SIZE_LOG_N-1))].
 pub(crate) fn compute_squares(r: Fr) -> [Fr; CONST_PROOF_SIZE_LOG_N] {
     let mut squares = [r; CONST_PROOF_SIZE_LOG_N];
 
