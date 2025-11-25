@@ -585,7 +585,7 @@ fn check_evals_consistency(
     // Notice that no array copies are needed.
     let mut extended_denominators: [Fr; SUBGROUP_SIZE as usize + 1] = core::array::from_fn(|i| {
         if i < SUBGROUP_SIZE as usize {
-            // For each i, we have:
+            // For each i < SUBGROUP_SIZE, we have:
             // Pr[SUBGROUP_GENERATOR_INVERSE^i * gemini_r - 1 is invertible]
             //   = Pr[SUBGROUP_GENERATOR_INVERSE^i * gemini_r - 1 != 0]
             //   = 1 - Pr[SUBGROUP_GENERATOR_INVERSE^i * gemini_r - 1 = 0]
