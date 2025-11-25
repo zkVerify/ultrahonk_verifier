@@ -581,29 +581,24 @@ fn check_evals_consistency(
     }
 
     let mut root_power = Fr::ONE;
-    // let mut denominators: [_; SUBGROUP_SIZE as usize] = core::array::from_fn(|_| {
-    //     let result = root_power * gemini_r - Fr::ONE;
-    //     root_power *= SUBGROUP_GENERATOR_INVERSE;
-    //     result
-    // });
 
     // Notice that no array copies are needed.
     let mut extended_denominators: [Fr; SUBGROUP_SIZE as usize + 1] = core::array::from_fn(|i| {
         if i < SUBGROUP_SIZE as usize {
-            let result = root_power * gemini_r - Fr::ONE; // invertible mod r
+            // For each i, we have:
+            // Pr[SUBGROUP_GENERATOR_INVERSE^i * gemini_r - 1 is invertible]
+            //   = Pr[SUBGROUP_GENERATOR_INVERSE^i * gemini_r - 1 != 0]
+            //   = 1 - Pr[SUBGROUP_GENERATOR_INVERSE^i * gemini_r - 1 = 0]
+            //   = 1 - Pr[gemini_r = (SUBGROUP_GENERATOR_INVERSE^i)^{-1}]
+            //   >= 1 - 1/2^128 because gemini_r is the 128 lower-significance bits output by Keccak256
+            let result = root_power * gemini_r - Fr::ONE;
             root_power *= SUBGROUP_GENERATOR_INVERSE;
             result
         } else {
-            Fr::from(SUBGROUP_SIZE as u64) // will always be invertible mod r
+            Fr::from(SUBGROUP_SIZE as u64) // is always invertible mod r
         }
     });
 
-    // For each i, we have:
-    // Pr[SUBGROUP_GENERATOR_INVERSE^i * gemini_r - 1 is invertible]
-    //   = Pr[SUBGROUP_GENERATOR_INVERSE^i * gemini_r - 1 != 0]
-    //   = 1 - Pr[SUBGROUP_GENERATOR_INVERSE^i * gemini_r - 1 = 0]
-    //   = 1 - Pr[gemini_r = (SUBGROUP_GENERATOR_INVERSE^i)^{-1}]
-    //   >= 1 - 1/2^128 because gemini_r is the 128 lower-significance bits output by Keccak256
     batch_inversion(&mut extended_denominators);
 
     // O(1) since we are simply manipulating pointers
