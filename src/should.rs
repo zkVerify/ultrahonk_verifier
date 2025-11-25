@@ -69,9 +69,8 @@ fn verify_valid_plain_proof(
 }
 
 mod reject {
-    use crate::constants::{EVM_WORD_SIZE, SCALAR_SIZE};
-
     use super::*;
+    use crate::constants::{EVM_WORD_SIZE, SCALAR_SIZE};
 
     #[rstest]
     fn a_zk_proof_with_non_matching_number_of_pis(

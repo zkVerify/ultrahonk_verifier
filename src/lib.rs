@@ -581,10 +581,21 @@ fn check_evals_consistency(
     }
 
     let mut root_power = Fr::ONE;
-    let mut denominators: [_; SUBGROUP_SIZE as usize] = core::array::from_fn(|_| {
-        let result = root_power * gemini_r - Fr::ONE;
-        root_power *= SUBGROUP_GENERATOR_INVERSE;
-        result
+    // let mut denominators: [_; SUBGROUP_SIZE as usize] = core::array::from_fn(|_| {
+    //     let result = root_power * gemini_r - Fr::ONE;
+    //     root_power *= SUBGROUP_GENERATOR_INVERSE;
+    //     result
+    // });
+
+    // Notice that no array copies are needed.
+    let mut extended_denominators: [Fr; SUBGROUP_SIZE as usize + 1] = core::array::from_fn(|i| {
+        if i < SUBGROUP_SIZE as usize {
+            let result = root_power * gemini_r - Fr::ONE; // invertible mod r
+            root_power *= SUBGROUP_GENERATOR_INVERSE;
+            result
+        } else {
+            Fr::from(SUBGROUP_SIZE as u64) // will always be invertible mod r
+        }
     });
 
     // For each i, we have:
@@ -593,21 +604,29 @@ fn check_evals_consistency(
     //   = 1 - Pr[SUBGROUP_GENERATOR_INVERSE^i * gemini_r - 1 = 0]
     //   = 1 - Pr[gemini_r = (SUBGROUP_GENERATOR_INVERSE^i)^{-1}]
     //   >= 1 - 1/2^128 because gemini_r is the 128 lower-significance bits output by Keccak256
-    batch_inversion(&mut denominators);
+    batch_inversion(&mut extended_denominators);
 
-    let mut challenge_poly_eval: Fr = denominators
+    let slice = extended_denominators.as_mut_slice();
+
+    let (inverted_denominators_slice, last_element_slice) =
+        slice.split_at_mut(SUBGROUP_SIZE as usize);
+
+    let inverted_denominators: &mut [Fr; SUBGROUP_SIZE as usize] = inverted_denominators_slice
+        .try_into()
+        .expect("Slice length mismatch");
+
+    let subgroup_size_inverse: &mut Fr = &mut last_element_slice[0];
+
+    let mut challenge_poly_eval: Fr = inverted_denominators
         .iter()
         .zip(challenge_poly_lagrange)
         .map(|(ai, bi)| *ai * bi)
         .sum();
 
-    let numerator = vanishing_poly_eval
-        * Fr::from(SUBGROUP_SIZE)
-            .inverse()
-            .expect("SUBGROUP_SIZE will always be invertible modulo r");
+    let numerator = vanishing_poly_eval * subgroup_size_inverse;
     challenge_poly_eval *= numerator;
-    let lagrange_first = denominators[0] * numerator;
-    let lagrange_last = *denominators
+    let lagrange_first = inverted_denominators[0] * numerator;
+    let lagrange_last = *inverted_denominators
         .last()
         .expect("Last element should always exist")
         * numerator;
