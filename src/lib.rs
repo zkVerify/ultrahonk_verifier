@@ -606,15 +606,13 @@ fn check_evals_consistency(
     //   >= 1 - 1/2^128 because gemini_r is the 128 lower-significance bits output by Keccak256
     batch_inversion(&mut extended_denominators);
 
-    let slice = extended_denominators.as_mut_slice();
-
-    let (inverted_denominators_slice, last_element_slice) =
-        slice.split_at_mut(SUBGROUP_SIZE as usize);
-
+    // O(1) since we are simply manipulating pointers
+    let (inverted_denominators_slice, last_element_slice) = extended_denominators
+        .as_mut_slice()
+        .split_at_mut(SUBGROUP_SIZE as usize);
     let inverted_denominators: &mut [Fr; SUBGROUP_SIZE as usize] = inverted_denominators_slice
         .try_into()
-        .expect("Slice length mismatch");
-
+        .expect("Slice length should always match");
     let subgroup_size_inverse: &mut Fr = &mut last_element_slice[0];
 
     let mut challenge_poly_eval: Fr = inverted_denominators
