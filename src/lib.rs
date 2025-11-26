@@ -584,7 +584,9 @@ fn check_evals_consistency(
 
     // Notice that no array copies are needed.
     let mut extended_denominators: [Fr; SUBGROUP_SIZE as usize + 1] = core::array::from_fn(|i| {
-        if i < SUBGROUP_SIZE as usize {
+        if i == 0 {
+            Fr::from(SUBGROUP_SIZE as u64) // is always invertible mod r
+        } else {
             // For each i < SUBGROUP_SIZE, we have:
             // Pr[SUBGROUP_GENERATOR_INVERSE^i * gemini_r - 1 is invertible]
             //   = Pr[SUBGROUP_GENERATOR_INVERSE^i * gemini_r - 1 != 0]
@@ -594,21 +596,19 @@ fn check_evals_consistency(
             let result = root_power * gemini_r - Fr::ONE;
             root_power *= SUBGROUP_GENERATOR_INVERSE;
             result
-        } else {
-            Fr::from(SUBGROUP_SIZE as u64) // is always invertible mod r
         }
     });
 
     batch_inversion(&mut extended_denominators);
 
     // O(1) since we are simply manipulating pointers
-    let (inverted_denominators_slice, last_element_slice) = extended_denominators
+    let (subgroup_size_inverse, inverted_denominators_slice) = extended_denominators
         .as_mut_slice()
-        .split_at_mut(SUBGROUP_SIZE as usize);
+        .split_first_mut()
+        .expect("Array is always non-empty");
     let inverted_denominators: &mut [Fr; SUBGROUP_SIZE as usize] = inverted_denominators_slice
         .try_into()
         .expect("Slice length should always match");
-    let subgroup_size_inverse: &mut Fr = &mut last_element_slice[0];
 
     let mut challenge_poly_eval: Fr = inverted_denominators
         .iter()
