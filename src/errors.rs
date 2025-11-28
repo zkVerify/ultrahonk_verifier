@@ -17,6 +17,8 @@
 use alloc::string::String;
 use snafu::Snafu;
 
+use crate::U256;
+
 /// The verification error type
 #[derive(Debug, PartialEq, Snafu)]
 pub enum VerifyError {
@@ -28,7 +30,7 @@ pub enum VerifyError {
     PublicInputError { message: String },
     /// Provided data has not valid proof.
     #[snafu(display("Invalid Proof"))]
-    InvalidProofError,
+    InvalidProofError { message: String },
     /// Verify proof failed.
     #[snafu(display("Verification Failed. Message: {message}"))]
     VerificationError { message: String },
@@ -44,6 +46,10 @@ pub enum GroupError {
         expected_length: usize,
     },
     NotOnCurve,
+    CoordinateExceedsModulus {
+        coordinate: U256,
+        modulus: U256,
+    },
 }
 
 #[derive(Debug, PartialEq)]

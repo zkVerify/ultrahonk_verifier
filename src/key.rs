@@ -16,9 +16,12 @@
 
 #![allow(non_camel_case_types)]
 
-use crate::utils::{read_g1, read_u64};
-use crate::{G1, VK_SIZE};
+use crate::{
+    utils::{read_g1, read_u64_from_evm_word, IntoBEBytes32},
+    EVMWord, G1, U256, VK_SIZE,
+};
 use ark_bn254_ext::CurveHooks;
+use sha3::{digest::Update, Digest, Keccak256};
 use snafu::Snafu;
 
 #[derive(Debug, PartialEq, Snafu)]
@@ -27,15 +30,8 @@ pub enum VerificationKeyError {
     BufferTooShort,
     #[snafu(display("Point for field '{field:?}' is not on curve"))]
     PointNotOnCurve { field: &'static str },
-
-    // // #[snafu(display("Point for field '{}' is not in the correct subgroup", field))]
-    // // PointNotInCorrectSubgroup { field: &'static str },
     #[snafu(display("Invalid circuit size. Must be a power of 2."))]
-    InvalidCircuitSize,
-
-    #[snafu(display("Invalid log circuit size. Must be consistent with circuit size."))]
     InvalidLogCircuitSize,
-
     #[snafu(display("Could not parse vk"))]
     ParsingError,
 }
@@ -52,7 +48,8 @@ pub enum CommitmentField {
     Q_ARITH,
     Q_DELTARANGE,
     Q_ELLIPTIC,
-    Q_AUX,
+    Q_MEMORY,
+    Q_NNF,
     Q_POSEIDON2EXTERNAL,
     Q_POSEIDON2INTERNAL,
     S_1,
@@ -84,7 +81,8 @@ impl CommitmentField {
             CommitmentField::Q_ARITH => "Q_ARITH",
             CommitmentField::Q_DELTARANGE => "Q_DELTARANGE",
             CommitmentField::Q_ELLIPTIC => "Q_ELLIPTIC",
-            CommitmentField::Q_AUX => "Q_AUX",
+            CommitmentField::Q_MEMORY => "Q_MEMORY",
+            CommitmentField::Q_NNF => "Q_NNF",
             CommitmentField::Q_POSEIDON2EXTERNAL => "Q_POSEIDON2EXTERNAL",
             CommitmentField::Q_POSEIDON2INTERNAL => "Q_POSEIDON2INTERNAL",
             CommitmentField::S_1 => "S_1",
@@ -108,7 +106,6 @@ impl CommitmentField {
 #[derive(PartialEq, Eq, Debug)]
 pub struct VerificationKey<H: CurveHooks> {
     // Misc Params
-    pub circuit_size: u64,
     pub log_circuit_size: u64,
     pub combined_input_size: u64, // Since bb 0.86.0, this is num_public_inputs + PAIRING_OBJECT_SIZE
     pub pub_inputs_offset: u64,
@@ -119,11 +116,12 @@ pub struct VerificationKey<H: CurveHooks> {
     pub q_r: G1<H>,
     pub q_o: G1<H>,
     pub q_4: G1<H>,
-    pub q_lookup: G1<H>,
-    pub q_arith: G1<H>,
-    pub q_deltarange: G1<H>,
+    pub q_lookup: G1<H>,     // Lookup
+    pub q_arith: G1<H>,      // Arithmetic widget
+    pub q_deltarange: G1<H>, // Delta Range sort
     pub q_elliptic: G1<H>,
-    pub q_aux: G1<H>,
+    pub q_memory: G1<H>, // Memory
+    pub q_nnf: G1<H>,    // Non-Native Field
     pub q_poseidon2external: G1<H>,
     pub q_poseidon2internal: G1<H>,
     // Copy Constraints
@@ -154,32 +152,20 @@ impl<H: CurveHooks> TryFrom<&[u8]> for VerificationKey<H> {
             return Err(VerificationKeyError::BufferTooShort);
         }
 
-        let (circuit_size, raw_vk) = match read_u64(raw_vk) {
-            Ok((n, raw_vk)) => (n, raw_vk),
-            _ => Err(VerificationKeyError::ParsingError)?,
-        };
-
-        // Assert: circuit_size > 0 and also(?) a power of 2
-        if circuit_size == 0 || (circuit_size & (circuit_size - 1) != 0) {
-            return Err(VerificationKeyError::InvalidCircuitSize);
-        }
-
-        let (log_circuit_size, raw_vk) = match read_u64(raw_vk) {
+        let (log_circuit_size, raw_vk) = match read_u64_from_evm_word(raw_vk) {
+            Ok((0, _)) => Err(VerificationKeyError::InvalidLogCircuitSize)?,
             Ok((log_n, raw_vk)) => (log_n, raw_vk),
             _ => Err(VerificationKeyError::ParsingError)?,
         };
 
-        // Assert: log_circuit_size == log_2(circuit_size)
-        if 1 << log_circuit_size != circuit_size {
-            return Err(VerificationKeyError::InvalidLogCircuitSize);
-        }
+        // TODO: Impose upper bound on log_circuit_size?
 
-        let (combined_input_size, raw_vk) = match read_u64(raw_vk) {
+        let (combined_input_size, raw_vk) = match read_u64_from_evm_word(raw_vk) {
             Ok((num_pubs, raw_vk)) => (num_pubs, raw_vk),
             _ => Err(VerificationKeyError::ParsingError)?,
         };
 
-        let (pub_inputs_offset, raw_vk) = match read_u64(raw_vk) {
+        let (pub_inputs_offset, raw_vk) = match read_u64_from_evm_word(raw_vk) {
             Ok((pi_offset, raw_vk)) => (pi_offset, raw_vk),
             _ => Err(VerificationKeyError::ParsingError)?,
         };
@@ -224,9 +210,13 @@ impl<H: CurveHooks> TryFrom<&[u8]> for VerificationKey<H> {
             read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
                 field: CommitmentField::Q_ELLIPTIC.str(),
             })?;
-        let (q_aux, raw_vk) =
+        let (q_memory, raw_vk) =
             read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::Q_AUX.str(),
+                field: CommitmentField::Q_MEMORY.str(),
+            })?;
+        let (q_nnf, raw_vk) =
+            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
+                field: CommitmentField::Q_NNF.str(),
             })?;
         let (q_poseidon2external, raw_vk) =
             read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
@@ -294,7 +284,6 @@ impl<H: CurveHooks> TryFrom<&[u8]> for VerificationKey<H> {
             })?;
 
         Ok(Self {
-            circuit_size,
             log_circuit_size,
             combined_input_size,
             pub_inputs_offset,
@@ -308,7 +297,8 @@ impl<H: CurveHooks> TryFrom<&[u8]> for VerificationKey<H> {
             q_arith,
             q_deltarange,
             q_elliptic,
-            q_aux,
+            q_memory,
+            q_nnf,
             q_poseidon2external,
             q_poseidon2internal,
             s_1,
@@ -329,6 +319,73 @@ impl<H: CurveHooks> TryFrom<&[u8]> for VerificationKey<H> {
     }
 }
 
+impl<H: CurveHooks> VerificationKey<H> {
+    pub fn compute_vk_hash(&self) -> EVMWord {
+        Keccak256::new()
+            .chain(U256::from(self.log_circuit_size).into_be_bytes32())
+            .chain(U256::from(self.combined_input_size).into_be_bytes32())
+            .chain(U256::from(self.pub_inputs_offset).into_be_bytes32())
+            .chain(self.q_m.x.into_be_bytes32())
+            .chain(self.q_m.y.into_be_bytes32())
+            .chain(self.q_c.x.into_be_bytes32())
+            .chain(self.q_c.y.into_be_bytes32())
+            .chain(self.q_l.x.into_be_bytes32())
+            .chain(self.q_l.y.into_be_bytes32())
+            .chain(self.q_r.x.into_be_bytes32())
+            .chain(self.q_r.y.into_be_bytes32())
+            .chain(self.q_o.x.into_be_bytes32())
+            .chain(self.q_o.y.into_be_bytes32())
+            .chain(self.q_4.x.into_be_bytes32())
+            .chain(self.q_4.y.into_be_bytes32())
+            .chain(self.q_lookup.x.into_be_bytes32())
+            .chain(self.q_lookup.y.into_be_bytes32())
+            .chain(self.q_arith.x.into_be_bytes32())
+            .chain(self.q_arith.y.into_be_bytes32())
+            .chain(self.q_deltarange.x.into_be_bytes32())
+            .chain(self.q_deltarange.y.into_be_bytes32())
+            .chain(self.q_elliptic.x.into_be_bytes32())
+            .chain(self.q_elliptic.y.into_be_bytes32())
+            .chain(self.q_memory.x.into_be_bytes32())
+            .chain(self.q_memory.y.into_be_bytes32())
+            .chain(self.q_nnf.x.into_be_bytes32())
+            .chain(self.q_nnf.y.into_be_bytes32())
+            .chain(self.q_poseidon2external.x.into_be_bytes32())
+            .chain(self.q_poseidon2external.y.into_be_bytes32())
+            .chain(self.q_poseidon2internal.x.into_be_bytes32())
+            .chain(self.q_poseidon2internal.y.into_be_bytes32())
+            .chain(self.s_1.x.into_be_bytes32())
+            .chain(self.s_1.y.into_be_bytes32())
+            .chain(self.s_2.x.into_be_bytes32())
+            .chain(self.s_2.y.into_be_bytes32())
+            .chain(self.s_3.x.into_be_bytes32())
+            .chain(self.s_3.y.into_be_bytes32())
+            .chain(self.s_4.x.into_be_bytes32())
+            .chain(self.s_4.y.into_be_bytes32())
+            .chain(self.id_1.x.into_be_bytes32())
+            .chain(self.id_1.y.into_be_bytes32())
+            .chain(self.id_2.x.into_be_bytes32())
+            .chain(self.id_2.y.into_be_bytes32())
+            .chain(self.id_3.x.into_be_bytes32())
+            .chain(self.id_3.y.into_be_bytes32())
+            .chain(self.id_4.x.into_be_bytes32())
+            .chain(self.id_4.y.into_be_bytes32())
+            .chain(self.t_1.x.into_be_bytes32())
+            .chain(self.t_1.y.into_be_bytes32())
+            .chain(self.t_2.x.into_be_bytes32())
+            .chain(self.t_2.y.into_be_bytes32())
+            .chain(self.t_3.x.into_be_bytes32())
+            .chain(self.t_3.y.into_be_bytes32())
+            .chain(self.t_4.x.into_be_bytes32())
+            .chain(self.t_4.y.into_be_bytes32())
+            .chain(self.lagrange_first.x.into_be_bytes32())
+            .chain(self.lagrange_first.y.into_be_bytes32())
+            .chain(self.lagrange_last.x.into_be_bytes32())
+            .chain(self.lagrange_last.y.into_be_bytes32())
+            .finalize()
+            .into()
+    }
+}
+
 #[cfg(test)]
 mod should {
     use super::*;
@@ -337,7 +394,7 @@ mod should {
     #[fixture]
     fn valid_vk() -> [u8; VK_SIZE] {
         hex_literal::hex!(
-            "0000000000001000000000000000000c000000000000001100000000000000010bacc07b163a7486c2bd235250a5e8e07ac5bd0dfd2f81f38d63a570adec1e3f0060381dd486efe8272bad6e733f9f3d354019a2a1ff37b121ea98ddcff363b018876158f8df4ea51e3b32b7124bf4fa91c0616cd5f34d87c5de3d3b1da5549f1a23d5a6678a8c3bff6a6e99bd49d2a47bfbfd2f0e305e3b5e0551ae3e26b48316a0c9f638810dce46378f69c5ae35df6a4666da4310461bd3c1df2cdcbca68212a706ae1326528b2fa2a974a5b181b58ce5aa8d59e460179523aad682df420f0f7b3a190344f58edf66e802f7443b9ca866c2d56edacd5cf085afa5fa9266592916d57af4de17360ef895b8dc90a32cafbc21e13ae3c7932fc9b36c86d8c12105c2162a69112d16562cc5dca971db837df62934fa1a34b08439aa22231887f22e4e4e1b78f20985efe1b79a7c6faf283c26c1c48b20ac40b93cf7b81c59c2ba0574e4eaabca0be0b484d4cb102c8828a367c0bc7410a4087be779836d3ac6be01105217d26a475433ecf26dc166697381a456cc5ced6aadac6017865063cd010c4032c3079594eb75a8449d3d5ce8bc3661650d53f9b24d923d8f404cb0bbc91084d709650356d40f0158fd6da81f54eb5fe796a0ca89441369b7c24301f8512e63970d20de99e21154d4f8e85a53ca705f41f3934305343a7d37b36bdc95ca25a1e6a6d9139bf90ac92ae051c814876679994fdfa424edfd5743fe79ee6d5302b1ad53e9115a47ee95dc67cfa237b11c8d367885166d748e7333ff8c836fff073e330045941828960664bc03a87eaafac7c6e689905cc1fe57d14584f9587018b6e4781a7b02e2a95f7a095b98cedede5bc515dbe02504d79e6546552e5b10285856d11a298f18c03033404c363b83183da23922b6ec9df33b029cddc3420511656f8faa4a333dca53ccfdad3648ca3236d3b8faedddd32745b942a44eabbf127c5856a0217ce7f9957207acaf60abd07dde29e7426d10d8b1c1af4f4a40311dfe66ebd27fba4fccfa539763b5d25c4b379711213680f7a7f1ebfe6c1de399291a5fd7f84bb2f9b745fee80d0c4d0767b8a652ea20a7f5e67a779d7ca3999729e0ff75bf43c9359885c91324f6342ad9eb22625ba5f282624f1d39612d5d08043106d655b1dcfcd219da56100a7ec773ddc56bcdfd364e2834d0b1dfceee682044f09e45c385f5be927ed5a868a3208f2467c939e1c462a2d5c3fc7571b74a0603a5e4d6a0d192f5b37cbc00edec40377291404a102c3c11e3cb967c0751662344678750d7d6163211b27fa3ea586c25eb2f0e85b75db16e3772f5feb7c8700d5dacec9639bc29f31219bda3ffaeca035bc6e3ea4d8ab82d8e5510fe2596eb0f00d5775c78368d2303f7098221cfa097ccc73a7723a8c1a92cb052fa759ade193e86bd52f5eab0f0d947e34767f9267f023c0dbfa8ed3647f45492b24d276900a6f7666eccc077e7ecc54cad449fcf23846853154e86539e758149a54f68da28c96c78044a5e698a7857e96c82c41df83e366be777c08ec8ed4f17a151967b2a828e52fe0036d7c370ad034a3b38e16f52551516ea604ab4d66c0bc334bac90a5f867a3d5711a55c732d5fa9487b8c3e1c1ae01a60c2a014fe560acf7fb9fe15ee2691ddecfe39d7612b1ccb5c6f82c6cc901dfc3e48fda7fb16211829fa550d094339480804ffd3043a7eb249f2f9a8891fda1aa157f1a39b4abb2614e2ea0bd820fd99bba859aea90badf373e95c6e1017304ed2b9dae8ec8fa6542f21ad0d104d06c3ae5ce3f279068623b01d4dd8787a674eafb3bb3cbda13c3f97167f275fa813d3868531c5a337ecea47c1b9c0815199d05b6107e1ffdab72166dcb72e04de1f795fceede2d254f26e210f0b2723f6c562c1f9e9ae33a4597a8856990450f8716810dff987300c3bc10a892b1c1c2637db3f8fecd9d8bb38442cc46810005567f9eb3d3a97098baa0d71c65db2bf83f8a194086a4cca39916b578faf103bcf2cf468d53c71d57b5c0ab31231e12e1ce3a444583203ea04c16ec69eb20c5d6e7a8b0b14d4ed8f51217ae8af4207277f4116e0af5a9268b38a5d34910b187b9371870f579be414054241d418f5689db2f6cbfabe968378fd68e9b280c00964ab30f99cb72cc59d0f621604926cfebfcff535f724f619bb0e7a4853dbdb132b76a71278e567595f3aaf837a72eb0ab515191143e5a3c8bd5875264866282c6b2a0de0a3fefdfc4fb4f3b8381d2c37ccc495848c2887f98bfbaca776ca390000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000220b549c7f8cdd7943b558904e08f54a1f80d17e617532b80db4e890d5ccf29822a72466b55e86351db40afd62853d975699f4f8ee8b44860a804a703e11bd451"
+            "000000000000000000000000000000000000000000000000000000000000000c00000000000000000000000000000000000000000000000000000000000000110000000000000000000000000000000000000000000000000000000000000001142bd66bdb7a2bc125c78e040da5a5cbe6f296ee1a11b55dce82f38413640a640d1415082e63c88eaa34836fe60428f70dee92853dc8a5d19d0bf85b0fa95ad42deae537974aa5697c77ce4f20f0fd5a3a264861cd51216bd8c56683467cd704068627460599c3db714496966bf5f4374fb6087ba1179c7a8ed5c59a1015e78406681df238df2a0f864a67847d46222c9aee090f36d34df5c2aab80f85a218f218e37167fd19d013b9c1b8da3c671ec025fe40eebc5d11d2d55e4ac8adccae27177c7a07701c29d13dc4669f3d97f847e96e4bcefe3f9cf39c6f73896b06e8212d31ea12ba12ee2338f1a638b192ffc9b995fd687c23cf6fe4a49a8e4f4c5aba2d623ef9f6f62903ac68b01fa7f3faaa5a881854d8b0a3fb6597416a145754e320b75671e0dd20da52b442fa3ce1643a24c7ac8e6059e6db24a7e1bfc51be2ac07ea8dd8b4d3fd18e2edafe7a56dfd287d677b48528aeba6bdb01913c3236ff82826602478d64dc4e23f777f35827a35ea2716bc853ad38b76968342e932d84b0c4032c3079594eb75a8449d3d5ce8bc3661650d53f9b24d923d8f404cb0bbc91084d709650356d40f0158fd6da81f54eb5fe796a0ca89441369b7c24301f8513057f9cfd5edb0e7c2c72a3c00da41d4c7c7b6d01c518c7ea0b38257198a9523027eb0839ef4980d6a98575cedc65ee5700a7148f647b842154c13fa145167b71775fbd3ba5e43163b9a8bc08ae2fdbd8e9dc005befcd8cd631818993e1437021d8011ee756abfa19e409fcb2e19a72238c07631bdde06678d3bce4455d2086f09c706e73a00d84450fb0eae1d72783faba96bc3990b1eaa86226b3574e5c43f276d401f1c0f9a2668fcae74683a84de1084739f9b1f547ec36638d7b5a1ecd912b12523f7d04a83276f3537c64334419e05b13fc20dedd7ff81c5677d3286ce2e741be4fe42cc1155a526829445f3fda95e243c4e602d1c13a77a2472f082da16a1350662e14b4ce4e8e364439d0abba02dc62a5526834f93c6db848d56dcb00563b1f480cad9069296d71489889503dda143f0b2e746ed0b6e85782c26040e20e1bb3056279dc342f6c756379f231d5f472088e4d88b5517e40b2a0133f40123ee36ecb11b62789eb4da763de77062d23ce01e2c8d1a5a6b3bd0ec93b42e770d1611c856951969fdda50b3205d5aa4486b632519d18424d0e92f60a31671d90ce97ee59d45d76230c0b534ea958de4c47e2f4c94aa3cadd7cd42e719521e0f154bdee4123a9946d2ae3eafb3800ee0eaf997cb1b074244b7337b923c097eaf0d5f22b8ade2c19f3c0953803a3a34d916eefb5bf34e2352250dd3fb63d6d8c622d2dd0a34c3a1da7c62cc30718076db1836d9e1111168b4d7ab689558c334db262c701396f0e3ae243059518c261a4137e7f6a698a26842094b80c6e88321bf172f8c6455a2bfe284b08b441d010fc2976235c0e1213cb7ef934c944e4e8374178afa12bf161e7e640beab3f563e0a2402c116a960773bd1e8b46a6a182239d21f45516c16fcb3033204ad4109fa0fbb54c4fead14c60e677f8e1897f6580570a7a5c9f897fd8dab82792c925627d7348f0bf1152efc7a0ee6a29e06296bb4d1d1934c19b595461621962d025f0fbb42467ce5caa69e812f125d20848fd1c5010e15c437db6ae7edf91438bfa5b19a7bad0f91d8971dba72882ee742a0b57f4146dc127b54505020320938baa053cd1f3dccb713a6957e0c9aa54ec21894a612d5cbdbf9edeff0d828ba063530a81a329131fb4fd19216bf0829882cdabebe61e214a8b0ce35f8e600ed91fa96cd915db4ed7fdbe73592b0b543997ac9ec27b214375d66b2db2ba7203e26ecee99e2307846f5a5eb2130b9c574c4e04e6e4772825f908ee9357e409b46a4cf0acba266c2a9b02c0ed29b2c26f8c8cbcbd82cf264ef648e67140128100429b213b9140ed25274a0f0bd3cf808a6d1bcd0d63ba0450f8716810dff987300c3bc10a892b1c1c2637db3f8fecd9d8bb38442cc46810005567f9eb3d3a97098baa0d71c65db2bf83f8a194086a4cca39916b578faf103bcf2cf468d53c71d57b5c0ab31231e12e1ce3a444583203ea04c16ec69eb20c5d6e7a8b0b14d4ed8f51217ae8af4207277f4116e0af5a9268b38a5d34910b0924c2d3fa7bd443b6244e3f29179883c120acb66ce414b5147c31531392c53007e5e59aa353dc977d4e082214179998a8086106f1eaaf33ee0b012cbd77066f132b76a71278e567595f3aaf837a72eb0ab515191143e5a3c8bd5875264866282c6b2a0de0a3fefdfc4fb4f3b8381d2c37ccc495848c2887f98bfbaca776ca390000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000206a032e44c27b0ce9ed4d186a2debd4bfe72be9bc894b742744cf102a554d06f053396ef4f905183ad76960162ff0d8c34d25b6126660c8385d13a63d2078399"
         )
     }
 
@@ -359,37 +416,26 @@ mod should {
         }
 
         #[rstest]
-        fn a_vk_with_circuit_size_zero(valid_vk: [u8; VK_SIZE]) {
+        fn a_vk_with_log_circuit_size_zero(valid_vk: [u8; VK_SIZE]) {
             let mut invalid_vk = [0u8; VK_SIZE];
             invalid_vk.copy_from_slice(&valid_vk);
-            invalid_vk[..8].fill(0);
-            assert_eq!(
-                VerificationKey::<()>::try_from(&invalid_vk[..]),
-                Err(VerificationKeyError::InvalidCircuitSize)
-            );
-        }
-
-        #[rstest]
-        fn a_vk_with_an_invalid_circuit_size(valid_vk: [u8; VK_SIZE]) {
-            let mut invalid_vk = [0u8; VK_SIZE];
-            invalid_vk.copy_from_slice(&valid_vk);
-            invalid_vk[..8].fill(1); // not a power of 2
-            assert_eq!(
-                VerificationKey::<()>::try_from(&invalid_vk[..]),
-                Err(VerificationKeyError::InvalidCircuitSize)
-            );
-        }
-
-        #[rstest]
-        fn a_vk_with_an_invalid_log_circuit_size(valid_vk: [u8; VK_SIZE]) {
-            let mut invalid_vk = [0u8; VK_SIZE];
-            invalid_vk.copy_from_slice(&valid_vk);
-            invalid_vk[8..16].fill(0);
+            invalid_vk[..32].fill(0);
             assert_eq!(
                 VerificationKey::<()>::try_from(&invalid_vk[..]),
                 Err(VerificationKeyError::InvalidLogCircuitSize)
             );
         }
+
+        // #[rstest]
+        // fn a_vk_with_an_invalid_log_circuit_size(valid_vk: [u8; VK_SIZE]) {
+        //     let mut invalid_vk = [0u8; VK_SIZE];
+        //     invalid_vk.copy_from_slice(&valid_vk);
+        //     invalid_vk[8..16].fill(0);
+        //     assert_eq!(
+        //         VerificationKey::<()>::try_from(&invalid_vk[..]),
+        //         Err(VerificationKeyError::InvalidLogCircuitSize)
+        //     );
+        // }
 
         #[rstest]
         fn a_vk_with_a_point_not_on_curve_for_any_commitment_field(valid_vk: [u8; VK_SIZE]) {
@@ -404,7 +450,8 @@ mod should {
                 CommitmentField::Q_ARITH,
                 CommitmentField::Q_DELTARANGE,
                 CommitmentField::Q_ELLIPTIC,
-                CommitmentField::Q_AUX,
+                CommitmentField::Q_MEMORY,
+                CommitmentField::Q_NNF,
                 CommitmentField::Q_POSEIDON2EXTERNAL,
                 CommitmentField::Q_POSEIDON2INTERNAL,
                 CommitmentField::S_1,
@@ -426,7 +473,7 @@ mod should {
                 let mut invalid_vk = [0u8; VK_SIZE];
                 invalid_vk.copy_from_slice(&valid_vk);
                 // Please note that (0, 0) is treated as the point at infinity
-                invalid_vk[32 + i * 64..32 + (i + 1) * 64].fill(1);
+                invalid_vk[3 * 32 + i * 64..3 * 32 + (i + 1) * 64].fill(1);
 
                 assert_eq!(
                     VerificationKey::<()>::try_from(&invalid_vk[..]).unwrap_err(),

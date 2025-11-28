@@ -30,7 +30,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{errors::FieldError, types::G1, EVMWord, Fq, Fq2, Fr, G2, U256};
+use crate::{
+    constants::{EVM_WORD_SIZE, GROUP_ELEMENT_SIZE},
+    errors::{FieldError, GroupError},
+    types::G1,
+    EVMWord, Fq, Fq2, Fr, G2, U256,
+};
 use ark_bn254_ext::CurveHooks;
 use ark_ec::AffineRepr;
 use ark_ff::{AdditiveGroup, PrimeField};
@@ -79,6 +84,12 @@ impl IntoBEBytes32 for Fr {
     }
 }
 
+impl IntoBEBytes32 for Fq {
+    fn into_be_bytes32(self) -> EVMWord {
+        self.into_bigint().into_be_bytes32()
+    }
+}
+
 impl IntoBEBytes32 for u64 {
     fn into_be_bytes32(self) -> EVMWord {
         let be = self.to_be_bytes();
@@ -88,9 +99,12 @@ impl IntoBEBytes32 for u64 {
     }
 }
 
-pub(crate) fn read_u64(data: &[u8]) -> Result<(u64, &[u8]), ()> {
-    let value = u64::from_be_bytes(data[..8].try_into().map_err(|_| ())?);
-    Ok((value, &data[8..]))
+pub(crate) fn read_u64_from_evm_word(data: &[u8]) -> Result<(u64, &[u8]), ()> {
+    let value = read_u256(&data[..EVM_WORD_SIZE])?;
+    if value > U256::new([u64::MAX, 0, 0, 0]) {
+        return Err(());
+    }
+    Ok((value.0[0], &data[EVM_WORD_SIZE..]))
 }
 
 pub(crate) fn read_u256(bytes: &[u8]) -> Result<U256, ()> {
@@ -100,30 +114,81 @@ pub(crate) fn read_u256(bytes: &[u8]) -> Result<U256, ()> {
 }
 
 // Parse point in G1.
-pub(crate) fn read_g1<H: CurveHooks>(data: &[u8]) -> Result<(G1<H>, &[u8]), ()> {
-    if data.len() < 64 {
-        return Err(());
+pub(crate) fn read_g1<H: CurveHooks>(data: &[u8]) -> Result<(G1<H>, &[u8]), GroupError> {
+    if data.len() < GROUP_ELEMENT_SIZE {
+        return Err(GroupError::InvalidSliceLength {
+            actual_length: data.len(),
+            expected_length: GROUP_ELEMENT_SIZE,
+        });
     }
 
-    let x = Fq::from_bigint(read_u256(&data[0..32])?).ok_or(())?;
-    let y = Fq::from_bigint(read_u256(&data[32..64])?).ok_or(())?;
+    let tmp_x = read_u256(&data[0..EVM_WORD_SIZE]).expect("Conversion should work at this point");
+    let x = Fq::from_bigint(tmp_x).ok_or(GroupError::CoordinateExceedsModulus {
+        coordinate: tmp_x,
+        modulus: Fq::MODULUS,
+    })?;
+    let tmp_y = read_u256(&data[EVM_WORD_SIZE..GROUP_ELEMENT_SIZE])
+        .expect("Conversion should work at this point");
+    let y = Fq::from_bigint(tmp_y).ok_or(GroupError::CoordinateExceedsModulus {
+        coordinate: tmp_y,
+        modulus: Fq::MODULUS,
+    })?;
 
     // If (0, 0) is given, we interpret this as the point at infinity:
     // https://docs.rs/ark-ec/0.5.0/src/ark_ec/models/short_weierstrass/affine.rs.html#212-218
     if x == Fq::ZERO && y == Fq::ZERO {
-        return Ok((G1::zero(), &data[64..]));
+        return Ok((G1::zero(), &data[GROUP_ELEMENT_SIZE..]));
     }
 
     let point = G1::new_unchecked(x, y);
 
     // Validate point
     if !point.is_on_curve() {
-        return Err(());
+        return Err(GroupError::NotOnCurve);
     }
     // This is always true for G1 with the BN254 curve.
     debug_assert!(point.is_in_correct_subgroup_assuming_on_curve());
 
-    Ok((point, &data[64..]))
+    Ok((point, &data[GROUP_ELEMENT_SIZE..]))
+}
+
+// Parse point in G1.
+pub(crate) fn read_g1_by_splitting<H: CurveHooks>(data: &mut &[u8]) -> Result<G1<H>, GroupError> {
+    let chunk = data
+        .split_off(..GROUP_ELEMENT_SIZE)
+        .ok_or(GroupError::InvalidSliceLength {
+            actual_length: data.len(),
+            expected_length: GROUP_ELEMENT_SIZE,
+        })?;
+
+    let tmp_x = read_u256(&chunk[0..EVM_WORD_SIZE]).expect("Conversion should work at this point");
+    let x = Fq::from_bigint(tmp_x).ok_or(GroupError::CoordinateExceedsModulus {
+        coordinate: tmp_x,
+        modulus: Fq::MODULUS,
+    })?;
+    let tmp_y = read_u256(&chunk[EVM_WORD_SIZE..GROUP_ELEMENT_SIZE])
+        .expect("Conversion should work at this point");
+    let y = Fq::from_bigint(tmp_y).ok_or(GroupError::CoordinateExceedsModulus {
+        coordinate: tmp_y,
+        modulus: Fq::MODULUS,
+    })?;
+
+    // If (0, 0) is given, we interpret this as the point at infinity:
+    // https://docs.rs/ark-ec/0.5.0/src/ark_ec/models/short_weierstrass/affine.rs.html#212-218
+    if x == Fq::ZERO && y == Fq::ZERO {
+        return Ok(G1::zero());
+    }
+
+    let point = G1::new_unchecked(x, y);
+
+    // Validate point
+    if !point.is_on_curve() {
+        return Err(GroupError::NotOnCurve);
+    }
+    // This is always true for G1 with the BN254 curve.
+    debug_assert!(point.is_in_correct_subgroup_assuming_on_curve());
+
+    Ok(point)
 }
 
 // Parse point in G2.

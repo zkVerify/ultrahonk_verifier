@@ -18,49 +18,35 @@ use ark_bn254::Fr;
 use ark_ff::MontFp;
 
 pub const CONST_PROOF_SIZE_LOG_N: usize = 28;
-pub const NUMBER_OF_SUBRELATIONS: usize = 27;
+pub const NUMBER_OF_SUBRELATIONS: usize = 28;
 pub const BATCHED_RELATION_PARTIAL_LENGTH: usize = 8; // for Plain case (i.e., non-ZK)
 pub const ZK_BATCHED_RELATION_PARTIAL_LENGTH: usize = 9; // for ZK case
-pub const NUMBER_OF_ENTITIES: usize = 40;
-pub const NUMBER_UNSHIFTED: usize = 35;
-// pub const NUMBER_TO_BE_SHIFTED: usize = 5;
+pub const NUMBER_OF_ENTITIES: usize = 41;
+pub const NUMBER_UNSHIFTED: usize = 36;
+pub const NUMBER_TO_BE_SHIFTED: usize = NUMBER_OF_ENTITIES - NUMBER_UNSHIFTED;
 
 // Alphas are used as relation separators so there should be NUMBER_OF_SUBRELATIONS - 1
 pub const NUMBER_OF_ALPHAS: usize = NUMBER_OF_SUBRELATIONS - 1;
 
-pub const LIBRA_COMMITMENTS: usize = 3;
-pub const LIBRA_EVALUATIONS: usize = 4;
+pub const NUM_LIBRA_COMMITMENTS: usize = 3;
+pub const NUM_LIBRA_EVALUATIONS: usize = 4;
 pub const LIBRA_UNIVARIATES_LENGTH: usize = 9;
 
 // Scalar size (in bytes)
-pub(crate) const SCALAR_SIZE: usize = 32;
-// G1ProofPoint size (in bytes)
-const G1_PROOF_POINT_SIZE: usize = 32 * 4;
-// G1 Point Size
-const G1_POINT_SIZE: usize = 64;
-
+pub(crate) const FIELD_ELEMENT_SIZE: usize = 32;
+// G1 Point Size (in bytes)
+pub(crate) const GROUP_ELEMENT_SIZE: usize = 64;
+// EVM words are 32 bytes long
 pub(crate) const EVM_WORD_SIZE: usize = 32;
-
+// Number of entries in the Pairing Point Object array
 pub const PAIRING_POINTS_SIZE: usize = 16;
 
-// ZK Proof size in bytes
-pub const ZK_PROOF_SIZE: usize = 4 * G1_PROOF_POINT_SIZE   // 1. Commitments to wire polynomials
-    + 3 * G1_PROOF_POINT_SIZE // 2. Commitments to logup witness polynomials
-    + 4 * G1_PROOF_POINT_SIZE // 3. Commitment to grand permutation polynomial
-    + (2 + NUMBER_OF_ENTITIES + ZK_BATCHED_RELATION_PARTIAL_LENGTH * CONST_PROOF_SIZE_LOG_N) * SCALAR_SIZE // 4. Sumcheck
-    + G1_PROOF_POINT_SIZE + SCALAR_SIZE // 5. ZK
-    + (2 + CONST_PROOF_SIZE_LOG_N - 1) * G1_PROOF_POINT_SIZE + (CONST_PROOF_SIZE_LOG_N + 4) * SCALAR_SIZE // 6. Shplemini
-    + PAIRING_POINTS_SIZE * SCALAR_SIZE; // 7. Pairing Point Object
+// Constants for proof length calculation (matching both UltraKeccakZKFlavor and UltraKeccakFlavor)
+pub(crate) const NUM_WITNESS_ENTITIES: usize = 8;
+pub(crate) const NUM_ELEMENTS_COMM: usize = 2; // U256 elements for curve points
+pub(crate) const NUM_ELEMENTS_FR: usize = 1; // U256 elements for field elements
 
-// Plain Proof size in bytes
-pub const PLAIN_PROOF_SIZE: usize = 4 * G1_PROOF_POINT_SIZE   // 1. Commitments to wire polynomials
-    + G1_PROOF_POINT_SIZE // 2. Lookup helpers - Permutations
-    + 3 * G1_PROOF_POINT_SIZE // 3. Lookup helpers - logup
-    + (NUMBER_OF_ENTITIES + BATCHED_RELATION_PARTIAL_LENGTH * CONST_PROOF_SIZE_LOG_N) * SCALAR_SIZE  // 4. Sumcheck
-    + (CONST_PROOF_SIZE_LOG_N - 1 + 2) * G1_PROOF_POINT_SIZE + CONST_PROOF_SIZE_LOG_N * SCALAR_SIZE // 5. Shplemini
-    + PAIRING_POINTS_SIZE * SCALAR_SIZE; // 6. Pairing Point Object
-
-pub const VK_SIZE: usize = 27 * G1_POINT_SIZE + EVM_WORD_SIZE;
+pub const VK_SIZE: usize = 28 * GROUP_ELEMENT_SIZE + 3 * EVM_WORD_SIZE;
 
 pub const PUB_SIZE: usize = 32;
 
@@ -69,3 +55,5 @@ pub(crate) const SUBGROUP_GENERATOR: Fr =
     MontFp!("0x07b0c561a6148404f086204a9f36ffb0617942546750f230c893619174a57a76");
 pub(crate) const SUBGROUP_GENERATOR_INVERSE: Fr =
     MontFp!("0x204bd3277422fad364751ad938e2b5e6a54cf8c68712848a692c553d0329f5d6");
+
+pub(crate) const PERMUTATION_ARGUMENT_VALUE_SEPARATOR: u64 = 1 << 28;

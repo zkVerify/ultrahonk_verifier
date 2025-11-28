@@ -35,7 +35,8 @@ pub enum Wire {
     Q_ARITH,
     Q_RANGE,
     Q_ELLIPTIC,
-    Q_AUX,
+    Q_MEMORY,
+    Q_NNF,
     Q_POSEIDON2_EXTERNAL,
     Q_POSEIDON2_INTERNAL,
     SIGMA_1,
@@ -73,7 +74,7 @@ fn wire(p: &[Fr; NUMBER_OF_ENTITIES], wire: Wire) -> Fr {
     p[wire as usize]
 }
 
-// Constants for the auxiliary relation.
+// Constants for the memory relation.
 const LIMB_SIZE: Fr = MontFp!("295147905179352825856"); // 1 << 68
 const SUBLIMB_SHIFT: Fr = MontFp!("16384"); // 1 << 14
 
@@ -111,12 +112,13 @@ pub(crate) fn accumulate_relation_evaluations(
     );
     accumulate_delta_range_relation(purported_evaluations, &mut evaluations, pow_partial_eval);
     accumulate_elliptic_relation(purported_evaluations, &mut evaluations, pow_partial_eval);
-    accumulate_auxillary_relation(
+    accumulate_memory_relation(
         purported_evaluations,
         rp_challenges,
         &mut evaluations,
         pow_partial_eval,
     );
+    accumulate_nnf_relation(purported_evaluations, &mut evaluations, pow_partial_eval);
     accumulate_poseidon_external_relation(
         purported_evaluations,
         &mut evaluations,
@@ -363,74 +365,12 @@ fn accumulate_elliptic_relation(
     }
 }
 
-fn accumulate_auxillary_relation(
+fn accumulate_memory_relation(
     p: &[Fr; NUMBER_OF_ENTITIES],
     rp: &RelationParametersChallenges,
     evals: &mut [Fr; NUMBER_OF_SUBRELATIONS],
     domain_sep: Fr,
 ) {
-    // Contribution 12
-    // Non native field arithmetic gate 2
-    // deg 4
-    //             _                                                                               _
-    //            /   _                   _                               _       14                \
-    // q_2 . q_4 |   (w_1 . w_2) + (w_1 . w_2) + (w_1 . w_4 + w_2 . w_3 - w_3) . 2    - w_3 - w_4   |
-    //            \_                                                                               _/
-    //
-    let mut limb_subproduct = wire(p, Wire::W_L) * wire(p, Wire::W_R_SHIFT)
-        + wire(p, Wire::W_L_SHIFT) * wire(p, Wire::W_R);
-    let mut non_native_field_gate_2 = wire(p, Wire::W_L) * wire(p, Wire::W_4)
-        + wire(p, Wire::W_R) * wire(p, Wire::W_O)
-        - wire(p, Wire::W_O_SHIFT);
-    non_native_field_gate_2 *= LIMB_SIZE;
-    non_native_field_gate_2 -= wire(p, Wire::W_4_SHIFT);
-    non_native_field_gate_2 += limb_subproduct;
-    non_native_field_gate_2 *= wire(p, Wire::Q_4);
-
-    limb_subproduct *= LIMB_SIZE;
-    limb_subproduct += wire(p, Wire::W_L_SHIFT) * wire(p, Wire::W_R_SHIFT);
-    let mut non_native_field_gate_1 = limb_subproduct;
-    non_native_field_gate_1 -= wire(p, Wire::W_O) + wire(p, Wire::W_4);
-    non_native_field_gate_1 *= wire(p, Wire::Q_O);
-
-    let mut non_native_field_gate_3 = limb_subproduct;
-    non_native_field_gate_3 += wire(p, Wire::W_4);
-    non_native_field_gate_3 -= wire(p, Wire::W_O_SHIFT) + wire(p, Wire::W_4_SHIFT);
-    non_native_field_gate_3 *= wire(p, Wire::Q_M);
-
-    let mut non_native_field_identity =
-        non_native_field_gate_1 + non_native_field_gate_2 + non_native_field_gate_3;
-    non_native_field_identity *= wire(p, Wire::Q_R);
-
-    // ((((w2' * 2^14 + w1') * 2^14 + w3) * 2^14 + w2) * 2^14 + w1 - w4) * qm
-    // deg 2
-    let mut limb_accumulator_1 = wire(p, Wire::W_R_SHIFT) * SUBLIMB_SHIFT;
-    limb_accumulator_1 += wire(p, Wire::W_L_SHIFT);
-    limb_accumulator_1 *= SUBLIMB_SHIFT;
-    limb_accumulator_1 += wire(p, Wire::W_O);
-    limb_accumulator_1 *= SUBLIMB_SHIFT;
-    limb_accumulator_1 += wire(p, Wire::W_R);
-    limb_accumulator_1 *= SUBLIMB_SHIFT;
-    limb_accumulator_1 += wire(p, Wire::W_L);
-    limb_accumulator_1 -= wire(p, Wire::W_4);
-    limb_accumulator_1 *= wire(p, Wire::Q_4);
-
-    // ((((w3' * 2^14 + w2') * 2^14 + w1') * 2^14 + w4) * 2^14 + w3 - w4') * qm
-    // deg 2
-    let mut limb_accumulator_2 = wire(p, Wire::W_O_SHIFT) * SUBLIMB_SHIFT;
-    limb_accumulator_2 += wire(p, Wire::W_R_SHIFT);
-    limb_accumulator_2 *= SUBLIMB_SHIFT;
-    limb_accumulator_2 += wire(p, Wire::W_L_SHIFT);
-    limb_accumulator_2 *= SUBLIMB_SHIFT;
-    limb_accumulator_2 += wire(p, Wire::W_4);
-    limb_accumulator_2 *= SUBLIMB_SHIFT;
-    limb_accumulator_2 += wire(p, Wire::W_O);
-    limb_accumulator_2 -= wire(p, Wire::W_4_SHIFT);
-    limb_accumulator_2 *= wire(p, Wire::Q_M);
-
-    let mut limb_accumulator_identity = limb_accumulator_1 + limb_accumulator_2;
-    limb_accumulator_identity *= wire(p, Wire::Q_O); //  deg 3
-
     // MEMORY
     //
     // A RAM memory record contains a tuple of the following fields:
@@ -494,7 +434,7 @@ fn accumulate_auxillary_relation(
     let index_delta = wire(p, Wire::W_L_SHIFT) - wire(p, Wire::W_L);
     let record_delta = wire(p, Wire::W_4_SHIFT) - wire(p, Wire::W_4);
 
-    let index_is_monotonically_increasing = index_delta.square() - index_delta; // deg 2
+    let index_is_monotonically_increasing = index_delta * (index_delta - Fr::ONE); // deg 2
 
     let adjacent_values_match_if_adjacent_indices_match =
         (index_delta * MINUS_ONE + Fr::ONE) * record_delta; // deg 2
@@ -502,12 +442,12 @@ fn accumulate_auxillary_relation(
     evals[14] = adjacent_values_match_if_adjacent_indices_match
         * wire(p, Wire::Q_L)
         * wire(p, Wire::Q_R)
-        * wire(p, Wire::Q_AUX)
+        * wire(p, Wire::Q_MEMORY)
         * domain_sep; // deg 5
     evals[15] = index_is_monotonically_increasing
         * wire(p, Wire::Q_L)
         * wire(p, Wire::Q_R)
-        * wire(p, Wire::Q_AUX)
+        * wire(p, Wire::Q_MEMORY)
         * domain_sep; // deg 5
 
     let rom_consistency_check_identity =
@@ -517,7 +457,7 @@ fn accumulate_auxillary_relation(
     // Contributions 15, 16 and 17
     // RAM Consistency Check
     //
-    // The 'access' type of the record is extracted with the expression `w_4 - ap.partial_record_check`
+    // The 'access' type of the record is extracted with the expression `w_4 - partial_record_check`
     // (i.e. for an honest Prover `w1 * eta + w2 * eta^2 + w3 * eta^3 - w4 = access`.
     // This is validated by requiring `access` to be boolean
     //
@@ -533,7 +473,7 @@ fn accumulate_auxillary_relation(
     // with a WRITE operation.
     //
     let access_type = wire(p, Wire::W_4) - partial_record_check; // will be 0 or 1 for honest Prover; deg 1 or 4
-    let access_check = access_type.square() - access_type; // check value is 0 or 1; deg 2 or 8
+    let access_check = access_type * (access_type - Fr::ONE); // check value is 0 or 1; deg 2 or 8
 
     // reverse order we could re-use `partial_record_check`  1 -  ((w3' * eta + w2') * eta + w1') * eta
     // deg 1 or 4
@@ -557,19 +497,19 @@ fn accumulate_auxillary_relation(
 
     // Putting it all together...
     evals[16] = adjacent_values_match_if_adjacent_indices_match_and_next_access_is_a_read_operation
-        * wire(p, Wire::Q_ARITH)
-        * wire(p, Wire::Q_AUX)
+        * wire(p, Wire::Q_O)
+        * wire(p, Wire::Q_MEMORY)
         * domain_sep; // deg 5 or 8
     evals[17] = index_is_monotonically_increasing
-        * wire(p, Wire::Q_ARITH)
-        * wire(p, Wire::Q_AUX)
+        * wire(p, Wire::Q_O)
+        * wire(p, Wire::Q_MEMORY)
         * domain_sep; // deg 4
     evals[18] = next_gate_access_type_is_boolean
-        * wire(p, Wire::Q_ARITH)
-        * wire(p, Wire::Q_AUX)
+        * wire(p, Wire::Q_O)
+        * wire(p, Wire::Q_MEMORY)
         * domain_sep; // deg 4 or 6
 
-    let ram_consistency_check_identity = access_check * wire(p, Wire::Q_ARITH); // deg 3 or 9
+    let ram_consistency_check_identity = access_check * wire(p, Wire::Q_O); // deg 3 or 9
 
     //
     // RAM Timestamp Consistency Check
@@ -597,10 +537,84 @@ fn accumulate_auxillary_relation(
     memory_identity += ram_consistency_check_identity; // deg 3 or 9
 
     // (deg 3 or 9) + (deg 4) + (deg 3)
-    let mut auxiliary_identity =
-        memory_identity + non_native_field_identity + limb_accumulator_identity;
-    auxiliary_identity *= wire(p, Wire::Q_AUX) * domain_sep; // deg 4 or 10
-    evals[13] = auxiliary_identity;
+    memory_identity *= wire(p, Wire::Q_MEMORY) * domain_sep; // deg 4 or 10
+    evals[13] = memory_identity;
+}
+
+fn accumulate_nnf_relation(
+    p: &[Fr; NUMBER_OF_ENTITIES],
+    evals: &mut [Fr; NUMBER_OF_SUBRELATIONS],
+    domain_sep: Fr,
+) {
+    /*
+     * Contribution 12
+     * Non native field arithmetic gate 2
+     * deg 4
+     *
+     *             _                                                                               _
+     *            /   _                   _                               _       14                \
+     * q_2 . q_4 |   (w_1 . w_2) + (w_1 . w_2) + (w_1 . w_4 + w_2 . w_3 - w_3) . 2    - w_3 - w_4   |
+     *            \_                                                                               _/
+     *
+     *
+     */
+    let mut limb_subproduct = wire(p, Wire::W_L) * wire(p, Wire::W_R_SHIFT)
+        + wire(p, Wire::W_L_SHIFT) * wire(p, Wire::W_R);
+    let mut non_native_field_gate_2 = wire(p, Wire::W_L) * wire(p, Wire::W_4)
+        + wire(p, Wire::W_R) * wire(p, Wire::W_O)
+        - wire(p, Wire::W_O_SHIFT);
+    non_native_field_gate_2 *= LIMB_SIZE;
+    non_native_field_gate_2 -= wire(p, Wire::W_4_SHIFT);
+    non_native_field_gate_2 += limb_subproduct;
+    non_native_field_gate_2 *= wire(p, Wire::Q_4);
+
+    limb_subproduct *= LIMB_SIZE;
+    limb_subproduct += wire(p, Wire::W_L_SHIFT) * wire(p, Wire::W_R_SHIFT);
+    let mut non_native_field_gate_1 = limb_subproduct;
+    non_native_field_gate_1 -= wire(p, Wire::W_O) + wire(p, Wire::W_4); // !!!
+    non_native_field_gate_1 *= wire(p, Wire::Q_O);
+
+    let mut non_native_field_gate_3 = limb_subproduct;
+    non_native_field_gate_3 += wire(p, Wire::W_4);
+    non_native_field_gate_3 -= wire(p, Wire::W_O_SHIFT) + wire(p, Wire::W_4_SHIFT);
+    non_native_field_gate_3 *= wire(p, Wire::Q_M);
+
+    let mut non_native_field_identity =
+        non_native_field_gate_1 + non_native_field_gate_2 + non_native_field_gate_3;
+    non_native_field_identity *= wire(p, Wire::Q_R);
+
+    // ((((w2' * 2^14 + w1') * 2^14 + w3) * 2^14 + w2) * 2^14 + w1 - w4) * qm
+    // deg 2
+    let mut limb_accumulator_1 = wire(p, Wire::W_R_SHIFT) * SUBLIMB_SHIFT;
+    limb_accumulator_1 += wire(p, Wire::W_L_SHIFT);
+    limb_accumulator_1 *= SUBLIMB_SHIFT;
+    limb_accumulator_1 += wire(p, Wire::W_O);
+    limb_accumulator_1 *= SUBLIMB_SHIFT;
+    limb_accumulator_1 += wire(p, Wire::W_R);
+    limb_accumulator_1 *= SUBLIMB_SHIFT;
+    limb_accumulator_1 += wire(p, Wire::W_L);
+    limb_accumulator_1 -= wire(p, Wire::W_4);
+    limb_accumulator_1 *= wire(p, Wire::Q_4);
+
+    // ((((w3' * 2^14 + w2') * 2^14 + w1') * 2^14 + w4) * 2^14 + w3 - w4') * qm
+    // deg 2
+    let mut limb_accumulator_2 = wire(p, Wire::W_O_SHIFT) * SUBLIMB_SHIFT;
+    limb_accumulator_2 += wire(p, Wire::W_R_SHIFT);
+    limb_accumulator_2 *= SUBLIMB_SHIFT;
+    limb_accumulator_2 += wire(p, Wire::W_L_SHIFT);
+    limb_accumulator_2 *= SUBLIMB_SHIFT;
+    limb_accumulator_2 += wire(p, Wire::W_4);
+    limb_accumulator_2 *= SUBLIMB_SHIFT;
+    limb_accumulator_2 += wire(p, Wire::W_O);
+    limb_accumulator_2 -= wire(p, Wire::W_4_SHIFT);
+    limb_accumulator_2 *= wire(p, Wire::Q_M);
+
+    let mut limb_accumulator_identity = limb_accumulator_1 + limb_accumulator_2;
+    limb_accumulator_identity *= wire(p, Wire::Q_O); //  deg 3
+
+    let mut nnf_identity = non_native_field_identity + limb_accumulator_identity;
+    nnf_identity *= wire(p, Wire::Q_NNF) * domain_sep;
+    evals[19] = nnf_identity;
 }
 
 fn accumulate_poseidon_external_relation(
@@ -634,13 +648,13 @@ fn accumulate_poseidon_external_relation(
     let v3 = t2 + v4; // u_1 + 3u_2 + 5u_3 + 7u_4
 
     let q_pos_by_scaling = wire(p, Wire::Q_POSEIDON2_EXTERNAL) * domain_sep;
-    evals[19] += q_pos_by_scaling * (v1 - wire(p, Wire::W_L_SHIFT));
+    evals[20] += q_pos_by_scaling * (v1 - wire(p, Wire::W_L_SHIFT));
 
-    evals[20] += q_pos_by_scaling * (v2 - wire(p, Wire::W_R_SHIFT));
+    evals[21] += q_pos_by_scaling * (v2 - wire(p, Wire::W_R_SHIFT));
 
-    evals[21] += q_pos_by_scaling * (v3 - wire(p, Wire::W_O_SHIFT));
+    evals[22] += q_pos_by_scaling * (v3 - wire(p, Wire::W_O_SHIFT));
 
-    evals[22] += q_pos_by_scaling * (v4 - wire(p, Wire::W_4_SHIFT));
+    evals[23] += q_pos_by_scaling * (v4 - wire(p, Wire::W_4_SHIFT));
 }
 
 fn accumulate_poseidon_internal_relation(
@@ -669,16 +683,16 @@ fn accumulate_poseidon_internal_relation(
     let q_pos_by_scaling = wire(p, Wire::Q_POSEIDON2_INTERNAL) * domain_sep;
 
     let v1 = u1 * INTERNAL_MATRIX_DIAGONAL[0] + u_sum;
-    evals[23] += q_pos_by_scaling * (v1 - wire(p, Wire::W_L_SHIFT));
+    evals[24] += q_pos_by_scaling * (v1 - wire(p, Wire::W_L_SHIFT));
 
     let v2 = u2 * INTERNAL_MATRIX_DIAGONAL[1] + u_sum;
-    evals[24] += q_pos_by_scaling * (v2 - wire(p, Wire::W_R_SHIFT));
+    evals[25] += q_pos_by_scaling * (v2 - wire(p, Wire::W_R_SHIFT));
 
     let v3 = u3 * INTERNAL_MATRIX_DIAGONAL[2] + u_sum;
-    evals[25] += q_pos_by_scaling * (v3 - wire(p, Wire::W_O_SHIFT));
+    evals[26] += q_pos_by_scaling * (v3 - wire(p, Wire::W_O_SHIFT));
 
     let v4 = u4 * INTERNAL_MATRIX_DIAGONAL[3] + u_sum;
-    evals[26] += q_pos_by_scaling * (v4 - wire(p, Wire::W_4_SHIFT));
+    evals[27] += q_pos_by_scaling * (v4 - wire(p, Wire::W_4_SHIFT));
 }
 
 fn scale_and_batch_subrelations(

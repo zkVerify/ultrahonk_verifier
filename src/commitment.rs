@@ -14,19 +14,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use ark_bn254_ext::Fr;
-use ark_ff::{batch_inversion, AdditiveGroup, Field, MontFp};
-
 use crate::constants::CONST_PROOF_SIZE_LOG_N;
+use ark_bn254_ext::Fr;
+use ark_ff::{batch_inversion, Field, MontFp};
 
 const TWO: Fr = MontFp!("2");
 
 // Compute an array containing r raised to powers of two:
-// [r, r^2, r^4, ..., r^(2^(CONST_PROOF_SIZE_LOG_N-1))].
-pub(crate) fn compute_squares(r: Fr) -> [Fr; CONST_PROOF_SIZE_LOG_N] {
-    let mut squares = [r; CONST_PROOF_SIZE_LOG_N];
+// [r, r^2, r^4, ..., r^(2^(log_n-1))].
+pub(crate) fn compute_squares(r: Fr, log_n: u64) -> Vec<Fr> {
+    let mut squares = Vec::<Fr>::with_capacity(log_n as usize);
 
-    for i in 1..CONST_PROOF_SIZE_LOG_N {
+    squares[0] = r;
+    for i in 1..log_n as usize {
         squares[i] = squares[i - 1].square();
     }
 
@@ -38,20 +38,20 @@ pub(crate) fn compute_fold_pos_evaluations(
     sumcheck_u_challenges: &[Fr; CONST_PROOF_SIZE_LOG_N],
     batched_eval_accumulator: &mut Fr,
     gemini_evaluations: &[Fr; CONST_PROOF_SIZE_LOG_N],
-    gemini_eval_challenge_powers: &[Fr; CONST_PROOF_SIZE_LOG_N],
+    gemini_eval_challenge_powers: &[Fr],
     log_size: u64,
-) -> [Fr; CONST_PROOF_SIZE_LOG_N] {
-    let mut fold_pos_evaluations = [Fr::ZERO; CONST_PROOF_SIZE_LOG_N];
+) -> Vec<Fr> {
+    let mut fold_pos_evaluations = Vec::<Fr>::with_capacity(log_size as usize);
 
     let mut inverted_denominators: [_; CONST_PROOF_SIZE_LOG_N] = core::array::from_fn(|i| {
-        let j = CONST_PROOF_SIZE_LOG_N - i - 1;
+        let j = CONST_PROOF_SIZE_LOG_N - 1 - i;
         gemini_eval_challenge_powers[j] * (Fr::ONE - sumcheck_u_challenges[j])
             + sumcheck_u_challenges[j] // invertible w.h.p.
     });
 
     batch_inversion(&mut inverted_denominators);
 
-    for i in (1..=CONST_PROOF_SIZE_LOG_N).rev() {
+    for i in (1..=log_size as usize).rev() {
         let challenge_power = gemini_eval_challenge_powers[i - 1];
         let u = sumcheck_u_challenges[i - 1];
 
@@ -59,10 +59,9 @@ pub(crate) fn compute_fold_pos_evaluations(
             - gemini_evaluations[i - 1] * (challenge_power * (Fr::ONE - u) - u);
         // Divide by the denominator
         batched_eval_round_acc *= inverted_denominators[CONST_PROOF_SIZE_LOG_N - i];
-        if i as u64 <= log_size {
-            *batched_eval_accumulator = batched_eval_round_acc;
-            fold_pos_evaluations[i - 1] = batched_eval_round_acc;
-        }
+
+        *batched_eval_accumulator = batched_eval_round_acc;
+        fold_pos_evaluations[i - 1] = batched_eval_round_acc;
     }
 
     fold_pos_evaluations
