@@ -20,7 +20,7 @@ use crate::{
         PERMUTATION_ARGUMENT_VALUE_SEPARATOR,
     },
     proof::{CommonProofData, ZKProof},
-    utils::IntoBEBytes32,
+    utils::{to_hex_string, IntoBEBytes32},
     EVMWord, ParsedProof, Pubs,
 };
 use ark_bn254_ext::{CurveHooks, Fr};
@@ -266,7 +266,6 @@ pub(crate) fn generate_transcript<H: CurveHooks>(
         generate_gate_challenges(previous_challenge, log_n);
 
     let mut libra_challenge = Fr::ZERO;
-    // let mut previous_challenge = previous_challenge;
     if let ParsedProof::ZK(zk_proof) = parsed_proof {
         (libra_challenge, previous_challenge) =
             generate_libra_challenge(previous_challenge, zk_proof);
@@ -546,14 +545,15 @@ fn generate_gate_challenges(
         .chain_update(previous_challenge.into_be_bytes32())
         .finalize()
         .into();
+    let next_previous_challenge = Fr::from_be_bytes_mod_order(&hash);
 
-    (gate_challenges[0], _) = split_challenge(Fr::from_be_bytes_mod_order(&hash));
+    (gate_challenges[0], _) = split_challenge(next_previous_challenge);
 
     for i in 1..log_n as usize {
         gate_challenges[i] = gate_challenges[i - 1].square();
     }
 
-    (gate_challenges, previous_challenge)
+    (gate_challenges, next_previous_challenge)
 }
 
 // Function exclusive to `ZKProof`.

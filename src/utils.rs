@@ -227,3 +227,10 @@ pub(crate) fn read_fq_util(data: &[u8]) -> Result<Fq, FieldError> {
 
     Ok(U256::new(limbs).into_fq())
 }
+
+// Utility for debugging.
+#[allow(unused)]
+pub(crate) fn to_hex_string(data: &[u8]) -> String {
+    let hex_string: String = data.iter().map(|b| format!("{b:02x}")).collect();
+    format!("0x{hex_string}")
+}

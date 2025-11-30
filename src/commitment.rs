@@ -16,7 +16,7 @@
 
 use crate::constants::CONST_PROOF_SIZE_LOG_N;
 use ark_bn254_ext::Fr;
-use ark_ff::{batch_inversion, Field, MontFp};
+use ark_ff::{batch_inversion, AdditiveGroup, Field, MontFp};
 
 const TWO: Fr = MontFp!("2");
 
@@ -25,9 +25,9 @@ const TWO: Fr = MontFp!("2");
 pub(crate) fn compute_squares(r: Fr, log_n: u64) -> Vec<Fr> {
     let mut squares = Vec::<Fr>::with_capacity(log_n as usize);
 
-    squares[0] = r;
+    squares.push(r);
     for i in 1..log_n as usize {
-        squares[i] = squares[i - 1].square();
+        squares.push(squares[i - 1].square());
     }
 
     squares
@@ -42,12 +42,15 @@ pub(crate) fn compute_fold_pos_evaluations(
     log_size: u64,
 ) -> Vec<Fr> {
     let mut fold_pos_evaluations = Vec::<Fr>::with_capacity(log_size as usize);
+    fold_pos_evaluations.resize(log_size as usize, Fr::ZERO);
 
-    let mut inverted_denominators: [_; CONST_PROOF_SIZE_LOG_N] = core::array::from_fn(|i| {
-        let j = CONST_PROOF_SIZE_LOG_N - 1 - i;
-        gemini_eval_challenge_powers[j] * (Fr::ONE - sumcheck_u_challenges[j])
-            + sumcheck_u_challenges[j] // invertible w.h.p.
-    });
+    let mut inverted_denominators = (0..log_size)
+        .map(|i| {
+            let j = (log_size - 1 - i) as usize;
+            gemini_eval_challenge_powers[j] * (Fr::ONE - sumcheck_u_challenges[j])
+                + sumcheck_u_challenges[j] // invertible w.h.p.
+        })
+        .collect::<Vec<Fr>>();
 
     batch_inversion(&mut inverted_denominators);
 
@@ -58,7 +61,7 @@ pub(crate) fn compute_fold_pos_evaluations(
         let mut batched_eval_round_acc = challenge_power * (*batched_eval_accumulator) * TWO
             - gemini_evaluations[i - 1] * (challenge_power * (Fr::ONE - u) - u);
         // Divide by the denominator
-        batched_eval_round_acc *= inverted_denominators[CONST_PROOF_SIZE_LOG_N - i];
+        batched_eval_round_acc *= inverted_denominators[log_size as usize - i];
 
         *batched_eval_accumulator = batched_eval_round_acc;
         fold_pos_evaluations[i - 1] = batched_eval_round_acc;

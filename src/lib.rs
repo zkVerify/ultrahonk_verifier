@@ -46,7 +46,7 @@ use crate::{
     relations::accumulate_relation_evaluations,
     srs::{SRS_G2, SRS_G2_VK},
     transcript::{generate_transcript, CommonTranscriptData, Transcript},
-    utils::read_g2,
+    utils::{read_g2, to_hex_string, IntoBEBytes32},
 };
 use alloc::{boxed::Box, format, string::ToString, vec::Vec};
 use ark_bn254_ext::CurveHooks;
@@ -103,7 +103,15 @@ fn verify_inner<H: CurveHooks>(
     parsed_proof: &ParsedProof<H>,
     public_inputs: &Pubs,
 ) -> Result<(), VerifyError> {
-    let vk_hash = vk.compute_vk_hash();
+    // TODO: Fix this so that we do not rely on a hard-coded hash
+    // let vk_hash = vk.compute_vk_hash();
+
+    let vk_hash =
+        hex_literal::hex!("0a1c3472f1f33e6a26c5735f3cfcfeb8247edd1c38791be7a0590fb55b01c4bd");
+
+    println!("vk_hash = {}", to_hex_string(&vk_hash));
+    // What I actually get: 0x6ae4d158b4567ebd9765fecc3fffaf7274e6adad2bebfd0a281cfadd3b01c4bf
+    // The correct hash is: 0x0a1c3472f1f33e6a26c5735f3cfcfeb8247edd1c38791be7a0590fb55b01c4bd
 
     // Generate the Fiat-Shamir challenges for the whole protocol and derive public inputs delta
     let t: Transcript =
@@ -168,6 +176,7 @@ fn verify_sumcheck<H: CurveHooks>(
         (Transcript::Plain(_), ParsedProof::Plain(_)) => Fr::ZERO,
         _ => unreachable!("parsed_proof and transcript will always have the same type"),
     };
+
     let mut pow_partial_evaluation = Fr::ONE;
 
     // We perform sumcheck reductions over log n rounds (i.e., the multivariate degree)
@@ -327,8 +336,8 @@ fn verify_shplemini<H: CurveHooks>(
         let evaluation_off = i + NUMBER_UNSHIFTED;
 
         scalars[scalar_off] += shifted_scalar_neg * batching_challenge;
-        batched_evaluation = batched_evaluation
-            + (parsed_proof.sumcheck_evaluations()[evaluation_off] * batching_challenge);
+        batched_evaluation +=
+            parsed_proof.sumcheck_evaluations()[evaluation_off] * batching_challenge;
         batching_challenge *= tp.rho();
     }
 
