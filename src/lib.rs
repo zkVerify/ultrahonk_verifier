@@ -46,7 +46,7 @@ use crate::{
     relations::accumulate_relation_evaluations,
     srs::{SRS_G2, SRS_G2_VK},
     transcript::{generate_transcript, CommonTranscriptData, Transcript},
-    utils::{read_g2, to_hex_string, IntoBEBytes32},
+    utils::{read_g2, to_hex_string},
 };
 use alloc::{boxed::Box, format, string::ToString, vec::Vec};
 use ark_bn254_ext::CurveHooks;

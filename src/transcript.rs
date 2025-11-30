@@ -20,7 +20,7 @@ use crate::{
         PERMUTATION_ARGUMENT_VALUE_SEPARATOR,
     },
     proof::{CommonProofData, ZKProof},
-    utils::{to_hex_string, IntoBEBytes32},
+    utils::IntoBEBytes32,
     EVMWord, ParsedProof, Pubs,
 };
 use ark_bn254_ext::{CurveHooks, Fr};
