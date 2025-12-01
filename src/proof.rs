@@ -18,13 +18,13 @@ extern crate alloc;
 
 use crate::{
     constants::{
-        BATCHED_RELATION_PARTIAL_LENGTH, CONST_PROOF_SIZE_LOG_N, EVM_WORD_SIZE, GROUP_ELEMENT_SIZE,
+        BATCHED_RELATION_PARTIAL_LENGTH, CONST_PROOF_SIZE_LOG_N, EVM_WORD_SIZE, FIELD_ELEMENT_SIZE,
         NUMBER_OF_ENTITIES, NUM_ELEMENTS_COMM, NUM_ELEMENTS_FR, NUM_LIBRA_COMMITMENTS,
         NUM_LIBRA_EVALUATIONS, NUM_WITNESS_ENTITIES, PAIRING_POINTS_SIZE,
         ZK_BATCHED_RELATION_PARTIAL_LENGTH,
     },
     errors::GroupError,
-    utils::{read_g1, read_g1_by_splitting, read_u256, IntoBEBytes32, IntoU256},
+    utils::{read_g1_by_splitting, read_u256, to_hex_string, IntoBEBytes32, IntoU256},
     EVMWord, Fr, G1, U256,
 };
 use alloc::{
@@ -34,11 +34,7 @@ use alloc::{
 use ark_bn254_ext::{CurveHooks, Fq};
 use ark_ec::AffineRepr;
 use ark_ff::{AdditiveGroup, MontFp, PrimeField};
-use core::{
-    array::from_fn,
-    fmt,
-    ops::{BitOr, Shl},
-};
+use core::{array::from_fn, fmt};
 use sha3::{Digest, Keccak256};
 use snafu::Snafu;
 
@@ -107,26 +103,9 @@ impl TryFrom<[u8; 128]> for G1ProofPoint {
     }
 }
 
-// Utility function for parsing `G1ProofPoint` from raw bytes.
-fn read_g1_proof_point(data: &mut &[u8]) -> Result<G1ProofPoint, ProofError> {
-    const CHUNK_SIZE: usize = 2 * GROUP_ELEMENT_SIZE;
-    let chunk: [_; CHUNK_SIZE] = data
-        .split_off(..CHUNK_SIZE)
-        .ok_or(ProofError::InvalidSliceLength {
-            expected_length: CHUNK_SIZE,
-            actual_length: data.len(),
-        })?
-        .try_into()
-        .unwrap();
-
-    G1ProofPoint::try_from(chunk).map_err(|_| ProofError::OtherError {
-        message: "Failed reading G1 Proof Point".to_string(),
-    })
-}
-
 // Utility function for parsing `Fr` from raw bytes.
 fn read_fr(data: &mut &[u8]) -> Result<Fr, ProofError> {
-    const CHUNK_SIZE: usize = 32;
+    const CHUNK_SIZE: usize = FIELD_ELEMENT_SIZE;
     let chunk = data
         .split_off(..CHUNK_SIZE)
         .ok_or(ProofError::InvalidSliceLength {
@@ -222,32 +201,6 @@ impl fmt::Display for PlainProofCommitmentField {
             PlainProofCommitmentField::KZG_QUOTIENT => write!(f, "KZG_QUOTIENT"),
         }
     }
-}
-
-/// Utility function for "reassembling" a `G1ProofPoint` into a `G1`.
-pub(crate) fn convert_proof_point<H: CurveHooks>(
-    g1_proof_point: G1ProofPoint,
-) -> Result<G1<H>, GroupError> {
-    const N: u32 = 136;
-    let x = Fq::from_bigint(g1_proof_point.x_0.bitor(g1_proof_point.x_1.shl(N)))
-        .expect("Should always succeed");
-    let y = Fq::from_bigint(g1_proof_point.y_0.bitor(g1_proof_point.y_1.shl(N)))
-        .expect("Should always succeed");
-
-    if x == Fq::ZERO && y == Fq::ZERO {
-        return Ok(G1::<H>::identity());
-    }
-
-    let point = G1::<H>::new_unchecked(x, y);
-
-    if !point.is_on_curve() {
-        return Err(GroupError::NotOnCurve);
-    }
-
-    // This is always true for G1 with the BN254 curve.
-    debug_assert!(point.is_in_correct_subgroup_assuming_on_curve());
-
-    Ok(point)
 }
 
 pub(crate) trait CommonProofData<H: CurveHooks> {

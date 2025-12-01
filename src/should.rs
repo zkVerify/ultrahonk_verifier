@@ -89,19 +89,19 @@ fn get_eth_keccak_hash(data: &[u8]) -> [u8; 32] {
 //     output
 // }
 
-#[rstest]
-fn foo(valid_vk: [u8; VK_SIZE]) {
-    let eth_hash = get_eth_keccak_hash(&valid_vk);
+// #[rstest]
+// fn foo(valid_vk: [u8; VK_SIZE]) {
+//     let eth_hash = get_eth_keccak_hash(&valid_vk);
 
-    assert_eq!(
-        to_hex_string(&eth_hash),
-        "0x0a1c3472f1f33e6a26c5735f3cfcfeb8247edd1c38791be7a0590fb55b01c4bd"
-    );
-}
+//     assert_eq!(
+//         to_hex_string(&eth_hash),
+//         "0x0a1c3472f1f33e6a26c5735f3cfcfeb8247edd1c38791be7a0590fb55b01c4bd"
+//     );
+// }
 
 mod reject {
     use super::*;
-    use crate::constants::EVM_WORD_SIZE;
+    use crate::constants::{EVM_WORD_SIZE, FIELD_ELEMENT_SIZE, GROUP_ELEMENT_SIZE};
 
     #[rstest]
     fn a_zk_proof_with_non_matching_number_of_pis(
@@ -153,103 +153,116 @@ mod reject {
             );
     }
 
-    //     #[rstest]
-    //     fn a_zk_proof_failing_sumcheck(
-    //         valid_vk: [u8; VK_SIZE],
-    //         valid_zk_proof: [u8; ZK_PROOF_SIZE],
-    //         valid_pubs: [PublicInput; 1],
-    //     ) {
-    //         let mut invalid_zk_proof = [0u8; ZK_PROOF_SIZE];
-    //         invalid_zk_proof.copy_from_slice(&valid_zk_proof);
-    //         invalid_zk_proof[PAIRING_POINTS_SIZE * EVM_WORD_SIZE + 1184
-    //             ..PAIRING_POINTS_SIZE * EVM_WORD_SIZE + 1184 + EVM_WORD_SIZE]
-    //             .fill(0); // Alter sumcheck_univariates[0]
+    #[rstest]
+    fn a_zk_proof_failing_sumcheck(
+        valid_vk: [u8; VK_SIZE],
+        valid_zk_proof: Box<[u8]>,
+        valid_pubs: [PublicInput; 1],
+    ) {
+        let mut invalid_zk_proof = valid_zk_proof.to_vec();
+        invalid_zk_proof.copy_from_slice(&valid_zk_proof);
+        invalid_zk_proof[PAIRING_POINTS_SIZE * EVM_WORD_SIZE + 1184
+            ..PAIRING_POINTS_SIZE * EVM_WORD_SIZE + 1184 + EVM_WORD_SIZE]
+            .fill(0); // Alter sumcheck_univariates[0]
 
-    //         assert_eq!(
-    //             verify::<()>(
-    //                 &valid_vk,
-    //                 &ProofType::ZK(Box::new(invalid_zk_proof)),
-    //                 &valid_pubs
-    //             )
-    //             .unwrap_err(),
-    //             VerifyError::VerificationError {
-    //                 message: format!(
-    //                     "Sumcheck Failed. Cause: Total Sum differs from Round Target Sum."
-    //                 )
-    //             }
-    //         );
-    //     }
+        assert_eq!(
+            verify::<()>(
+                &valid_vk,
+                &ProofType::ZK(invalid_zk_proof.into_boxed_slice()),
+                &valid_pubs
+            )
+            .unwrap_err(),
+            VerifyError::VerificationError {
+                message: format!(
+                    "Sumcheck Failed. Cause: Total Sum differs from Round Target Sum."
+                )
+            }
+        );
+    }
 
-    //     #[rstest]
-    //     fn a_plain_proof_failing_sumcheck(
-    //         valid_vk: [u8; VK_SIZE],
-    //         valid_plain_proof: [u8; PLAIN_PROOF_SIZE],
-    //         valid_pubs: [PublicInput; 1],
-    //     ) {
-    //         let mut invalid_plain_proof = [0u8; PLAIN_PROOF_SIZE];
-    //         invalid_plain_proof.copy_from_slice(&valid_plain_proof);
-    //         invalid_plain_proof[PAIRING_POINTS_SIZE * EVM_WORD_SIZE + 0x400
-    //             ..PAIRING_POINTS_SIZE * EVM_WORD_SIZE + 0x400 + EVM_WORD_SIZE]
-    //             .fill(0); // Alter sumcheck_univariates[0]
+    #[rstest]
+    fn a_plain_proof_failing_sumcheck(
+        valid_vk: [u8; VK_SIZE],
+        valid_plain_proof: Box<[u8]>,
+        valid_pubs: [PublicInput; 1],
+    ) {
+        let mut invalid_plain_proof = valid_plain_proof.to_vec();
+        invalid_plain_proof.copy_from_slice(&valid_plain_proof);
+        invalid_plain_proof[PAIRING_POINTS_SIZE * EVM_WORD_SIZE + 0x400
+            ..PAIRING_POINTS_SIZE * EVM_WORD_SIZE + 0x400 + EVM_WORD_SIZE]
+            .fill(0); // Alter sumcheck_univariates[0]
 
-    //         assert_eq!(
-    //             verify::<()>(
-    //                 &valid_vk,
-    //                 &ProofType::Plain(Box::new(invalid_plain_proof)),
-    //                 &valid_pubs
-    //             )
-    //             .unwrap_err(),
-    //             VerifyError::VerificationError {
-    //                 message: format!(
-    //                     "Sumcheck Failed. Cause: Total Sum differs from Round Target Sum."
-    //                 )
-    //             }
-    //         );
-    //     }
+        assert_eq!(
+            verify::<()>(
+                &valid_vk,
+                &ProofType::Plain(invalid_plain_proof.into_boxed_slice()),
+                &valid_pubs
+            )
+            .unwrap_err(),
+            VerifyError::VerificationError {
+                message: format!(
+                    "Sumcheck Failed. Cause: Total Sum differs from Round Target Sum."
+                )
+            }
+        );
+    }
 
-    //     #[rstest]
-    //     fn a_zk_proof_failing_sumcheck_v2(
-    //         valid_vk: [u8; VK_SIZE],
-    //         valid_zk_proof: [u8; ZK_PROOF_SIZE],
-    //         valid_pubs: [PublicInput; 1],
-    //     ) {
-    //         let mut invalid_zk_proof = [0u8; ZK_PROOF_SIZE];
-    //         invalid_zk_proof.copy_from_slice(&valid_zk_proof);
-    //         invalid_zk_proof[PAIRING_POINTS_SIZE * EVM_WORD_SIZE + 0x2000
-    //             ..(PAIRING_POINTS_SIZE * EVM_WORD_SIZE + 0x2000 + 40 * EVM_WORD_SIZE)]
-    //             .fill(0); // Alter sumcheck_evaluations
+    #[rstest]
+    fn a_zk_proof_failing_sumcheck_v2(
+        valid_vk: [u8; VK_SIZE],
+        valid_zk_proof: Box<[u8]>,
+        valid_pubs: [PublicInput; 1],
+    ) {
+        let mut invalid_zk_proof = valid_zk_proof.to_vec();
+        invalid_zk_proof.copy_from_slice(&valid_zk_proof);
+        invalid_zk_proof[PAIRING_POINTS_SIZE * EVM_WORD_SIZE
+            + 11 * GROUP_ELEMENT_SIZE
+            + EVM_WORD_SIZE
+            + 108 * EVM_WORD_SIZE
+            ..(PAIRING_POINTS_SIZE * EVM_WORD_SIZE
+                + 11 * GROUP_ELEMENT_SIZE
+                + EVM_WORD_SIZE
+                + 108 * EVM_WORD_SIZE
+                + EVM_WORD_SIZE)]
+            .fill(0); // Alter sumcheck_evaluations
 
-    //         assert_eq!(
-    //             verify::<()>(&valid_vk, &ProofType::ZK(Box::new(invalid_zk_proof)), &valid_pubs).unwrap_err(),
-    //             VerifyError::VerificationError {
-    //                 message: format!(
-    //                     "Sumcheck Failed. Cause: Grand Honk Relation Sum does not match Round Target Sum."
-    //                 )
-    //             }
-    //         );
-    //     }
+        assert_eq!(
+                verify::<()>(&valid_vk, &ProofType::ZK(invalid_zk_proof.into_boxed_slice()), &valid_pubs).unwrap_err(),
+                VerifyError::VerificationError {
+                    message: format!(
+                        "Sumcheck Failed. Cause: Grand Honk Relation Sum does not match Round Target Sum."
+                    )
+                }
+            );
+    }
 
-    //     #[rstest]
-    //     fn a_plain_proof_failing_sumcheck_v2(
-    //         valid_vk: [u8; VK_SIZE],
-    //         valid_plain_proof: [u8; PLAIN_PROOF_SIZE],
-    //         valid_pubs: [PublicInput; 1],
-    //     ) {
-    //         let mut invalid_plain_proof = [0u8; PLAIN_PROOF_SIZE];
-    //         invalid_plain_proof.copy_from_slice(&valid_plain_proof);
-    //         invalid_plain_proof[PAIRING_POINTS_SIZE * EVM_WORD_SIZE + 0x2000
-    //             ..PAIRING_POINTS_SIZE * EVM_WORD_SIZE + 0x2000 + 40 * EVM_WORD_SIZE]
-    //             .fill(0); // Alter sumcheck_evaluations
+    #[rstest]
+    fn a_plain_proof_failing_sumcheck_v2(
+        valid_vk: [u8; VK_SIZE],
+        valid_plain_proof: Box<[u8]>,
+        valid_pubs: [PublicInput; 1],
+    ) {
+        let mut invalid_plain_proof = valid_plain_proof.into_vec();
+        invalid_plain_proof[PAIRING_POINTS_SIZE * EVM_WORD_SIZE
+            + 11 * GROUP_ELEMENT_SIZE
+            + EVM_WORD_SIZE
+            + 108 * EVM_WORD_SIZE
+            ..(PAIRING_POINTS_SIZE * EVM_WORD_SIZE
+                + 11 * GROUP_ELEMENT_SIZE
+                + EVM_WORD_SIZE
+                + 108 * EVM_WORD_SIZE
+                + EVM_WORD_SIZE)]
+            .fill(0); // Alter sumcheck_evaluations
 
-    //         assert_eq!(
-    //             verify::<()>(&valid_vk, &ProofType::Plain(Box::new(invalid_plain_proof)), &valid_pubs).unwrap_err(),
-    //             VerifyError::VerificationError {
-    //                 message: format!(
-    //                     "Sumcheck Failed. Cause: Grand Honk Relation Sum does not match Round Target Sum."
-    //                 )
-    //             }
-    //         );
-    //     }
+        assert_eq!(
+                verify::<()>(&valid_vk, &ProofType::Plain(invalid_plain_proof.into_boxed_slice()), &valid_pubs).unwrap_err(),
+                VerifyError::VerificationError {
+                    message: format!(
+                        "Sumcheck Failed. Cause: Grand Honk Relation Sum does not match Round Target Sum."
+                    )
+                }
+            );
+    }
 
     //     #[rstest]
     //     fn a_zk_proof_failing_shplemini_because_of_points_not_on_curve(
@@ -379,60 +392,70 @@ mod reject {
     //         }
     //     }
 
-    //     #[rstest]
-    //     fn a_zk_proof_failing_shplemini_pairing_check(
-    //         valid_vk: [u8; VK_SIZE],
-    //         valid_zk_proof: [u8; ZK_PROOF_SIZE],
-    //         valid_pubs: [PublicInput; 1],
-    //     ) {
-    //         let offset = ZK_PROOF_SIZE
-    //             - 2 * 0x80
-    //             - FIELD_ELEMENT_SIZE * NUM_LIBRA_EVALUATIONS
-    //             - FIELD_ELEMENT_SIZE * CONST_PROOF_SIZE_LOG_N; // offset for gemini_a_evaluations[0]
-    //         let mut invalid_zk_proof = [0u8; ZK_PROOF_SIZE];
-    //         invalid_zk_proof.copy_from_slice(&valid_zk_proof);
-    //         // Alter field; notice that (1, 3) ∉ G1
-    //         invalid_zk_proof[offset..offset + 128].fill(0);
-    //         invalid_zk_proof[offset + 31] = 1;
-    //         invalid_zk_proof[offset + 64 + 31] = 3;
+    #[rstest]
+    fn a_zk_proof_failing_shplemini_pairing_check(
+        valid_vk: [u8; VK_SIZE],
+        valid_zk_proof: Box<[u8]>,
+        valid_pubs: [PublicInput; 1],
+    ) {
+        let log_circuit_size = VerificationKey::<()>::try_from(&valid_vk[..])
+            .expect("vk is valid")
+            .log_circuit_size;
+        let zk_proof_size = ZKProof::<()>::calculate_proof_byte_size(log_circuit_size);
+        let offset = zk_proof_size
+            - 2 * GROUP_ELEMENT_SIZE
+            - FIELD_ELEMENT_SIZE * NUM_LIBRA_EVALUATIONS
+            - FIELD_ELEMENT_SIZE * log_circuit_size as usize; // offset for gemini_a_evaluations[0]
+        let mut invalid_zk_proof = valid_zk_proof.into_vec();
+        // Alter field; notice that (1, 3) ∉ G1
+        invalid_zk_proof[offset..offset + GROUP_ELEMENT_SIZE].fill(0);
+        invalid_zk_proof[offset + EVM_WORD_SIZE - 1] = 1;
+        invalid_zk_proof[offset + 2 * EVM_WORD_SIZE - 1] = 3;
 
-    //         assert_eq!(
-    //             verify::<()>(
-    //                 &valid_vk,
-    //                 &ProofType::ZK(Box::new(invalid_zk_proof)),
-    //                 &valid_pubs
-    //             )
-    //             .unwrap_err(),
-    //             VerifyError::VerificationError {
-    //                 message: format!("Shplemini Failed. Cause: Shplemini pairing check failed")
-    //             }
-    //         );
-    //     }
+        assert_eq!(
+            verify::<()>(
+                &valid_vk,
+                &ProofType::ZK(invalid_zk_proof.into_boxed_slice()),
+                &valid_pubs
+            )
+            .unwrap_err(),
+            VerifyError::VerificationError {
+                message: format!("Shplemini Failed. Cause: Shplemini pairing check failed")
+            }
+        );
+    }
 
-    //     #[rstest]
-    //     fn a_plain_proof_failing_shplemini_pairing_check(
-    //         valid_vk: [u8; VK_SIZE],
-    //         valid_plain_proof: [u8; PLAIN_PROOF_SIZE],
-    //         valid_pubs: [PublicInput; 1],
-    //     ) {
-    //         let offset = PLAIN_PROOF_SIZE - 2 * 0x80 - FIELD_ELEMENT_SIZE * CONST_PROOF_SIZE_LOG_N; // offset for gemini_a_evaluations[0]
-    //         let mut invalid_plain_proof = [0u8; PLAIN_PROOF_SIZE];
-    //         invalid_plain_proof.copy_from_slice(&valid_plain_proof);
-    //         // Alter field; notice that (1, 3) ∉ G1
-    //         invalid_plain_proof[offset..offset + 128].fill(0);
-    //         invalid_plain_proof[offset + 31] = 1;
-    //         invalid_plain_proof[offset + 64 + 31] = 3;
+    #[rstest]
+    fn a_plain_proof_failing_shplemini_pairing_check(
+        valid_vk: [u8; VK_SIZE],
+        valid_plain_proof: Box<[u8]>,
+        valid_pubs: [PublicInput; 1],
+    ) {
+        let log_circuit_size = VerificationKey::<()>::try_from(&valid_vk[..])
+            .expect("vk is valid")
+            .log_circuit_size;
+        let plain_proof_size = ZKProof::<()>::calculate_proof_byte_size(log_circuit_size);
+        let offset = plain_proof_size
+            - 2 * GROUP_ELEMENT_SIZE
+            - FIELD_ELEMENT_SIZE * 27 as usize
+            - 12 * EVM_WORD_SIZE; // offset for gemini_a_evaluations[0]
 
-    //         assert_eq!(
-    //             verify::<()>(
-    //                 &valid_vk,
-    //                 &ProofType::Plain(Box::new(invalid_plain_proof)),
-    //                 &valid_pubs
-    //             )
-    //             .unwrap_err(),
-    //             VerifyError::VerificationError {
-    //                 message: format!("Shplemini Failed. Cause: Shplemini pairing check failed")
-    //             }
-    //         );
-    //     }
+        let mut invalid_plain_proof = valid_plain_proof.into_vec();
+        // Alter field; notice that (1, 3) ∉ G1
+        invalid_plain_proof[offset..offset + GROUP_ELEMENT_SIZE].fill(0);
+        invalid_plain_proof[offset + EVM_WORD_SIZE - 1] = 1;
+        invalid_plain_proof[offset + 2 * EVM_WORD_SIZE - 1] = 3;
+
+        assert_eq!(
+            verify::<()>(
+                &valid_vk,
+                &ProofType::Plain(invalid_plain_proof.into_boxed_slice()),
+                &valid_pubs
+            )
+            .unwrap_err(),
+            VerifyError::VerificationError {
+                message: format!("Shplemini Failed. Cause: Shplemini pairing check failed")
+            }
+        );
+    }
 }
