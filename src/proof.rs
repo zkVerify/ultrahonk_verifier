@@ -285,7 +285,7 @@ impl<H: CurveHooks> ZKProof<H> {
         // Pairing points
         proof_length += PAIRING_POINTS_SIZE; // pairing inputs carried on public inputs
 
-        return proof_length;
+        proof_length
     }
 
     // Calculate proof size in bytes based on log_n.
@@ -639,7 +639,7 @@ impl<H: CurveHooks> PlainProof<H> {
         // Pairing points
         proof_length += PAIRING_POINTS_SIZE; // pairing inputs carried on public inputs
 
-        return proof_length;
+        proof_length
     }
 
     // Calculate proof size in bytes based on log_n.

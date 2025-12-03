@@ -74,7 +74,7 @@ pub fn verify<H: CurveHooks + Default>(
     // TODO: Check upper bound for vk.circuit_size?
 
     // TODO: Move check inside the from_bytes functions if possible.
-    check_proof_size::<H>(&proof, vk.log_circuit_size)?;
+    check_proof_size::<H>(proof, vk.log_circuit_size)?;
 
     check_public_input_number(&vk, pubs)?;
 

@@ -70,7 +70,7 @@ impl fmt::Display for GroupError {
                     "Invalid Slice Length. Actual length: {actual_length}, Expected length: {expected_length}",
                 )
             }
-            GroupError::NotOnCurve {} => {
+            GroupError::NotOnCurve => {
                 write!(f, "Point not on curve")
             }
             GroupError::CoordinateExceedsModulus {
