@@ -412,14 +412,15 @@ fn verify_shplemini<H: CurveHooks>(
     let mut boundary = NUMBER_UNSHIFTED + 1 + offset;
 
     let num_non_dummy_rounds = vk.log_circuit_size as usize - 1;
-    let mut inverted_denominators = Vec::with_capacity(2 * num_non_dummy_rounds);
-    inverted_denominators.extend((0..num_non_dummy_rounds).flat_map(|i| {
-        // Both invertible w.h.p.
-        [
-            tp.shplonk_z() - powers_of_evaluation_challenge[i + 1],
-            tp.shplonk_z() + powers_of_evaluation_challenge[i + 1],
-        ]
-    }));
+    let mut inverted_denominators: Vec<_> = (0..num_non_dummy_rounds)
+        .flat_map(|i| {
+            // Both invertible w.h.p.
+            [
+                tp.shplonk_z() - powers_of_evaluation_challenge[i + 1],
+                tp.shplonk_z() + powers_of_evaluation_challenge[i + 1],
+            ]
+        })
+        .collect();
 
     batch_inversion(&mut inverted_denominators);
 
