@@ -15,9 +15,15 @@
 // limitations under the License.
 
 use alloc::string::String;
+use core::fmt;
 use snafu::Snafu;
 
-use crate::U256;
+use crate::{
+    key::VkCommitmentField,
+    proof::ProofCommitmentField,
+    utils::{to_hex_string, IntoBEBytes32},
+    U256,
+};
 
 /// The verification error type
 #[derive(Debug, PartialEq, Snafu)]
@@ -47,9 +53,97 @@ pub enum GroupError {
     },
     NotOnCurve,
     CoordinateExceedsModulus {
-        coordinate: U256,
+        coordinate_value: U256,
         modulus: U256,
     },
+}
+
+impl fmt::Display for GroupError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            GroupError::InvalidSliceLength {
+                actual_length,
+                expected_length,
+            } => {
+                write!(
+                    f,
+                    "Invalid Slice Length. Actual length: {actual_length}, Expected length: {expected_length}",
+                )
+            }
+            GroupError::NotOnCurve {} => {
+                write!(f, "Point not on curve")
+            }
+            GroupError::CoordinateExceedsModulus {
+                coordinate_value,
+                modulus,
+            } => {
+                write!(
+                    f,
+                    "Coordinate value {} exceeds base field modulus {}",
+                    to_hex_string(&coordinate_value.into_be_bytes32()),
+                    modulus
+                )
+            }
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum CommitmentField {
+    Proof(ProofCommitmentField),
+    Vk(VkCommitmentField),
+}
+
+impl From<ProofCommitmentField> for CommitmentField {
+    fn from(pcf: ProofCommitmentField) -> Self {
+        CommitmentField::Proof(pcf)
+    }
+}
+
+impl From<VkCommitmentField> for CommitmentField {
+    fn from(vkcf: VkCommitmentField) -> Self {
+        CommitmentField::Vk(vkcf)
+    }
+}
+
+impl fmt::Display for CommitmentField {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CommitmentField::Proof(field_name) => {
+                write!(f, "{field_name}")
+            }
+            CommitmentField::Vk(field_name) => {
+                write!(f, "{field_name}")
+            }
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ConversionError {
+    pub group: GroupError,
+    pub field: Option<CommitmentField>,
+}
+
+impl fmt::Display for ConversionError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.field {
+            Some(field_name) => {
+                write!(
+                    f,
+                    "Failed to convert data into an EC point for field \"{}\". Cause: {}",
+                    field_name, self.group
+                )
+            }
+            None => {
+                write!(
+                    f,
+                    "Failed to convert data into an EC point. Cause: {}",
+                    self.group
+                )
+            }
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]

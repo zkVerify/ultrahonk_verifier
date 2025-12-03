@@ -434,7 +434,7 @@ mod reject {
         let log_circuit_size = VerificationKey::<()>::try_from(&valid_vk[..])
             .expect("vk is valid")
             .log_circuit_size;
-        let plain_proof_size = ZKProof::<()>::calculate_proof_byte_size(log_circuit_size);
+        let plain_proof_size = PlainProof::<()>::calculate_proof_byte_size(log_circuit_size);
         let offset = plain_proof_size
             - 2 * GROUP_ELEMENT_SIZE
             - FIELD_ELEMENT_SIZE * 27 as usize

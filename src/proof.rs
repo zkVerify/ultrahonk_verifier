@@ -23,14 +23,11 @@ use crate::{
         NUM_LIBRA_EVALUATIONS, NUM_WITNESS_ENTITIES, PAIRING_POINTS_SIZE,
         ZK_BATCHED_RELATION_PARTIAL_LENGTH,
     },
-    errors::GroupError,
-    utils::{read_g1_by_splitting, read_u256, to_hex_string, IntoBEBytes32, IntoU256},
-    EVMWord, Fr, G1, U256,
+    errors::{ConversionError, GroupError},
+    utils::{read_g1_by_splitting, IntoBEBytes32, IntoU256},
+    EVMWord, Fr, G1,
 };
-use alloc::{
-    boxed::Box,
-    string::{String, ToString},
-};
+use alloc::boxed::Box;
 use ark_bn254_ext::{CurveHooks, Fq};
 use ark_ec::AffineRepr;
 use ark_ff::{AdditiveGroup, MontFp, PrimeField};
@@ -46,19 +43,14 @@ pub enum ProofError {
         expected_size: usize,
         actual_size: usize,
     },
-    #[snafu(display("Invalid slice size. Expected: {expected_length}; Got: {actual_length}",))]
-    InvalidSliceLength {
-        expected_length: usize,
-        actual_length: usize,
-    },
-    #[snafu(display("Point for proof commitment field '{field:?}' is not on curve"))]
-    PointNotOnCurve { field: String },
-    #[snafu(display("Other error: {message:?}"))]
-    OtherError { message: String },
+    #[snafu(display("Group element conversion error: {conv_error}"))]
+    GroupConversionError { conv_error: ConversionError },
     #[snafu(display("Shplemini pairing check failed"))]
     ShpleminiPairingCheckFailed,
-    #[snafu(display("Consistency check failed. Cause: {message:?}"))]
+    #[snafu(display("Consistency check failed. Cause: {message}"))]
     ConsistencyCheckFailed { message: &'static str },
+    #[snafu(display("Other error: {message}"))]
+    OtherError { message: String },
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -67,53 +59,18 @@ pub enum ProofType {
     ZK(Box<[u8]>),
 }
 
-// Auxiliary struct for parsing.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct G1ProofPoint {
-    pub x_0: U256,
-    pub x_1: U256,
-    pub y_0: U256,
-    pub y_1: U256,
-}
-
-impl Default for G1ProofPoint {
-    fn default() -> Self {
-        Self {
-            x_0: U256::zero(),
-            x_1: U256::zero(),
-            y_0: U256::zero(),
-            y_1: U256::zero(),
-        }
-    }
-}
-
-impl TryFrom<[u8; 128]> for G1ProofPoint {
-    type Error = ();
-
-    fn try_from(data: [u8; 128]) -> Result<Self, Self::Error> {
-        let x_0 = read_u256(&data[..32])?;
-        let x_1 = read_u256(&data[32..64])?;
-        let y_0 = read_u256(&data[64..96])?;
-        let y_1 = read_u256(&data[96..])?;
-
-        // IMPORTANT: Note that validation is skipped here but
-        // is instead performed when we try to convert to `G1`.
-
-        Ok(Self { x_0, x_1, y_0, y_1 })
-    }
-}
-
 // Utility function for parsing `Fr` from raw bytes.
 fn read_fr(data: &mut &[u8]) -> Result<Fr, ProofError> {
     const CHUNK_SIZE: usize = FIELD_ELEMENT_SIZE;
-    let chunk = data
-        .split_off(..CHUNK_SIZE)
-        .ok_or(ProofError::InvalidSliceLength {
-            expected_length: CHUNK_SIZE,
-            actual_length: data.len(),
-        })?;
+    let chunk = data.split_off(..CHUNK_SIZE).ok_or(
+        ProofError::OtherError {
+            message: "Unable to read field element from data".to_string(),
+        }, // TODO: Change to another (new) variant
+           // expected_length: CHUNK_SIZE,
+           // actual_length: data.len(),
+    )?;
 
-    Ok(Fr::from_be_bytes_mod_order(chunk))
+    Ok(Fr::from_be_bytes_mod_order(chunk)) // Q: Do we want verification to fail if value >= r?
 }
 
 // Utility function for parsing an EVMWord (raw bytes).
@@ -121,9 +78,11 @@ fn read_evm_word(data: &mut &[u8]) -> Result<EVMWord, ProofError> {
     const CHUNK_SIZE: usize = EVM_WORD_SIZE;
     let chunk: EVMWord = data
         .split_off(..CHUNK_SIZE)
-        .ok_or(ProofError::InvalidSliceLength {
-            expected_length: CHUNK_SIZE,
-            actual_length: data.len(),
+        .ok_or(ProofError::OtherError {
+            // TODO: Change to another (new) variant
+            message: "Unable to read EVM word from data".to_string(),
+            // expected_length: CHUNK_SIZE,
+            // actual_length: data.len(),
         })?
         .try_into()
         .expect("Conversion should work at this point");
@@ -132,7 +91,7 @@ fn read_evm_word(data: &mut &[u8]) -> Result<EVMWord, ProofError> {
 }
 
 #[derive(Debug, Hash, Eq, PartialEq)]
-pub enum ZKProofCommitmentField {
+pub enum ProofCommitmentField {
     SHPLONK_Q,
     GEMINI_MASKING_POLY,
     W_1,
@@ -148,57 +107,22 @@ pub enum ZKProofCommitmentField {
     KZG_QUOTIENT,
 }
 
-impl fmt::Display for ZKProofCommitmentField {
+impl fmt::Display for ProofCommitmentField {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ZKProofCommitmentField::SHPLONK_Q => write!(f, "SHPLONK_Q"),
-            ZKProofCommitmentField::GEMINI_MASKING_POLY => write!(f, "GEMINI_MASKING_POLY"),
-            ZKProofCommitmentField::W_1 => write!(f, "W_1"),
-            ZKProofCommitmentField::W_2 => write!(f, "W_2"),
-            ZKProofCommitmentField::W_3 => write!(f, "W_3"),
-            ZKProofCommitmentField::W_4 => write!(f, "W_4"),
-            ZKProofCommitmentField::Z_PERM => write!(f, "Z_PERM"),
-            ZKProofCommitmentField::LOOKUP_INVERSES => write!(f, "LOOKUP_INVERSES"),
-            ZKProofCommitmentField::LOOKUP_READ_COUNTS => write!(f, "LOOKUP_READ_COUNTS"),
-            ZKProofCommitmentField::LOOKUP_READ_TAGS => write!(f, "LOOKUP_READ_TAGS"),
-            ZKProofCommitmentField::LIBRA_COMMITMENTS(i) => write!(f, "LIBRA_COMMITMENTS_{i}"),
-            ZKProofCommitmentField::GEMINI_FOLD_COMMS(i) => write!(f, "GEMINI_FOLD_COMMS_{i}"),
-            ZKProofCommitmentField::KZG_QUOTIENT => write!(f, "KZG_QUOTIENT"),
-        }
-    }
-}
-
-#[derive(Debug, Hash, Eq, PartialEq)]
-pub enum PlainProofCommitmentField {
-    SHPLONK_Q,
-    W_1,
-    W_2,
-    W_3,
-    W_4,
-    Z_PERM,
-    LOOKUP_INVERSES,
-    LOOKUP_READ_COUNTS,
-    LOOKUP_READ_TAGS,
-    GEMINI_FOLD_COMMS(usize),
-    KZG_QUOTIENT,
-}
-
-impl fmt::Display for PlainProofCommitmentField {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            PlainProofCommitmentField::SHPLONK_Q => write!(f, "SHPLONK_Q"),
-            PlainProofCommitmentField::W_1 => write!(f, "W_1"),
-            PlainProofCommitmentField::W_2 => write!(f, "W_2"),
-            PlainProofCommitmentField::W_3 => write!(f, "W_3"),
-            PlainProofCommitmentField::W_4 => write!(f, "W_4"),
-            PlainProofCommitmentField::Z_PERM => write!(f, "Z_PERM"),
-            PlainProofCommitmentField::LOOKUP_INVERSES => write!(f, "LOOKUP_INVERSES"),
-            PlainProofCommitmentField::LOOKUP_READ_COUNTS => write!(f, "LOOKUP_READ_COUNTS"),
-            PlainProofCommitmentField::LOOKUP_READ_TAGS => write!(f, "LOOKUP_READ_TAGS"),
-            PlainProofCommitmentField::GEMINI_FOLD_COMMS(i) => {
-                write!(f, "GEMINI_FOLD_COMMS_{i}")
-            }
-            PlainProofCommitmentField::KZG_QUOTIENT => write!(f, "KZG_QUOTIENT"),
+            ProofCommitmentField::SHPLONK_Q => write!(f, "SHPLONK_Q"),
+            ProofCommitmentField::GEMINI_MASKING_POLY => write!(f, "GEMINI_MASKING_POLY"),
+            ProofCommitmentField::W_1 => write!(f, "W_1"),
+            ProofCommitmentField::W_2 => write!(f, "W_2"),
+            ProofCommitmentField::W_3 => write!(f, "W_3"),
+            ProofCommitmentField::W_4 => write!(f, "W_4"),
+            ProofCommitmentField::Z_PERM => write!(f, "Z_PERM"),
+            ProofCommitmentField::LOOKUP_INVERSES => write!(f, "LOOKUP_INVERSES"),
+            ProofCommitmentField::LOOKUP_READ_COUNTS => write!(f, "LOOKUP_READ_COUNTS"),
+            ProofCommitmentField::LOOKUP_READ_TAGS => write!(f, "LOOKUP_READ_TAGS"),
+            ProofCommitmentField::LIBRA_COMMITMENTS(i) => write!(f, "LIBRA_COMMITMENTS_{i}"),
+            ProofCommitmentField::GEMINI_FOLD_COMMS(i) => write!(f, "GEMINI_FOLD_COMMS_{i}"),
+            ProofCommitmentField::KZG_QUOTIENT => write!(f, "KZG_QUOTIENT"),
         }
     }
 }
@@ -216,7 +140,7 @@ pub(crate) trait CommonProofData<H: CurveHooks> {
     fn z_perm(&self) -> &G1<H>;
     fn sumcheck_univariates<'a>(&'a self) -> Box<dyn Iterator<Item = &'a [Fr]> + 'a>;
     fn sumcheck_evaluations(&self) -> &[Fr; NUMBER_OF_ENTITIES];
-    fn gemini_fold_comms(&self) -> &[G1<H>; CONST_PROOF_SIZE_LOG_N - 1];
+    fn gemini_fold_comms(&self) -> &Vec<G1<H>>;
     fn gemini_a_evaluations(&self) -> &[Fr; CONST_PROOF_SIZE_LOG_N];
     fn shplonk_q(&self) -> &G1<H>;
     fn kzg_quotient(&self) -> &G1<H>;
@@ -247,7 +171,7 @@ pub struct ZKProof<H: CurveHooks> {
     pub gemini_masking_poly: G1<H>,
     pub gemini_masking_eval: Fr,
     // Shplemini
-    pub gemini_fold_comms: [G1<H>; CONST_PROOF_SIZE_LOG_N - 1],
+    pub gemini_fold_comms: Vec<G1<H>>,
     pub gemini_a_evaluations: [Fr; CONST_PROOF_SIZE_LOG_N],
     pub libra_poly_evals: [Fr; NUM_LIBRA_EVALUATIONS],
     pub shplonk_q: G1<H>,
@@ -307,7 +231,7 @@ impl<H: CurveHooks> CommonProofData<H> for ZKProof<H> {
         &self.sumcheck_evaluations
     }
 
-    fn gemini_fold_comms(&self) -> &[G1<H>; CONST_PROOF_SIZE_LOG_N - 1] {
+    fn gemini_fold_comms(&self) -> &Vec<G1<H>> {
         &self.gemini_fold_comms
     }
 
@@ -385,203 +309,82 @@ impl<H: CurveHooks> ZKProof<H> {
         });
 
         // Commitments
-        let w1 = read_g1_by_splitting::<H>(&mut proof_bytes).map_err(|e| match e {
-            GroupError::NotOnCurve => ProofError::PointNotOnCurve {
-                field: ZKProofCommitmentField::W_1.to_string(),
-            },
-            GroupError::CoordinateExceedsModulus {
-                coordinate: _,
-                modulus: _,
-            } => ProofError::OtherError {
-                message: format!(
-                    "Coordinate for field '{:?}' exceeds base field modulus",
-                    ZKProofCommitmentField::W_1.to_string()
-                ),
-            },
-            GroupError::InvalidSliceLength {
-                actual_length,
-                expected_length,
-            } => ProofError::InvalidSliceLength {
-                expected_length,
-                actual_length,
-            },
+        let w1 = read_g1_by_splitting::<H>(&mut proof_bytes).map_err(|e| {
+            ProofError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(ProofCommitmentField::W_1.into()),
+                },
+            }
         })?;
-        let w2 = read_g1_by_splitting::<H>(&mut proof_bytes).map_err(|e| match e {
-            GroupError::NotOnCurve => ProofError::PointNotOnCurve {
-                field: ZKProofCommitmentField::W_2.to_string(),
-            },
-            GroupError::CoordinateExceedsModulus {
-                coordinate: _,
-                modulus: _,
-            } => ProofError::OtherError {
-                message: format!(
-                    "Coordinate for field '{:?}' exceeds base field modulus",
-                    ZKProofCommitmentField::W_2.to_string()
-                ),
-            },
-            GroupError::InvalidSliceLength {
-                actual_length,
-                expected_length,
-            } => ProofError::InvalidSliceLength {
-                expected_length,
-                actual_length,
-            },
+        let w2 = read_g1_by_splitting::<H>(&mut proof_bytes).map_err(|e| {
+            ProofError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(ProofCommitmentField::W_2.into()),
+                },
+            }
         })?;
-        let w3 = read_g1_by_splitting::<H>(&mut proof_bytes).map_err(|e| match e {
-            GroupError::NotOnCurve => ProofError::PointNotOnCurve {
-                field: ZKProofCommitmentField::W_3.to_string(),
-            },
-            GroupError::CoordinateExceedsModulus {
-                coordinate: _,
-                modulus: _,
-            } => ProofError::OtherError {
-                message: format!(
-                    "Coordinate for field '{:?}' exceeds base field modulus",
-                    ZKProofCommitmentField::W_3.to_string()
-                ),
-            },
-            GroupError::InvalidSliceLength {
-                actual_length,
-                expected_length,
-            } => ProofError::InvalidSliceLength {
-                expected_length,
-                actual_length,
-            },
+        let w3 = read_g1_by_splitting::<H>(&mut proof_bytes).map_err(|e| {
+            ProofError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(ProofCommitmentField::W_3.into()),
+                },
+            }
         })?;
-
         // Lookup / Permutation Helper Commitments
-        let lookup_read_counts =
-            read_g1_by_splitting::<H>(&mut proof_bytes).map_err(|e| match e {
-                GroupError::NotOnCurve => ProofError::PointNotOnCurve {
-                    field: ZKProofCommitmentField::LOOKUP_READ_COUNTS.to_string(),
+        let lookup_read_counts = read_g1_by_splitting::<H>(&mut proof_bytes).map_err(|e| {
+            ProofError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(ProofCommitmentField::LOOKUP_READ_COUNTS.into()),
                 },
-                GroupError::CoordinateExceedsModulus {
-                    coordinate: _,
-                    modulus: _,
-                } => ProofError::OtherError {
-                    message: format!(
-                        "Coordinate for field '{:?}' exceeds base field modulus",
-                        ZKProofCommitmentField::LOOKUP_READ_COUNTS.to_string()
-                    ),
-                },
-                GroupError::InvalidSliceLength {
-                    actual_length,
-                    expected_length,
-                } => ProofError::InvalidSliceLength {
-                    expected_length,
-                    actual_length,
-                },
-            })?;
-        let lookup_read_tags =
-            read_g1_by_splitting::<H>(&mut proof_bytes).map_err(|e| match e {
-                GroupError::NotOnCurve => ProofError::PointNotOnCurve {
-                    field: ZKProofCommitmentField::LOOKUP_READ_TAGS.to_string(),
-                },
-                GroupError::CoordinateExceedsModulus {
-                    coordinate: _,
-                    modulus: _,
-                } => ProofError::OtherError {
-                    message: format!(
-                        "Coordinate for field '{:?}' exceeds base field modulus",
-                        ZKProofCommitmentField::LOOKUP_READ_TAGS.to_string()
-                    ),
-                },
-                GroupError::InvalidSliceLength {
-                    actual_length,
-                    expected_length,
-                } => ProofError::InvalidSliceLength {
-                    expected_length,
-                    actual_length,
-                },
-            })?;
-        let w4 = read_g1_by_splitting::<H>(&mut proof_bytes).map_err(|e| match e {
-            GroupError::NotOnCurve => ProofError::PointNotOnCurve {
-                field: ZKProofCommitmentField::W_4.to_string(),
-            },
-            GroupError::CoordinateExceedsModulus {
-                coordinate: _,
-                modulus: _,
-            } => ProofError::OtherError {
-                message: format!(
-                    "Coordinate for field '{:?}' exceeds base field modulus",
-                    ZKProofCommitmentField::W_4.to_string()
-                ),
-            },
-            GroupError::InvalidSliceLength {
-                actual_length,
-                expected_length,
-            } => ProofError::InvalidSliceLength {
-                expected_length,
-                actual_length,
-            },
+            }
         })?;
-        let lookup_inverses = read_g1_by_splitting::<H>(&mut proof_bytes).map_err(|e| match e {
-            GroupError::NotOnCurve => ProofError::PointNotOnCurve {
-                field: ZKProofCommitmentField::LOOKUP_INVERSES.to_string(),
-            },
-            GroupError::CoordinateExceedsModulus {
-                coordinate: _,
-                modulus: _,
-            } => ProofError::OtherError {
-                message: format!(
-                    "Coordinate for field '{:?}' exceeds base field modulus",
-                    ZKProofCommitmentField::LOOKUP_INVERSES.to_string()
-                ),
-            },
-            GroupError::InvalidSliceLength {
-                actual_length,
-                expected_length,
-            } => ProofError::InvalidSliceLength {
-                expected_length,
-                actual_length,
-            },
+        let lookup_read_tags = read_g1_by_splitting::<H>(&mut proof_bytes).map_err(|e| {
+            ProofError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(ProofCommitmentField::LOOKUP_READ_TAGS.into()),
+                },
+            }
         })?;
-        let z_perm = read_g1_by_splitting::<H>(&mut proof_bytes).map_err(|e| match e {
-            GroupError::NotOnCurve => ProofError::PointNotOnCurve {
-                field: ZKProofCommitmentField::Z_PERM.to_string(),
-            },
-            GroupError::CoordinateExceedsModulus {
-                coordinate: _,
-                modulus: _,
-            } => ProofError::OtherError {
-                message: format!(
-                    "Coordinate for field '{:?}' exceeds base field modulus",
-                    ZKProofCommitmentField::Z_PERM.to_string()
-                ),
-            },
-            GroupError::InvalidSliceLength {
-                actual_length,
-                expected_length,
-            } => ProofError::InvalidSliceLength {
-                expected_length,
-                actual_length,
-            },
+        let w4 = read_g1_by_splitting::<H>(&mut proof_bytes).map_err(|e| {
+            ProofError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(ProofCommitmentField::W_4.into()),
+                },
+            }
+        })?;
+        let lookup_inverses = read_g1_by_splitting::<H>(&mut proof_bytes).map_err(|e| {
+            ProofError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(ProofCommitmentField::LOOKUP_INVERSES.into()),
+                },
+            }
+        })?;
+        let z_perm = read_g1_by_splitting::<H>(&mut proof_bytes).map_err(|e| {
+            ProofError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(ProofCommitmentField::Z_PERM.into()),
+                },
+            }
         })?;
 
         let mut libra_commitments = [G1::<H>::default(); NUM_LIBRA_COMMITMENTS];
 
-        libra_commitments[0] =
-            read_g1_by_splitting::<H>(&mut proof_bytes).map_err(|e| match e {
-                GroupError::NotOnCurve => ProofError::PointNotOnCurve {
-                    field: ZKProofCommitmentField::LIBRA_COMMITMENTS(0).to_string(),
+        libra_commitments[0] = read_g1_by_splitting::<H>(&mut proof_bytes).map_err(|e| {
+            ProofError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(ProofCommitmentField::LIBRA_COMMITMENTS(0).into()),
                 },
-                GroupError::CoordinateExceedsModulus {
-                    coordinate: _,
-                    modulus: _,
-                } => ProofError::OtherError {
-                    message: format!(
-                        "Coordinate for field '{:?}' exceeds base field modulus",
-                        ZKProofCommitmentField::LIBRA_COMMITMENTS(0).to_string()
-                    ),
-                },
-                GroupError::InvalidSliceLength {
-                    actual_length,
-                    expected_length,
-                } => ProofError::InvalidSliceLength {
-                    expected_length,
-                    actual_length,
-                },
-            })?;
+            }
+        })?;
 
         let libra_sum = read_fr(&mut proof_bytes)?;
 
@@ -605,101 +408,47 @@ impl<H: CurveHooks> ZKProof<H> {
 
         let libra_evaluation = read_fr(&mut proof_bytes)?;
 
-        libra_commitments[1] =
-            read_g1_by_splitting::<H>(&mut proof_bytes).map_err(|e| match e {
-                GroupError::NotOnCurve => ProofError::PointNotOnCurve {
-                    field: ZKProofCommitmentField::LIBRA_COMMITMENTS(1).to_string(),
+        libra_commitments[1] = read_g1_by_splitting::<H>(&mut proof_bytes).map_err(|e| {
+            ProofError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(ProofCommitmentField::LIBRA_COMMITMENTS(1).into()),
                 },
-                GroupError::CoordinateExceedsModulus {
-                    coordinate: _,
-                    modulus: _,
-                } => ProofError::OtherError {
-                    message: format!(
-                        "Coordinate for field '{:?}' exceeds base field modulus",
-                        ZKProofCommitmentField::LIBRA_COMMITMENTS(1).to_string()
-                    ),
+            }
+        })?;
+        libra_commitments[2] = read_g1_by_splitting::<H>(&mut proof_bytes).map_err(|e| {
+            ProofError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(ProofCommitmentField::LIBRA_COMMITMENTS(2).into()),
                 },
-                GroupError::InvalidSliceLength {
-                    actual_length,
-                    expected_length,
-                } => ProofError::InvalidSliceLength {
-                    expected_length,
-                    actual_length,
-                },
-            })?;
-        libra_commitments[2] =
-            read_g1_by_splitting::<H>(&mut proof_bytes).map_err(|e| match e {
-                GroupError::NotOnCurve => ProofError::PointNotOnCurve {
-                    field: ZKProofCommitmentField::LIBRA_COMMITMENTS(2).to_string(),
-                },
-                GroupError::CoordinateExceedsModulus {
-                    coordinate: _,
-                    modulus: _,
-                } => ProofError::OtherError {
-                    message: format!(
-                        "Coordinate for field '{:?}' exceeds base field modulus",
-                        ZKProofCommitmentField::LIBRA_COMMITMENTS(2).to_string()
-                    ),
-                },
-                GroupError::InvalidSliceLength {
-                    actual_length,
-                    expected_length,
-                } => ProofError::InvalidSliceLength {
-                    expected_length,
-                    actual_length,
-                },
-            })?;
+            }
+        })?;
 
-        let gemini_masking_poly =
-            read_g1_by_splitting::<H>(&mut proof_bytes).map_err(|e| match e {
-                GroupError::NotOnCurve => ProofError::PointNotOnCurve {
-                    field: ZKProofCommitmentField::GEMINI_MASKING_POLY.to_string(),
+        let gemini_masking_poly = read_g1_by_splitting::<H>(&mut proof_bytes).map_err(|e| {
+            ProofError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(ProofCommitmentField::GEMINI_MASKING_POLY.into()),
                 },
-                GroupError::CoordinateExceedsModulus {
-                    coordinate: _,
-                    modulus: _,
-                } => ProofError::OtherError {
-                    message: format!(
-                        "Coordinate for field '{:?}' exceeds base field modulus",
-                        ZKProofCommitmentField::GEMINI_MASKING_POLY.to_string()
-                    ),
-                },
-                GroupError::InvalidSliceLength {
-                    actual_length,
-                    expected_length,
-                } => ProofError::InvalidSliceLength {
-                    expected_length,
-                    actual_length,
-                },
-            })?;
+            }
+        })?;
 
         let gemini_masking_eval = read_fr(&mut proof_bytes)?;
 
         // Gemini
         // Read gemini fold univariates
-        let mut gemini_fold_comms = [G1::<H>::identity(); CONST_PROOF_SIZE_LOG_N - 1];
+        let mut gemini_fold_comms = Vec::with_capacity(log_n as usize - 1);
 
         for i in 0..(log_n as usize - 1) {
-            let point = read_g1_by_splitting::<H>(&mut proof_bytes).map_err(|e| match e {
-                GroupError::NotOnCurve => ProofError::PointNotOnCurve {
-                    field: ZKProofCommitmentField::GEMINI_FOLD_COMMS(i).to_string(),
-                },
-                GroupError::CoordinateExceedsModulus { .. } => ProofError::OtherError {
-                    message: format!(
-                        "Coordinate for field '{:?}' exceeds base field modulus",
-                        ZKProofCommitmentField::GEMINI_FOLD_COMMS(i).to_string()
-                    ),
-                },
-                GroupError::InvalidSliceLength {
-                    actual_length,
-                    expected_length,
-                } => ProofError::InvalidSliceLength {
-                    expected_length,
-                    actual_length,
-                },
-            })?;
-
-            gemini_fold_comms[i] = point;
+            gemini_fold_comms.push(read_g1_by_splitting::<H>(&mut proof_bytes).map_err(|e| {
+                ProofError::GroupConversionError {
+                    conv_error: ConversionError {
+                        group: e,
+                        field: Some(ProofCommitmentField::GEMINI_FOLD_COMMS(i).into()),
+                    },
+                }
+            })?);
         }
 
         // Read gemini a evaluations
@@ -717,48 +466,23 @@ impl<H: CurveHooks> ZKProof<H> {
         });
 
         // Shplonk
-        let shplonk_q = read_g1_by_splitting::<H>(&mut proof_bytes).map_err(|e| match e {
-            GroupError::NotOnCurve => ProofError::PointNotOnCurve {
-                field: ZKProofCommitmentField::SHPLONK_Q.to_string(),
-            },
-            GroupError::CoordinateExceedsModulus {
-                coordinate: _,
-                modulus: _,
-            } => ProofError::OtherError {
-                message: format!(
-                    "Coordinate for field '{:?}' exceeds base field modulus",
-                    ZKProofCommitmentField::SHPLONK_Q.to_string()
-                ),
-            },
-            GroupError::InvalidSliceLength {
-                actual_length,
-                expected_length,
-            } => ProofError::InvalidSliceLength {
-                expected_length,
-                actual_length,
-            },
+        let shplonk_q = read_g1_by_splitting::<H>(&mut proof_bytes).map_err(|e| {
+            ProofError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(ProofCommitmentField::SHPLONK_Q.into()),
+                },
+            }
         })?;
+
         // KZG
-        let kzg_quotient = read_g1_by_splitting::<H>(&mut proof_bytes).map_err(|e| match e {
-            GroupError::NotOnCurve => ProofError::PointNotOnCurve {
-                field: ZKProofCommitmentField::KZG_QUOTIENT.to_string(),
-            },
-            GroupError::CoordinateExceedsModulus {
-                coordinate: _,
-                modulus: _,
-            } => ProofError::OtherError {
-                message: format!(
-                    "Coordinate for field '{:?}' exceeds base field modulus",
-                    ZKProofCommitmentField::KZG_QUOTIENT.to_string()
-                ),
-            },
-            GroupError::InvalidSliceLength {
-                actual_length,
-                expected_length,
-            } => ProofError::InvalidSliceLength {
-                expected_length,
-                actual_length,
-            },
+        let kzg_quotient = read_g1_by_splitting::<H>(&mut proof_bytes).map_err(|e| {
+            ProofError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(ProofCommitmentField::KZG_QUOTIENT.into()),
+                },
+            }
         })?;
 
         Ok(Self {
@@ -806,7 +530,7 @@ pub struct PlainProof<H: CurveHooks> {
     pub sumcheck_univariates: Vec<Vec<Fr>>,
     pub sumcheck_evaluations: [Fr; NUMBER_OF_ENTITIES],
     // Shplemini
-    pub gemini_fold_comms: [G1<H>; CONST_PROOF_SIZE_LOG_N - 1],
+    pub gemini_fold_comms: Vec<G1<H>>,
     pub gemini_a_evaluations: [Fr; CONST_PROOF_SIZE_LOG_N],
     pub shplonk_q: G1<H>,
     pub kzg_quotient: G1<H>,
@@ -865,7 +589,7 @@ impl<H: CurveHooks> CommonProofData<H> for PlainProof<H> {
         &self.sumcheck_evaluations
     }
 
-    fn gemini_fold_comms(&self) -> &[G1<H>; CONST_PROOF_SIZE_LOG_N - 1] {
+    fn gemini_fold_comms(&self) -> &Vec<G1<H>> {
         &self.gemini_fold_comms
     }
 
@@ -939,175 +663,71 @@ impl<H: CurveHooks> PlainProof<H> {
         });
 
         // Commitments
-        let w1 = read_g1_by_splitting(&mut proof_bytes).map_err(|e| match e {
-            GroupError::NotOnCurve => ProofError::PointNotOnCurve {
-                field: ZKProofCommitmentField::W_1.to_string(),
-            },
-            GroupError::CoordinateExceedsModulus {
-                coordinate: _,
-                modulus: _,
-            } => ProofError::OtherError {
-                message: format!(
-                    "Coordinate for field '{:?}' exceeds base field modulus",
-                    ZKProofCommitmentField::W_1.to_string()
-                ),
-            },
-            GroupError::InvalidSliceLength {
-                actual_length,
-                expected_length,
-            } => ProofError::InvalidSliceLength {
-                expected_length,
-                actual_length,
-            },
+        let w1 = read_g1_by_splitting(&mut proof_bytes).map_err(|e| {
+            ProofError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(ProofCommitmentField::W_1.into()),
+                },
+            }
         })?;
-        let w2 = read_g1_by_splitting(&mut proof_bytes).map_err(|e| match e {
-            GroupError::NotOnCurve => ProofError::PointNotOnCurve {
-                field: ZKProofCommitmentField::W_2.to_string(),
-            },
-            GroupError::CoordinateExceedsModulus {
-                coordinate: _,
-                modulus: _,
-            } => ProofError::OtherError {
-                message: format!(
-                    "Coordinate for field '{:?}' exceeds base field modulus",
-                    ZKProofCommitmentField::W_2.to_string()
-                ),
-            },
-            GroupError::InvalidSliceLength {
-                actual_length,
-                expected_length,
-            } => ProofError::InvalidSliceLength {
-                expected_length,
-                actual_length,
-            },
+        let w2 = read_g1_by_splitting(&mut proof_bytes).map_err(|e| {
+            ProofError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(ProofCommitmentField::W_2.into()),
+                },
+            }
         })?;
-        let w3 = read_g1_by_splitting(&mut proof_bytes).map_err(|e| match e {
-            GroupError::NotOnCurve => ProofError::PointNotOnCurve {
-                field: ZKProofCommitmentField::W_3.to_string(),
-            },
-            GroupError::CoordinateExceedsModulus {
-                coordinate: _,
-                modulus: _,
-            } => ProofError::OtherError {
-                message: format!(
-                    "Coordinate for field '{:?}' exceeds base field modulus",
-                    ZKProofCommitmentField::W_3.to_string()
-                ),
-            },
-            GroupError::InvalidSliceLength {
-                actual_length,
-                expected_length,
-            } => ProofError::InvalidSliceLength {
-                expected_length,
-                actual_length,
-            },
+        let w3 = read_g1_by_splitting(&mut proof_bytes).map_err(|e| {
+            ProofError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(ProofCommitmentField::W_3.into()),
+                },
+            }
         })?;
 
         // Lookup / Permutation Helper Commitments
-        let lookup_read_counts = read_g1_by_splitting(&mut proof_bytes).map_err(|e| match e {
-            GroupError::NotOnCurve => ProofError::PointNotOnCurve {
-                field: ZKProofCommitmentField::LOOKUP_READ_COUNTS.to_string(),
-            },
-            GroupError::CoordinateExceedsModulus {
-                coordinate: _,
-                modulus: _,
-            } => ProofError::OtherError {
-                message: format!(
-                    "Coordinate for field '{:?}' exceeds base field modulus",
-                    ZKProofCommitmentField::LOOKUP_READ_COUNTS.to_string()
-                ),
-            },
-            GroupError::InvalidSliceLength {
-                actual_length,
-                expected_length,
-            } => ProofError::InvalidSliceLength {
-                expected_length,
-                actual_length,
-            },
+        let lookup_read_counts = read_g1_by_splitting(&mut proof_bytes).map_err(|e| {
+            ProofError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(ProofCommitmentField::LOOKUP_READ_COUNTS.into()),
+                },
+            }
         })?;
-        let lookup_read_tags = read_g1_by_splitting(&mut proof_bytes).map_err(|e| match e {
-            GroupError::NotOnCurve => ProofError::PointNotOnCurve {
-                field: ZKProofCommitmentField::LOOKUP_READ_TAGS.to_string(),
-            },
-            GroupError::CoordinateExceedsModulus {
-                coordinate: _,
-                modulus: _,
-            } => ProofError::OtherError {
-                message: format!(
-                    "Coordinate for field '{:?}' exceeds base field modulus",
-                    ZKProofCommitmentField::LOOKUP_READ_TAGS.to_string()
-                ),
-            },
-            GroupError::InvalidSliceLength {
-                actual_length,
-                expected_length,
-            } => ProofError::InvalidSliceLength {
-                expected_length,
-                actual_length,
-            },
+        let lookup_read_tags = read_g1_by_splitting(&mut proof_bytes).map_err(|e| {
+            ProofError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(ProofCommitmentField::LOOKUP_READ_TAGS.into()),
+                },
+            }
         })?;
-        let w4 = read_g1_by_splitting(&mut proof_bytes).map_err(|e| match e {
-            GroupError::NotOnCurve => ProofError::PointNotOnCurve {
-                field: ZKProofCommitmentField::W_4.to_string(),
-            },
-            GroupError::CoordinateExceedsModulus {
-                coordinate: _,
-                modulus: _,
-            } => ProofError::OtherError {
-                message: format!(
-                    "Coordinate for field '{:?}' exceeds base field modulus",
-                    ZKProofCommitmentField::W_4.to_string()
-                ),
-            },
-            GroupError::InvalidSliceLength {
-                actual_length,
-                expected_length,
-            } => ProofError::InvalidSliceLength {
-                expected_length,
-                actual_length,
-            },
+        let w4 = read_g1_by_splitting(&mut proof_bytes).map_err(|e| {
+            ProofError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(ProofCommitmentField::W_4.into()),
+                },
+            }
         })?;
-        let lookup_inverses = read_g1_by_splitting(&mut proof_bytes).map_err(|e| match e {
-            GroupError::NotOnCurve => ProofError::PointNotOnCurve {
-                field: ZKProofCommitmentField::LOOKUP_INVERSES.to_string(),
-            },
-            GroupError::CoordinateExceedsModulus {
-                coordinate: _,
-                modulus: _,
-            } => ProofError::OtherError {
-                message: format!(
-                    "Coordinate for field '{:?}' exceeds base field modulus",
-                    ZKProofCommitmentField::LOOKUP_INVERSES.to_string()
-                ),
-            },
-            GroupError::InvalidSliceLength {
-                actual_length,
-                expected_length,
-            } => ProofError::InvalidSliceLength {
-                expected_length,
-                actual_length,
-            },
+        let lookup_inverses = read_g1_by_splitting(&mut proof_bytes).map_err(|e| {
+            ProofError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(ProofCommitmentField::LOOKUP_INVERSES.into()),
+                },
+            }
         })?;
-        let z_perm = read_g1_by_splitting(&mut proof_bytes).map_err(|e| match e {
-            GroupError::NotOnCurve => ProofError::PointNotOnCurve {
-                field: ZKProofCommitmentField::Z_PERM.to_string(),
-            },
-            GroupError::CoordinateExceedsModulus {
-                coordinate: _,
-                modulus: _,
-            } => ProofError::OtherError {
-                message: format!(
-                    "Coordinate for field '{:?}' exceeds base field modulus",
-                    ZKProofCommitmentField::Z_PERM.to_string()
-                ),
-            },
-            GroupError::InvalidSliceLength {
-                actual_length,
-                expected_length,
-            } => ProofError::InvalidSliceLength {
-                expected_length,
-                actual_length,
-            },
+        let z_perm = read_g1_by_splitting(&mut proof_bytes).map_err(|e| {
+            ProofError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(ProofCommitmentField::Z_PERM.into()),
+                },
+            }
         })?;
 
         // Sumcheck univariates
@@ -1130,29 +750,17 @@ impl<H: CurveHooks> PlainProof<H> {
 
         // Gemini
         // Read gemini fold univariates
-        let mut gemini_fold_comms = [G1::<H>::identity(); CONST_PROOF_SIZE_LOG_N - 1];
+        let mut gemini_fold_comms = Vec::with_capacity(log_n as usize - 1);
 
         for i in 0..(log_n as usize - 1) {
-            let point = read_g1_by_splitting::<H>(&mut proof_bytes).map_err(|e| match e {
-                GroupError::NotOnCurve => ProofError::PointNotOnCurve {
-                    field: ZKProofCommitmentField::GEMINI_FOLD_COMMS(i).to_string(),
-                },
-                GroupError::CoordinateExceedsModulus { .. } => ProofError::OtherError {
-                    message: format!(
-                        "Coordinate for field '{:?}' exceeds base field modulus",
-                        ZKProofCommitmentField::GEMINI_FOLD_COMMS(i).to_string()
-                    ),
-                },
-                GroupError::InvalidSliceLength {
-                    actual_length,
-                    expected_length,
-                } => ProofError::InvalidSliceLength {
-                    expected_length,
-                    actual_length,
-                },
-            })?;
-
-            gemini_fold_comms[i] = point;
+            gemini_fold_comms.push(read_g1_by_splitting::<H>(&mut proof_bytes).map_err(|e| {
+                ProofError::GroupConversionError {
+                    conv_error: ConversionError {
+                        group: e,
+                        field: Some(ProofCommitmentField::GEMINI_FOLD_COMMS(i).into()),
+                    },
+                }
+            })?);
         }
 
         // Read gemini a evaluations
@@ -1166,49 +774,23 @@ impl<H: CurveHooks> PlainProof<H> {
         });
 
         // Shplonk
-        let shplonk_q = read_g1_by_splitting(&mut proof_bytes).map_err(|e| match e {
-            GroupError::NotOnCurve => ProofError::PointNotOnCurve {
-                field: ZKProofCommitmentField::SHPLONK_Q.to_string(),
-            },
-            GroupError::CoordinateExceedsModulus {
-                coordinate: _,
-                modulus: _,
-            } => ProofError::OtherError {
-                message: format!(
-                    "Coordinate for field '{:?}' exceeds base field modulus",
-                    ZKProofCommitmentField::SHPLONK_Q.to_string()
-                ),
-            },
-            GroupError::InvalidSliceLength {
-                actual_length,
-                expected_length,
-            } => ProofError::InvalidSliceLength {
-                expected_length,
-                actual_length,
-            },
+        let shplonk_q = read_g1_by_splitting(&mut proof_bytes).map_err(|e| {
+            ProofError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(ProofCommitmentField::SHPLONK_Q.into()),
+                },
+            }
         })?;
 
         // KZG
-        let kzg_quotient = read_g1_by_splitting(&mut proof_bytes).map_err(|e| match e {
-            GroupError::NotOnCurve => ProofError::PointNotOnCurve {
-                field: ZKProofCommitmentField::KZG_QUOTIENT.to_string(),
-            },
-            GroupError::CoordinateExceedsModulus {
-                coordinate: _,
-                modulus: _,
-            } => ProofError::OtherError {
-                message: format!(
-                    "Coordinate for field '{:?}' exceeds base field modulus",
-                    ZKProofCommitmentField::KZG_QUOTIENT.to_string()
-                ),
-            },
-            GroupError::InvalidSliceLength {
-                actual_length,
-                expected_length,
-            } => ProofError::InvalidSliceLength {
-                expected_length,
-                actual_length,
-            },
+        let kzg_quotient = read_g1_by_splitting(&mut proof_bytes).map_err(|e| {
+            ProofError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(ProofCommitmentField::KZG_QUOTIENT.into()),
+                },
+            }
         })?;
 
         Ok(Self {
@@ -1352,7 +934,7 @@ impl<H: CurveHooks> CommonProofData<H> for ParsedProof<H> {
         }
     }
 
-    fn gemini_fold_comms(&self) -> &[G1<H>; CONST_PROOF_SIZE_LOG_N - 1] {
+    fn gemini_fold_comms(&self) -> &Vec<G1<H>> {
         match self {
             Self::ZK(p) => p.gemini_fold_comms(),
             Self::Plain(p) => p.gemini_fold_comms(),
@@ -1397,13 +979,25 @@ pub(crate) fn convert_pairing_points_to_g1<H: CurveHooks>(
 
     let lhs_x = Fq::from_bigint(lhs_x)
         .ok_or(())
-        .map_err(|_| ProofError::OtherError {
-            message: "Invalid x coordinate for Pairing Object LHS (not in Fq)".to_string(),
+        .map_err(|_| ProofError::GroupConversionError {
+            conv_error: ConversionError {
+                group: GroupError::CoordinateExceedsModulus {
+                    coordinate_value: lhs_x,
+                    modulus: Fq::MODULUS,
+                },
+                field: None,
+            },
         })?;
     let lhs_y = Fq::from_bigint(lhs_y)
         .ok_or(())
-        .map_err(|_| ProofError::OtherError {
-            message: "Invalid y coordinate for Pairing Object LHS (not in Fq)".to_string(),
+        .map_err(|_| ProofError::GroupConversionError {
+            conv_error: ConversionError {
+                group: GroupError::CoordinateExceedsModulus {
+                    coordinate_value: lhs_y,
+                    modulus: Fq::MODULUS,
+                },
+                field: None,
+            },
         })?;
 
     // If (0, 0) is given, we interpret this as the point at infinity:
@@ -1415,8 +1009,11 @@ pub(crate) fn convert_pairing_points_to_g1<H: CurveHooks>(
 
         // Validate point
         if !p0.is_on_curve() {
-            return Err(ProofError::PointNotOnCurve {
-                field: "Pairing Object LHS is not a curve point".to_string(),
+            return Err(ProofError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: GroupError::NotOnCurve,
+                    field: None,
+                },
             });
         }
         // This is always true for G1 with the BN254 curve.
@@ -1435,13 +1032,25 @@ pub(crate) fn convert_pairing_points_to_g1<H: CurveHooks>(
 
     let rhs_x = Fq::from_bigint(rhs_x)
         .ok_or(())
-        .map_err(|_| ProofError::OtherError {
-            message: "Invalid x coordinate for Pairing Object RHS (not in Fq)".to_string(),
+        .map_err(|_| ProofError::GroupConversionError {
+            conv_error: ConversionError {
+                group: GroupError::CoordinateExceedsModulus {
+                    coordinate_value: rhs_x,
+                    modulus: Fq::MODULUS,
+                },
+                field: None,
+            },
         })?;
     let rhs_y = Fq::from_bigint(rhs_y)
         .ok_or(())
-        .map_err(|_| ProofError::OtherError {
-            message: "Invalid x coordinate for Pairing Object RHS (not in Fq)".to_string(),
+        .map_err(|_| ProofError::GroupConversionError {
+            conv_error: ConversionError {
+                group: GroupError::CoordinateExceedsModulus {
+                    coordinate_value: rhs_y,
+                    modulus: Fq::MODULUS,
+                },
+                field: None,
+            },
         })?;
 
     // If (0, 0) is given, we interpret this as the point at infinity:
@@ -1453,8 +1062,11 @@ pub(crate) fn convert_pairing_points_to_g1<H: CurveHooks>(
 
         // Validate point
         if !p1.is_on_curve() {
-            return Err(ProofError::PointNotOnCurve {
-                field: "Pairing Object RHS is not a curve point".to_string(),
+            return Err(ProofError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: GroupError::NotOnCurve,
+                    field: None,
+                },
             });
         }
         // This is always true for G1 with the BN254 curve.

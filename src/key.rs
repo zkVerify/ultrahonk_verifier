@@ -17,10 +17,12 @@
 #![allow(non_camel_case_types)]
 
 use crate::{
-    utils::{read_g1, read_u64_from_evm_word, IntoBEBytes32},
+    errors::ConversionError,
+    utils::{read_g1_by_splitting, read_u64_from_evm_word, IntoBEBytes32},
     EVMWord, G1, U256, VK_SIZE,
 };
 use ark_bn254_ext::CurveHooks;
+use core::fmt;
 use sha3::{digest::Update, Digest, Keccak256};
 use snafu::Snafu;
 
@@ -28,16 +30,16 @@ use snafu::Snafu;
 pub enum VerificationKeyError {
     #[snafu(display("Buffer too short"))]
     BufferTooShort,
-    #[snafu(display("Point for field '{field:?}' is not on curve"))]
-    PointNotOnCurve { field: &'static str },
     #[snafu(display("Invalid circuit size. Must be a power of 2."))]
     InvalidLogCircuitSize,
-    #[snafu(display("Could not parse vk"))]
+    #[snafu(display("Group element conversion error: {conv_error}"))]
+    GroupConversionError { conv_error: ConversionError },
+    #[snafu(display("Parsing error"))]
     ParsingError,
 }
 
-#[derive(Debug, Hash, Eq, PartialEq)]
-pub enum CommitmentField {
+#[derive(Debug, Hash, Eq, PartialEq, Clone)]
+pub enum VkCommitmentField {
     Q_M,
     Q_C,
     Q_L,
@@ -68,37 +70,72 @@ pub enum CommitmentField {
     Lagrange_Last,
 }
 
-impl CommitmentField {
+impl fmt::Display for VkCommitmentField {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            VkCommitmentField::Q_M => write!(f, "Q_M"),
+            VkCommitmentField::Q_C => write!(f, "Q_C"),
+            VkCommitmentField::Q_L => write!(f, "Q_L"),
+            VkCommitmentField::Q_R => write!(f, "Q_R"),
+            VkCommitmentField::Q_O => write!(f, "Q_O"),
+            VkCommitmentField::Q_4 => write!(f, "Q_4"),
+            VkCommitmentField::Q_LOOKUP => write!(f, "Q_LOOKUP"),
+            VkCommitmentField::Q_ARITH => write!(f, "Q_ARITH"),
+            VkCommitmentField::Q_DELTARANGE => write!(f, "Q_DELTARANGE"),
+            VkCommitmentField::Q_ELLIPTIC => write!(f, "Q_ELLIPTIC"),
+            VkCommitmentField::Q_MEMORY => write!(f, "Q_MEMORY"),
+            VkCommitmentField::Q_NNF => write!(f, "Q_NNF"),
+            VkCommitmentField::Q_POSEIDON2EXTERNAL => write!(f, "Q_POSEIDON2EXTERNAL"),
+            VkCommitmentField::Q_POSEIDON2INTERNAL => write!(f, "Q_POSEIDON2INTERNAL"),
+            VkCommitmentField::S_1 => write!(f, "S_1"),
+            VkCommitmentField::S_2 => write!(f, "S_2"),
+            VkCommitmentField::S_3 => write!(f, "S_3"),
+            VkCommitmentField::S_4 => write!(f, "S_4"),
+            VkCommitmentField::ID_1 => write!(f, "ID_1"),
+            VkCommitmentField::ID_2 => write!(f, "ID_2"),
+            VkCommitmentField::ID_3 => write!(f, "ID_3"),
+            VkCommitmentField::ID_4 => write!(f, "ID_4"),
+            VkCommitmentField::T_1 => write!(f, "T_1"),
+            VkCommitmentField::T_2 => write!(f, "T_2"),
+            VkCommitmentField::T_3 => write!(f, "T_3"),
+            VkCommitmentField::T_4 => write!(f, "T_4"),
+            VkCommitmentField::Lagrange_First => write!(f, "Lagrange_First"),
+            VkCommitmentField::Lagrange_Last => write!(f, "Lagrange_Last"),
+        }
+    }
+}
+
+impl VkCommitmentField {
     pub fn str(&self) -> &'static str {
         match self {
-            CommitmentField::Q_M => "Q_M",
-            CommitmentField::Q_C => "Q_C",
-            CommitmentField::Q_L => "Q_L",
-            CommitmentField::Q_R => "Q_R",
-            CommitmentField::Q_O => "Q_O",
-            CommitmentField::Q_4 => "Q_4",
-            CommitmentField::Q_LOOKUP => "Q_LOOKUP",
-            CommitmentField::Q_ARITH => "Q_ARITH",
-            CommitmentField::Q_DELTARANGE => "Q_DELTARANGE",
-            CommitmentField::Q_ELLIPTIC => "Q_ELLIPTIC",
-            CommitmentField::Q_MEMORY => "Q_MEMORY",
-            CommitmentField::Q_NNF => "Q_NNF",
-            CommitmentField::Q_POSEIDON2EXTERNAL => "Q_POSEIDON2EXTERNAL",
-            CommitmentField::Q_POSEIDON2INTERNAL => "Q_POSEIDON2INTERNAL",
-            CommitmentField::S_1 => "S_1",
-            CommitmentField::S_2 => "S_2",
-            CommitmentField::S_3 => "S_3",
-            CommitmentField::S_4 => "S_4",
-            CommitmentField::ID_1 => "ID_1",
-            CommitmentField::ID_2 => "ID_2",
-            CommitmentField::ID_3 => "ID_3",
-            CommitmentField::ID_4 => "ID_4",
-            CommitmentField::T_1 => "T_1",
-            CommitmentField::T_2 => "T_2",
-            CommitmentField::T_3 => "T_3",
-            CommitmentField::T_4 => "T_4",
-            CommitmentField::Lagrange_First => "Lagrange_First",
-            CommitmentField::Lagrange_Last => "Lagrange_Last",
+            VkCommitmentField::Q_M => "Q_M",
+            VkCommitmentField::Q_C => "Q_C",
+            VkCommitmentField::Q_L => "Q_L",
+            VkCommitmentField::Q_R => "Q_R",
+            VkCommitmentField::Q_O => "Q_O",
+            VkCommitmentField::Q_4 => "Q_4",
+            VkCommitmentField::Q_LOOKUP => "Q_LOOKUP",
+            VkCommitmentField::Q_ARITH => "Q_ARITH",
+            VkCommitmentField::Q_DELTARANGE => "Q_DELTARANGE",
+            VkCommitmentField::Q_ELLIPTIC => "Q_ELLIPTIC",
+            VkCommitmentField::Q_MEMORY => "Q_MEMORY",
+            VkCommitmentField::Q_NNF => "Q_NNF",
+            VkCommitmentField::Q_POSEIDON2EXTERNAL => "Q_POSEIDON2EXTERNAL",
+            VkCommitmentField::Q_POSEIDON2INTERNAL => "Q_POSEIDON2INTERNAL",
+            VkCommitmentField::S_1 => "S_1",
+            VkCommitmentField::S_2 => "S_2",
+            VkCommitmentField::S_3 => "S_3",
+            VkCommitmentField::S_4 => "S_4",
+            VkCommitmentField::ID_1 => "ID_1",
+            VkCommitmentField::ID_2 => "ID_2",
+            VkCommitmentField::ID_3 => "ID_3",
+            VkCommitmentField::ID_4 => "ID_4",
+            VkCommitmentField::T_1 => "T_1",
+            VkCommitmentField::T_2 => "T_2",
+            VkCommitmentField::T_3 => "T_3",
+            VkCommitmentField::T_4 => "T_4",
+            VkCommitmentField::Lagrange_First => "Lagrange_First",
+            VkCommitmentField::Lagrange_Last => "Lagrange_Last",
         }
     }
 }
@@ -147,141 +184,253 @@ pub struct VerificationKey<H: CurveHooks> {
 impl<H: CurveHooks> TryFrom<&[u8]> for VerificationKey<H> {
     type Error = VerificationKeyError;
 
-    fn try_from(raw_vk: &[u8]) -> Result<Self, Self::Error> {
+    fn try_from(mut raw_vk: &[u8]) -> Result<Self, Self::Error> {
         if raw_vk.len() < VK_SIZE {
             return Err(VerificationKeyError::BufferTooShort);
         }
 
-        let (log_circuit_size, raw_vk) = match read_u64_from_evm_word(raw_vk) {
-            Ok((0, _)) => Err(VerificationKeyError::InvalidLogCircuitSize)?,
-            Ok((log_n, raw_vk)) => (log_n, raw_vk),
+        let log_circuit_size = match read_u64_from_evm_word(&mut raw_vk) {
+            Ok(0) => Err(VerificationKeyError::InvalidLogCircuitSize)?,
+            Ok(log_n) => log_n,
             _ => Err(VerificationKeyError::ParsingError)?,
         };
 
         // TODO: Impose upper bound on log_circuit_size?
 
-        let (combined_input_size, raw_vk) = match read_u64_from_evm_word(raw_vk) {
-            Ok((num_pubs, raw_vk)) => (num_pubs, raw_vk),
+        let combined_input_size = match read_u64_from_evm_word(&mut raw_vk) {
+            Ok(num_pubs) => num_pubs,
             _ => Err(VerificationKeyError::ParsingError)?,
         };
 
-        let (pub_inputs_offset, raw_vk) = match read_u64_from_evm_word(raw_vk) {
-            Ok((pi_offset, raw_vk)) => (pi_offset, raw_vk),
+        let pub_inputs_offset = match read_u64_from_evm_word(&mut raw_vk) {
+            Ok(pi_offset) => pi_offset,
             _ => Err(VerificationKeyError::ParsingError)?,
         };
 
-        let (q_m, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::Q_M.str(),
-            })?;
-        let (q_c, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::Q_C.str(),
-            })?;
-        let (q_l, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::Q_L.str(),
-            })?;
-        let (q_r, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::Q_R.str(),
-            })?;
-        let (q_o, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::Q_O.str(),
-            })?;
-        let (q_4, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::Q_4.str(),
-            })?;
-        let (q_lookup, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::Q_LOOKUP.str(),
-            })?;
-        let (q_arith, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::Q_ARITH.str(),
-            })?;
-        let (q_deltarange, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::Q_DELTARANGE.str(),
-            })?;
-        let (q_elliptic, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::Q_ELLIPTIC.str(),
-            })?;
-        let (q_memory, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::Q_MEMORY.str(),
-            })?;
-        let (q_nnf, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::Q_NNF.str(),
-            })?;
-        let (q_poseidon2external, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::Q_POSEIDON2EXTERNAL.str(),
-            })?;
-        let (q_poseidon2internal, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::Q_POSEIDON2INTERNAL.str(),
-            })?;
-        let (s_1, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::S_1.str(),
-            })?;
-        let (s_2, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::S_2.str(),
-            })?;
-        let (s_3, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::S_3.str(),
-            })?;
-        let (s_4, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::S_4.str(),
-            })?;
-        let (id_1, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::ID_1.str(),
-            })?;
-        let (id_2, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::ID_2.str(),
-            })?;
-        let (id_3, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::ID_3.str(),
-            })?;
-        let (id_4, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::ID_4.str(),
-            })?;
-        let (t_1, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::T_1.str(),
-            })?;
-        let (t_2, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::T_2.str(),
-            })?;
-        let (t_3, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::T_3.str(),
-            })?;
-        let (t_4, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::T_4.str(),
-            })?;
-        let (lagrange_first, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::Lagrange_First.str(),
-            })?;
-        let (lagrange_last, _) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::Lagrange_Last.str(),
-            })?;
+        let q_m = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::Q_M.into()),
+                },
+            }
+        })?;
+        let q_c = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::Q_C.into()),
+                },
+            }
+        })?;
+        let q_l = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::Q_L.into()),
+                },
+            }
+        })?;
+        let q_r = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::Q_R.into()),
+                },
+            }
+        })?;
+        let q_o = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::Q_O.into()),
+                },
+            }
+        })?;
+        let q_4 = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::Q_4.into()),
+                },
+            }
+        })?;
+        let q_lookup = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::Q_LOOKUP.into()),
+                },
+            }
+        })?;
+        let q_arith = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::Q_ARITH.into()),
+                },
+            }
+        })?;
+        let q_deltarange = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::Q_DELTARANGE.into()),
+                },
+            }
+        })?;
+        let q_elliptic = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::Q_ELLIPTIC.into()),
+                },
+            }
+        })?;
+        let q_memory = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::Q_MEMORY.into()),
+                },
+            }
+        })?;
+        let q_nnf = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::Q_NNF.into()),
+                },
+            }
+        })?;
+        let q_poseidon2external = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::Q_POSEIDON2EXTERNAL.into()),
+                },
+            }
+        })?;
+        let q_poseidon2internal = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::Q_POSEIDON2INTERNAL.into()),
+                },
+            }
+        })?;
+        let s_1 = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::S_1.into()),
+                },
+            }
+        })?;
+        let s_2 = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::S_2.into()),
+                },
+            }
+        })?;
+        let s_3 = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::S_3.into()),
+                },
+            }
+        })?;
+        let s_4 = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::S_4.into()),
+                },
+            }
+        })?;
+        let id_1 = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::ID_1.into()),
+                },
+            }
+        })?;
+        let id_2 = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::ID_2.into()),
+                },
+            }
+        })?;
+        let id_3 = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::ID_3.into()),
+                },
+            }
+        })?;
+        let id_4 = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::ID_4.into()),
+                },
+            }
+        })?;
+        let t_1 = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::T_1.into()),
+                },
+            }
+        })?;
+        let t_2 = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::T_2.into()),
+                },
+            }
+        })?;
+        let t_3 = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::T_3.into()),
+                },
+            }
+        })?;
+        let t_4 = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::T_4.into()),
+                },
+            }
+        })?;
+        let lagrange_first = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::Lagrange_First.into()),
+                },
+            }
+        })?;
+        let lagrange_last = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::Lagrange_Last.into()),
+                },
+            }
+        })?;
 
         Ok(Self {
             log_circuit_size,
@@ -389,6 +538,7 @@ impl<H: CurveHooks> VerificationKey<H> {
 #[cfg(test)]
 mod should {
     use super::*;
+    use crate::errors::GroupError;
     use rstest::{fixture, rstest};
 
     #[fixture]
@@ -404,6 +554,11 @@ mod should {
     }
 
     mod reject {
+        use crate::{
+            constants::{EVM_WORD_SIZE, GROUP_ELEMENT_SIZE},
+            errors::CommitmentField,
+        };
+
         use super::*;
 
         #[rstest]
@@ -440,44 +595,53 @@ mod should {
         #[rstest]
         fn a_vk_with_a_point_not_on_curve_for_any_commitment_field(valid_vk: [u8; VK_SIZE]) {
             let commitment_fields = [
-                CommitmentField::Q_M,
-                CommitmentField::Q_C,
-                CommitmentField::Q_L,
-                CommitmentField::Q_R,
-                CommitmentField::Q_O,
-                CommitmentField::Q_4,
-                CommitmentField::Q_LOOKUP,
-                CommitmentField::Q_ARITH,
-                CommitmentField::Q_DELTARANGE,
-                CommitmentField::Q_ELLIPTIC,
-                CommitmentField::Q_MEMORY,
-                CommitmentField::Q_NNF,
-                CommitmentField::Q_POSEIDON2EXTERNAL,
-                CommitmentField::Q_POSEIDON2INTERNAL,
-                CommitmentField::S_1,
-                CommitmentField::S_2,
-                CommitmentField::S_3,
-                CommitmentField::S_4,
-                CommitmentField::ID_1,
-                CommitmentField::ID_2,
-                CommitmentField::ID_3,
-                CommitmentField::ID_4,
-                CommitmentField::T_1,
-                CommitmentField::T_2,
-                CommitmentField::T_3,
-                CommitmentField::T_4,
-                CommitmentField::Lagrange_First,
-                CommitmentField::Lagrange_Last,
+                VkCommitmentField::Q_M,
+                VkCommitmentField::Q_C,
+                VkCommitmentField::Q_L,
+                VkCommitmentField::Q_R,
+                VkCommitmentField::Q_O,
+                VkCommitmentField::Q_4,
+                VkCommitmentField::Q_LOOKUP,
+                VkCommitmentField::Q_ARITH,
+                VkCommitmentField::Q_DELTARANGE,
+                VkCommitmentField::Q_ELLIPTIC,
+                VkCommitmentField::Q_MEMORY,
+                VkCommitmentField::Q_NNF,
+                VkCommitmentField::Q_POSEIDON2EXTERNAL,
+                VkCommitmentField::Q_POSEIDON2INTERNAL,
+                VkCommitmentField::S_1,
+                VkCommitmentField::S_2,
+                VkCommitmentField::S_3,
+                VkCommitmentField::S_4,
+                VkCommitmentField::ID_1,
+                VkCommitmentField::ID_2,
+                VkCommitmentField::ID_3,
+                VkCommitmentField::ID_4,
+                VkCommitmentField::T_1,
+                VkCommitmentField::T_2,
+                VkCommitmentField::T_3,
+                VkCommitmentField::T_4,
+                VkCommitmentField::Lagrange_First,
+                VkCommitmentField::Lagrange_Last,
             ];
+            const OFFSET: usize = 3 * EVM_WORD_SIZE;
             for (i, cm) in commitment_fields.iter().enumerate() {
                 let mut invalid_vk = [0u8; VK_SIZE];
                 invalid_vk.copy_from_slice(&valid_vk);
                 // Please note that (0, 0) is treated as the point at infinity
-                invalid_vk[3 * 32 + i * 64..3 * 32 + (i + 1) * 64].fill(1);
+                invalid_vk[OFFSET + i * GROUP_ELEMENT_SIZE..OFFSET + (i + 1) * GROUP_ELEMENT_SIZE]
+                    .fill(1);
 
                 assert_eq!(
                     VerificationKey::<()>::try_from(&invalid_vk[..]).unwrap_err(),
-                    VerificationKeyError::PointNotOnCurve { field: cm.str() }
+                    VerificationKeyError::GroupConversionError {
+                        conv_error: ConversionError {
+                            group: GroupError::NotOnCurve,
+                            field: Some(<CommitmentField as From<VkCommitmentField>>::from(
+                                cm.clone()
+                            )),
+                        }
+                    }
                 );
             }
         }
