@@ -44,13 +44,12 @@ pub(crate) fn compute_fold_pos_evaluations(
     let mut fold_pos_evaluations = Vec::<Fr>::with_capacity(log_size as usize);
     fold_pos_evaluations.resize(log_size as usize, Fr::ZERO);
 
-    let mut inverted_denominators = (0..log_size)
-        .map(|i| {
-            let j = (log_size - 1 - i) as usize;
-            gemini_eval_challenge_powers[j] * (Fr::ONE - sumcheck_u_challenges[j])
-                + sumcheck_u_challenges[j] // invertible w.h.p.
-        })
-        .collect::<Vec<Fr>>();
+    let mut inverted_denominators = Vec::with_capacity(log_size as usize);
+    inverted_denominators.extend((0..log_size).map(|i| {
+        let j = (log_size - 1 - i) as usize;
+        gemini_eval_challenge_powers[j] * (Fr::ONE - sumcheck_u_challenges[j])
+            + sumcheck_u_challenges[j] // invertible w.h.p.
+    }));
 
     batch_inversion(&mut inverted_denominators);
 

@@ -253,9 +253,11 @@ fn compute_next_target_sum<H: CurveHooks>(
     // computing just 1 inverse + `O(ZK_BATCHED_RELATION_PARTIAL_LENGTH)` modular multiplications.
     // Notice that inversion will w.h.p. succeed because the `BARYCENTRIC_LAGRANGE_DENOMINATORS`
     // are all fixed (and non-zero), and w.h.p. `round_challenge - i` is also non-zero.
-    let mut denominator_inverses: Vec<Fr> = (0..batched_relation_partial_length)
-        .map(|i| baricentric_lagrange_denominators[i] * (round_challenge - Fr::from(i as u64)))
-        .collect();
+    let mut denominator_inverses = Vec::with_capacity(batched_relation_partial_length);
+    denominator_inverses
+        .extend((0..batched_relation_partial_length).map(|i| {
+            baricentric_lagrange_denominators[i] * (round_challenge - Fr::from(i as u64))
+        }));
     batch_inversion(&mut denominator_inverses);
 
     for i in 0..batched_relation_partial_length {
@@ -410,15 +412,14 @@ fn verify_shplemini<H: CurveHooks>(
     let mut boundary = NUMBER_UNSHIFTED + 1 + offset;
 
     let num_non_dummy_rounds = vk.log_circuit_size as usize - 1;
-    let mut inverted_denominators: Vec<Fr> = (0..num_non_dummy_rounds)
-        .flat_map(|i| {
-            // Both invertible w.h.p.
-            [
-                tp.shplonk_z() - powers_of_evaluation_challenge[i + 1],
-                tp.shplonk_z() + powers_of_evaluation_challenge[i + 1],
-            ]
-        })
-        .collect();
+    let mut inverted_denominators = Vec::with_capacity(2 * num_non_dummy_rounds);
+    inverted_denominators.extend((0..num_non_dummy_rounds).flat_map(|i| {
+        // Both invertible w.h.p.
+        [
+            tp.shplonk_z() - powers_of_evaluation_challenge[i + 1],
+            tp.shplonk_z() + powers_of_evaluation_challenge[i + 1],
+        ]
+    }));
 
     batch_inversion(&mut inverted_denominators);
 
