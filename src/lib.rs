@@ -253,11 +253,10 @@ fn compute_next_target_sum<H: CurveHooks>(
     // computing just 1 inverse + `O(ZK_BATCHED_RELATION_PARTIAL_LENGTH)` modular multiplications.
     // Notice that inversion will w.h.p. succeed because the `BARYCENTRIC_LAGRANGE_DENOMINATORS`
     // are all fixed (and non-zero), and w.h.p. `round_challenge - i` is also non-zero.
-    let mut denominator_inverses = Vec::with_capacity(batched_relation_partial_length);
-    denominator_inverses
-        .extend((0..batched_relation_partial_length).map(|i| {
-            baricentric_lagrange_denominators[i] * (round_challenge - Fr::from(i as u64))
-        }));
+    let mut denominator_inverses: Vec<Fr> = (0..batched_relation_partial_length)
+        .map(|i| baricentric_lagrange_denominators[i] * (round_challenge - Fr::from(i as u64)))
+        .collect();
+
     batch_inversion(&mut denominator_inverses);
 
     for i in 0..batched_relation_partial_length {
