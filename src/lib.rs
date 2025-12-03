@@ -375,8 +375,6 @@ fn verify_shplemini<H: CurveHooks>(
     commitments[27 + offset] = vk.lagrange_first;
     commitments[28 + offset] = vk.lagrange_last;
 
-    // TODO: Elliptic curve points will likely need to be validated during parsing now!
-
     // Accumulate proof points
     commitments[29 + offset] = *parsed_proof.w1();
     commitments[30 + offset] = *parsed_proof.w2();

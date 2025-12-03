@@ -90,7 +90,7 @@ fn read_evm_word(data: &mut &[u8]) -> Result<EVMWord, ProofError> {
     Ok(chunk)
 }
 
-#[derive(Debug, Hash, Eq, PartialEq)]
+#[derive(Debug, Hash, Eq, PartialEq, Clone)]
 pub enum ProofCommitmentField {
     SHPLONK_Q,
     GEMINI_MASKING_POLY,
@@ -267,19 +267,24 @@ impl<H: CurveHooks> ZKProof<H> {
     pub(crate) fn calculate_proof_size(log_n: u64) -> usize {
         // Witness and Libra commitments
         let mut proof_length = NUM_WITNESS_ENTITIES * NUM_ELEMENTS_COMM; // witness commitments
+
         proof_length += NUM_ELEMENTS_COMM * 4; // Libra concat, grand sum, quotient comms + Gemini masking
 
         // Sumcheck
         proof_length += (log_n as usize) * ZK_BATCHED_RELATION_PARTIAL_LENGTH * NUM_ELEMENTS_FR; // sumcheck univariates
+
         proof_length += NUMBER_OF_ENTITIES * NUM_ELEMENTS_FR; // sumcheck evaluations
 
         // Libra and Gemini
         proof_length += NUM_ELEMENTS_FR * 3; // Libra sum, claimed eval, Gemini masking eval
+
         proof_length += (log_n as usize) * NUM_ELEMENTS_FR; // Gemini a evaluations
+
         proof_length += NUM_LIBRA_EVALUATIONS * NUM_ELEMENTS_FR; // libra evaluations
 
         // PCS commitments
         proof_length += (log_n as usize - 1) * NUM_ELEMENTS_COMM; // Gemini Fold commitments
+
         proof_length += NUM_ELEMENTS_COMM * 2; // Shplonk Q and KZG W commitments
 
         // Pairing points
@@ -457,7 +462,7 @@ impl<H: CurveHooks> ZKProof<H> {
                 read_fr(&mut proof_bytes)
                     .expect("Should always be able to read a field element here")
             } else {
-                Fr::ZERO // TODO: Double-check for correctness
+                Fr::ZERO
             }
         });
 
@@ -1169,7 +1174,7 @@ mod should {
     // This is normally extracted from the vk and is needed for parsing the proof.
     #[fixture]
     fn logn() -> u64 {
-        12
+        0x0c
     }
 
     #[rstest]
@@ -1183,6 +1188,8 @@ mod should {
     }
 
     mod reject {
+        use crate::constants::{GROUP_ELEMENT_SIZE, LIBRA_UNIVARIATES_LENGTH};
+
         use super::*;
 
         #[rstest]
@@ -1207,6 +1214,223 @@ mod should {
                     actual_size: invalid_proof.len()
                 })
             );
+        }
+
+        #[rstest]
+        fn a_zk_proof_containing_points_not_on_curve(valid_zk_proof: Box<[u8]>) {
+            let log_n = logn() as usize;
+            let w_1_offset = PAIRING_POINTS_SIZE * EVM_WORD_SIZE;
+            let libra_commitments_1_offset: usize = PAIRING_POINTS_SIZE * EVM_WORD_SIZE
+                + 8 * GROUP_ELEMENT_SIZE
+                + 2 * EVM_WORD_SIZE
+                + log_n * ZK_BATCHED_RELATION_PARTIAL_LENGTH * EVM_WORD_SIZE
+                + NUMBER_OF_ENTITIES * EVM_WORD_SIZE
+                + GROUP_ELEMENT_SIZE;
+            let gemini_fold_comms_0_offset: usize = libra_commitments_1_offset
+                + (NUM_LIBRA_COMMITMENTS - 1) * GROUP_ELEMENT_SIZE
+                + GROUP_ELEMENT_SIZE
+                + EVM_WORD_SIZE;
+            let shplonk_q_offset: usize = gemini_fold_comms_0_offset
+                + (log_n - 1) * GROUP_ELEMENT_SIZE
+                + (log_n + NUM_LIBRA_EVALUATIONS) * EVM_WORD_SIZE;
+
+            let fixed_fields: [(ProofCommitmentField, usize); 9] = [
+                (ProofCommitmentField::W_1, w_1_offset),
+                (ProofCommitmentField::W_2, w_1_offset + GROUP_ELEMENT_SIZE),
+                (
+                    ProofCommitmentField::W_3,
+                    w_1_offset + 2 * GROUP_ELEMENT_SIZE,
+                ),
+                (
+                    ProofCommitmentField::LOOKUP_READ_COUNTS,
+                    w_1_offset + 3 * GROUP_ELEMENT_SIZE,
+                ),
+                (
+                    ProofCommitmentField::LOOKUP_READ_TAGS,
+                    w_1_offset + 4 * GROUP_ELEMENT_SIZE,
+                ),
+                (
+                    ProofCommitmentField::W_4,
+                    w_1_offset + 5 * GROUP_ELEMENT_SIZE,
+                ),
+                (
+                    ProofCommitmentField::LOOKUP_INVERSES,
+                    w_1_offset + 6 * GROUP_ELEMENT_SIZE,
+                ),
+                (
+                    ProofCommitmentField::Z_PERM,
+                    w_1_offset + 7 * GROUP_ELEMENT_SIZE,
+                ),
+                (
+                    ProofCommitmentField::Z_PERM,
+                    w_1_offset + 7 * GROUP_ELEMENT_SIZE,
+                ),
+            ];
+
+            let libra_fields: Vec<(ProofCommitmentField, usize)> = (0..NUM_LIBRA_COMMITMENTS)
+                .map(|i| match i {
+                    0 => (
+                        ProofCommitmentField::LIBRA_COMMITMENTS(0),
+                        w_1_offset + 8 * GROUP_ELEMENT_SIZE,
+                    ),
+                    _ => (
+                        ProofCommitmentField::LIBRA_COMMITMENTS(i),
+                        libra_commitments_1_offset + (i - 1) * GROUP_ELEMENT_SIZE,
+                    ),
+                })
+                .collect();
+
+            let gemini_fields: Vec<(ProofCommitmentField, usize)> = (0..log_n - 1)
+                .map(|i| {
+                    (
+                        ProofCommitmentField::GEMINI_FOLD_COMMS(i),
+                        gemini_fold_comms_0_offset + i * GROUP_ELEMENT_SIZE,
+                    )
+                })
+                .collect();
+
+            let final_fields: [(ProofCommitmentField, usize); 2] = [
+                (ProofCommitmentField::SHPLONK_Q, shplonk_q_offset),
+                (
+                    ProofCommitmentField::KZG_QUOTIENT,
+                    shplonk_q_offset + GROUP_ELEMENT_SIZE,
+                ),
+            ];
+
+            let mut field_offset_vec: Vec<(ProofCommitmentField, usize)> = fixed_fields.to_vec();
+            field_offset_vec.extend(gemini_fields);
+            field_offset_vec.extend(libra_fields);
+            field_offset_vec.extend(final_fields.to_vec());
+
+            let field_offset = field_offset_vec.to_owned();
+
+            for (field, offset) in field_offset {
+                let mut invalid_zk_proof = valid_zk_proof.to_vec();
+                // Alter current field; notice that (1, 3) ∉ G1
+                invalid_zk_proof[offset..offset + GROUP_ELEMENT_SIZE].fill(0);
+                invalid_zk_proof[offset + EVM_WORD_SIZE - 1] = 1;
+                invalid_zk_proof[offset + GROUP_ELEMENT_SIZE - 1] = 3;
+
+                assert_eq!(
+                    ZKProof::<()>::from_bytes(&invalid_zk_proof[..], logn()),
+                    Err(ProofError::GroupConversionError {
+                        conv_error: ConversionError {
+                            group: GroupError::NotOnCurve,
+                            field: Some(field.into())
+                        }
+                    })
+                );
+            }
+        }
+
+        #[rstest]
+        fn a_zk_proof_containing_points_with_coordinates_outside_fq(valid_zk_proof: Box<[u8]>) {
+            let log_n = logn() as usize;
+            let w_1_offset = PAIRING_POINTS_SIZE * EVM_WORD_SIZE;
+            let libra_commitments_1_offset: usize = PAIRING_POINTS_SIZE * EVM_WORD_SIZE
+                + 8 * GROUP_ELEMENT_SIZE
+                + 2 * EVM_WORD_SIZE
+                + log_n * ZK_BATCHED_RELATION_PARTIAL_LENGTH * EVM_WORD_SIZE
+                + NUMBER_OF_ENTITIES * EVM_WORD_SIZE
+                + GROUP_ELEMENT_SIZE;
+            let gemini_fold_comms_0_offset: usize = libra_commitments_1_offset
+                + (NUM_LIBRA_COMMITMENTS - 1) * GROUP_ELEMENT_SIZE
+                + GROUP_ELEMENT_SIZE
+                + EVM_WORD_SIZE;
+            let shplonk_q_offset: usize = gemini_fold_comms_0_offset
+                + (log_n - 1) * GROUP_ELEMENT_SIZE
+                + (log_n + NUM_LIBRA_EVALUATIONS) * EVM_WORD_SIZE;
+
+            let fixed_fields: [(ProofCommitmentField, usize); 9] = [
+                (ProofCommitmentField::W_1, w_1_offset),
+                (ProofCommitmentField::W_2, w_1_offset + GROUP_ELEMENT_SIZE),
+                (
+                    ProofCommitmentField::W_3,
+                    w_1_offset + 2 * GROUP_ELEMENT_SIZE,
+                ),
+                (
+                    ProofCommitmentField::LOOKUP_READ_COUNTS,
+                    w_1_offset + 3 * GROUP_ELEMENT_SIZE,
+                ),
+                (
+                    ProofCommitmentField::LOOKUP_READ_TAGS,
+                    w_1_offset + 4 * GROUP_ELEMENT_SIZE,
+                ),
+                (
+                    ProofCommitmentField::W_4,
+                    w_1_offset + 5 * GROUP_ELEMENT_SIZE,
+                ),
+                (
+                    ProofCommitmentField::LOOKUP_INVERSES,
+                    w_1_offset + 6 * GROUP_ELEMENT_SIZE,
+                ),
+                (
+                    ProofCommitmentField::Z_PERM,
+                    w_1_offset + 7 * GROUP_ELEMENT_SIZE,
+                ),
+                (
+                    ProofCommitmentField::Z_PERM,
+                    w_1_offset + 7 * GROUP_ELEMENT_SIZE,
+                ),
+            ];
+
+            let libra_fields: Vec<(ProofCommitmentField, usize)> = (0..NUM_LIBRA_COMMITMENTS)
+                .map(|i| match i {
+                    0 => (
+                        ProofCommitmentField::LIBRA_COMMITMENTS(0),
+                        w_1_offset + 8 * GROUP_ELEMENT_SIZE,
+                    ),
+                    _ => (
+                        ProofCommitmentField::LIBRA_COMMITMENTS(i),
+                        libra_commitments_1_offset + (i - 1) * GROUP_ELEMENT_SIZE,
+                    ),
+                })
+                .collect();
+
+            let gemini_fields: Vec<(ProofCommitmentField, usize)> = (0..log_n - 1)
+                .map(|i| {
+                    (
+                        ProofCommitmentField::GEMINI_FOLD_COMMS(i),
+                        gemini_fold_comms_0_offset + i * GROUP_ELEMENT_SIZE,
+                    )
+                })
+                .collect();
+
+            let final_fields: [(ProofCommitmentField, usize); 2] = [
+                (ProofCommitmentField::SHPLONK_Q, shplonk_q_offset),
+                (
+                    ProofCommitmentField::KZG_QUOTIENT,
+                    shplonk_q_offset + GROUP_ELEMENT_SIZE,
+                ),
+            ];
+
+            let mut field_offset_vec: Vec<(ProofCommitmentField, usize)> = fixed_fields.to_vec();
+            field_offset_vec.extend(gemini_fields);
+            field_offset_vec.extend(libra_fields);
+            field_offset_vec.extend(final_fields.to_vec());
+
+            let field_offset = field_offset_vec.to_owned();
+
+            let invalid_bytes = Fq::MODULUS.into_be_bytes32();
+            for (field, offset) in field_offset {
+                let mut invalid_zk_proof = valid_zk_proof.to_vec();
+                // Copy the base field modulus bytes into the coordinate position to
+                // simulate an out-of-bounds coordinate.
+                invalid_zk_proof[offset..offset + EVM_WORD_SIZE].copy_from_slice(&invalid_bytes);
+
+                assert_eq!(
+                    ZKProof::<()>::from_bytes(&invalid_zk_proof[..], logn()),
+                    Err(ProofError::GroupConversionError {
+                        conv_error: ConversionError {
+                            group: GroupError::CoordinateExceedsModulus {
+                                coordinate_value: Fq::MODULUS,
+                                modulus: Fq::MODULUS,
+                            },
+                            field: Some(field.into())
+                        }
+                    })
+                );
+            }
         }
     }
 }
