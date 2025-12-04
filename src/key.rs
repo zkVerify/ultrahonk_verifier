@@ -31,9 +31,9 @@ use snafu::Snafu;
 pub enum VerificationKeyError {
     #[snafu(display("Buffer too short"))]
     BufferTooShort,
-    #[snafu(display("Invalid circuit size. Must be a power of 2."))]
+    #[snafu(display("Invalid log circuit size. Must be a positive integer."))]
     InvalidLogCircuitSize,
-    #[snafu(display("Invalid circuit size. Must not exceed {CONST_PROOF_SIZE_LOG_N}."))]
+    #[snafu(display("Invalid log circuit size. Must not exceed {CONST_PROOF_SIZE_LOG_N}."))]
     LogCircuitSizeTooBig,
     #[snafu(display("Group element conversion error: {conv_error}"))]
     GroupConversionError { conv_error: ConversionError },

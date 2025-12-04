@@ -16,7 +16,6 @@
 
 use crate::*;
 use alloc::boxed::Box;
-use ark_ff::PrimeField;
 use rstest::{fixture, rstest};
 // use sha3::{digest::Update, Digest, Keccak256};
 
@@ -101,10 +100,7 @@ fn get_eth_keccak_hash(data: &[u8]) -> [u8; 32] {
 
 mod reject {
     use super::*;
-    use crate::{
-        constants::{EVM_WORD_SIZE, FIELD_ELEMENT_SIZE, GROUP_ELEMENT_SIZE},
-        proof::ProofCommitmentField,
-    };
+    use crate::constants::{EVM_WORD_SIZE, FIELD_ELEMENT_SIZE, GROUP_ELEMENT_SIZE};
 
     #[rstest]
     fn a_zk_proof_with_non_matching_number_of_pis(
