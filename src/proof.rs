@@ -774,7 +774,7 @@ impl<H: CurveHooks> PlainProof<H> {
                 read_fr(&mut proof_bytes)
                     .expect("Should always be able to read a field element here")
             } else {
-                Fr::ZERO // TODO: Double-check for correctness
+                Fr::ZERO
             }
         });
 
@@ -1188,7 +1188,7 @@ mod should {
     }
 
     mod reject {
-        use crate::constants::{GROUP_ELEMENT_SIZE, LIBRA_UNIVARIATES_LENGTH};
+        use crate::constants::GROUP_ELEMENT_SIZE;
 
         use super::*;
 
@@ -1432,5 +1432,60 @@ mod should {
                 );
             }
         }
+
+        //     #[rstest]
+        //     fn a_plain_proof_containing_points_not_on_curve(
+        //         valid_vk: [u8; VK_SIZE],
+        //         valid_plain_proof: Box<[u8]>,
+        //         valid_pubs: [PublicInput; 1],
+        //     ) {
+        //         let field_offset = [
+        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(0), 0x2500),
+        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(1), 0x2580),
+        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(2), 0x2600),
+        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(3), 0x2680),
+        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(4), 0x2700),
+        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(5), 0x2780),
+        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(6), 0x2800),
+        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(7), 0x2880),
+        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(8), 0x2900),
+        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(9), 0x2980),
+        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(10), 0x2a00),
+        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(11), 0x2a80),
+        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(12), 0x2b00),
+        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(13), 0x2b80),
+        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(14), 0x2c00),
+        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(15), 0x2c80),
+        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(16), 0x2d00),
+        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(17), 0x2d80),
+        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(18), 0x2e00),
+        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(19), 0x2e80),
+        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(20), 0x2f00),
+        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(21), 0x2f80),
+        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(22), 0x3000),
+        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(23), 0x3080),
+        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(24), 0x3100),
+        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(25), 0x3180),
+        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(26), 0x3200),
+        //             (PlainProofCommitmentField::SHPLONK_Q, 0x3600),
+        //             (PlainProofCommitmentField::KZG_QUOTIENT, 0x3680),
+        //         ]
+        //         .map(|(cf, idx)| (cf, idx + PAIRING_POINTS_SIZE * EVM_WORD_SIZE));
+
+        //         for (field, offset) in field_offset {
+        //             let mut invalid_plain_proof = [0u8; PLAIN_PROOF_SIZE];
+        //             invalid_plain_proof.copy_from_slice(&valid_plain_proof);
+        //             // Alter current field; notice that (1, 3) ∉ G1
+        //             invalid_plain_proof[offset..offset + 128].fill(0);
+        //             invalid_plain_proof[offset + 31] = 1;
+        //             invalid_plain_proof[offset + 64 + 31] = 3;
+
+        //             assert_eq!(
+        //                 verify::<()>(&valid_vk, &ProofType::Plain(Box::new(invalid_plain_proof)), &valid_pubs).unwrap_err(),
+        //                 VerifyError::VerificationError {
+        //                     message: format!("Shplemini Failed. Cause: Point for proof commitment field '\"{field}\"' is not on curve")
+        //             });
+        //         }
+        //     }
     }
 }

@@ -17,6 +17,7 @@
 #![allow(non_camel_case_types)]
 
 use crate::{
+    constants::CONST_PROOF_SIZE_LOG_N,
     errors::ConversionError,
     utils::{read_g1_by_splitting, read_u64_from_evm_word, IntoBEBytes32},
     EVMWord, G1, U256, VK_SIZE,
@@ -32,6 +33,8 @@ pub enum VerificationKeyError {
     BufferTooShort,
     #[snafu(display("Invalid circuit size. Must be a power of 2."))]
     InvalidLogCircuitSize,
+    #[snafu(display("Invalid circuit size. Must not exceed {CONST_PROOF_SIZE_LOG_N}."))]
+    LogCircuitSizeTooBig,
     #[snafu(display("Group element conversion error: {conv_error}"))]
     GroupConversionError { conv_error: ConversionError },
     #[snafu(display("Parsing error"))]
@@ -195,7 +198,9 @@ impl<H: CurveHooks> TryFrom<&[u8]> for VerificationKey<H> {
             _ => Err(VerificationKeyError::ParsingError)?,
         };
 
-        // TODO: Impose upper bound on log_circuit_size?
+        if log_circuit_size > CONST_PROOF_SIZE_LOG_N as u64 {
+            return Err(VerificationKeyError::LogCircuitSizeTooBig);
+        }
 
         let combined_input_size = match read_u64_from_evm_word(&mut raw_vk) {
             Ok(num_pubs) => num_pubs,
@@ -578,6 +583,18 @@ mod should {
             assert_eq!(
                 VerificationKey::<()>::try_from(&invalid_vk[..]),
                 Err(VerificationKeyError::InvalidLogCircuitSize)
+            );
+        }
+
+        #[rstest]
+        fn a_vk_with_log_circuit_size_too_big(valid_vk: [u8; VK_SIZE]) {
+            let mut invalid_vk = [0u8; VK_SIZE];
+            invalid_vk.copy_from_slice(&valid_vk);
+            let invalid_bytes = U256::from(CONST_PROOF_SIZE_LOG_N as u64 + 1).into_be_bytes32();
+            invalid_vk[0..EVM_WORD_SIZE].copy_from_slice(&invalid_bytes);
+            assert_eq!(
+                VerificationKey::<()>::try_from(&invalid_vk[..]),
+                Err(VerificationKeyError::LogCircuitSizeTooBig)
             );
         }
 

@@ -71,8 +71,6 @@ pub fn verify<H: CurveHooks + Default>(
 ) -> Result<(), VerifyError> {
     let vk = VerificationKey::<H>::try_from(vk_bytes).map_err(|_| VerifyError::KeyError)?;
 
-    // TODO: Check upper bound for vk.circuit_size?
-
     // TODO: Move check inside the from_bytes functions if possible.
     check_proof_size::<H>(proof, vk.log_circuit_size)?;
 
