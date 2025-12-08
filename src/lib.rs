@@ -46,7 +46,7 @@ use crate::{
     relations::accumulate_relation_evaluations,
     srs::{SRS_G2, SRS_G2_VK},
     transcript::{generate_transcript, CommonTranscriptData, Transcript},
-    utils::{read_g2, to_hex_string},
+    utils::read_g2,
 };
 use alloc::{boxed::Box, format, string::ToString, vec::Vec};
 use ark_bn254_ext::CurveHooks;
@@ -107,7 +107,7 @@ fn verify_inner<H: CurveHooks>(
     let vk_hash =
         hex_literal::hex!("0a1c3472f1f33e6a26c5735f3cfcfeb8247edd1c38791be7a0590fb55b01c4bd");
 
-    println!("vk_hash = {}", to_hex_string(&vk_hash));
+    // println!("vk_hash = {}", to_hex_string(&vk_hash));
     // What I actually get: 0x6ae4d158b4567ebd9765fecc3fffaf7274e6adad2bebfd0a281cfadd3b01c4bf
     // The correct hash is: 0x0a1c3472f1f33e6a26c5735f3cfcfeb8247edd1c38791be7a0590fb55b01c4bd
 

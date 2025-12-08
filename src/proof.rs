@@ -1220,8 +1220,8 @@ mod should {
         fn a_zk_proof_containing_points_not_on_curve(valid_zk_proof: Box<[u8]>) {
             let log_n = logn() as usize;
             let w_1_offset = PAIRING_POINTS_SIZE * EVM_WORD_SIZE;
-            let libra_commitments_1_offset: usize = PAIRING_POINTS_SIZE * EVM_WORD_SIZE
-                + 8 * GROUP_ELEMENT_SIZE
+            let libra_commitments_1_offset: usize = w_1_offset
+                + NUM_WITNESS_ENTITIES * GROUP_ELEMENT_SIZE
                 + 2 * EVM_WORD_SIZE
                 + log_n * ZK_BATCHED_RELATION_PARTIAL_LENGTH * EVM_WORD_SIZE
                 + NUMBER_OF_ENTITIES * EVM_WORD_SIZE
@@ -1234,7 +1234,7 @@ mod should {
                 + (log_n - 1) * GROUP_ELEMENT_SIZE
                 + (log_n + NUM_LIBRA_EVALUATIONS) * EVM_WORD_SIZE;
 
-            let fixed_fields: [(ProofCommitmentField, usize); 9] = [
+            let fixed_fields: [(ProofCommitmentField, usize); NUM_WITNESS_ENTITIES] = [
                 (ProofCommitmentField::W_1, w_1_offset),
                 (ProofCommitmentField::W_2, w_1_offset + GROUP_ELEMENT_SIZE),
                 (
@@ -1256,10 +1256,6 @@ mod should {
                 (
                     ProofCommitmentField::LOOKUP_INVERSES,
                     w_1_offset + 6 * GROUP_ELEMENT_SIZE,
-                ),
-                (
-                    ProofCommitmentField::Z_PERM,
-                    w_1_offset + 7 * GROUP_ELEMENT_SIZE,
                 ),
                 (
                     ProofCommitmentField::Z_PERM,
@@ -1327,8 +1323,8 @@ mod should {
         fn a_zk_proof_containing_points_with_coordinates_outside_fq(valid_zk_proof: Box<[u8]>) {
             let log_n = logn() as usize;
             let w_1_offset = PAIRING_POINTS_SIZE * EVM_WORD_SIZE;
-            let libra_commitments_1_offset: usize = PAIRING_POINTS_SIZE * EVM_WORD_SIZE
-                + 8 * GROUP_ELEMENT_SIZE
+            let libra_commitments_1_offset: usize = w_1_offset
+                + NUM_WITNESS_ENTITIES * GROUP_ELEMENT_SIZE
                 + 2 * EVM_WORD_SIZE
                 + log_n * ZK_BATCHED_RELATION_PARTIAL_LENGTH * EVM_WORD_SIZE
                 + NUMBER_OF_ENTITIES * EVM_WORD_SIZE
@@ -1341,7 +1337,7 @@ mod should {
                 + (log_n - 1) * GROUP_ELEMENT_SIZE
                 + (log_n + NUM_LIBRA_EVALUATIONS) * EVM_WORD_SIZE;
 
-            let fixed_fields: [(ProofCommitmentField, usize); 9] = [
+            let fixed_fields: [(ProofCommitmentField, usize); NUM_WITNESS_ENTITIES] = [
                 (ProofCommitmentField::W_1, w_1_offset),
                 (ProofCommitmentField::W_2, w_1_offset + GROUP_ELEMENT_SIZE),
                 (
@@ -1363,10 +1359,6 @@ mod should {
                 (
                     ProofCommitmentField::LOOKUP_INVERSES,
                     w_1_offset + 6 * GROUP_ELEMENT_SIZE,
-                ),
-                (
-                    ProofCommitmentField::Z_PERM,
-                    w_1_offset + 7 * GROUP_ELEMENT_SIZE,
                 ),
                 (
                     ProofCommitmentField::Z_PERM,
@@ -1433,59 +1425,175 @@ mod should {
             }
         }
 
-        //     #[rstest]
-        //     fn a_plain_proof_containing_points_not_on_curve(
-        //         valid_vk: [u8; VK_SIZE],
-        //         valid_plain_proof: Box<[u8]>,
-        //         valid_pubs: [PublicInput; 1],
-        //     ) {
-        //         let field_offset = [
-        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(0), 0x2500),
-        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(1), 0x2580),
-        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(2), 0x2600),
-        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(3), 0x2680),
-        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(4), 0x2700),
-        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(5), 0x2780),
-        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(6), 0x2800),
-        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(7), 0x2880),
-        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(8), 0x2900),
-        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(9), 0x2980),
-        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(10), 0x2a00),
-        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(11), 0x2a80),
-        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(12), 0x2b00),
-        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(13), 0x2b80),
-        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(14), 0x2c00),
-        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(15), 0x2c80),
-        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(16), 0x2d00),
-        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(17), 0x2d80),
-        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(18), 0x2e00),
-        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(19), 0x2e80),
-        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(20), 0x2f00),
-        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(21), 0x2f80),
-        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(22), 0x3000),
-        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(23), 0x3080),
-        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(24), 0x3100),
-        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(25), 0x3180),
-        //             (PlainProofCommitmentField::GEMINI_FOLD_COMMS(26), 0x3200),
-        //             (PlainProofCommitmentField::SHPLONK_Q, 0x3600),
-        //             (PlainProofCommitmentField::KZG_QUOTIENT, 0x3680),
-        //         ]
-        //         .map(|(cf, idx)| (cf, idx + PAIRING_POINTS_SIZE * EVM_WORD_SIZE));
+        #[rstest]
+        fn a_plain_proof_containing_points_not_on_curve(valid_plain_proof: Box<[u8]>) {
+            let log_n = logn() as usize;
+            let w_1_offset = PAIRING_POINTS_SIZE * EVM_WORD_SIZE;
+            let gemini_fold_comms_0_offset: usize = w_1_offset
+                + NUM_WITNESS_ENTITIES * GROUP_ELEMENT_SIZE
+                + log_n * BATCHED_RELATION_PARTIAL_LENGTH * EVM_WORD_SIZE
+                + NUMBER_OF_ENTITIES * EVM_WORD_SIZE;
+            let shplonk_q_offset: usize = gemini_fold_comms_0_offset
+                + (log_n - 1) * GROUP_ELEMENT_SIZE
+                + (log_n) * EVM_WORD_SIZE;
 
-        //         for (field, offset) in field_offset {
-        //             let mut invalid_plain_proof = [0u8; PLAIN_PROOF_SIZE];
-        //             invalid_plain_proof.copy_from_slice(&valid_plain_proof);
-        //             // Alter current field; notice that (1, 3) ∉ G1
-        //             invalid_plain_proof[offset..offset + 128].fill(0);
-        //             invalid_plain_proof[offset + 31] = 1;
-        //             invalid_plain_proof[offset + 64 + 31] = 3;
+            let fixed_fields: [(ProofCommitmentField, usize); NUM_WITNESS_ENTITIES] = [
+                (ProofCommitmentField::W_1, w_1_offset),
+                (ProofCommitmentField::W_2, w_1_offset + GROUP_ELEMENT_SIZE),
+                (
+                    ProofCommitmentField::W_3,
+                    w_1_offset + 2 * GROUP_ELEMENT_SIZE,
+                ),
+                (
+                    ProofCommitmentField::LOOKUP_READ_COUNTS,
+                    w_1_offset + 3 * GROUP_ELEMENT_SIZE,
+                ),
+                (
+                    ProofCommitmentField::LOOKUP_READ_TAGS,
+                    w_1_offset + 4 * GROUP_ELEMENT_SIZE,
+                ),
+                (
+                    ProofCommitmentField::W_4,
+                    w_1_offset + 5 * GROUP_ELEMENT_SIZE,
+                ),
+                (
+                    ProofCommitmentField::LOOKUP_INVERSES,
+                    w_1_offset + 6 * GROUP_ELEMENT_SIZE,
+                ),
+                (
+                    ProofCommitmentField::Z_PERM,
+                    w_1_offset + 7 * GROUP_ELEMENT_SIZE,
+                ),
+            ];
 
-        //             assert_eq!(
-        //                 verify::<()>(&valid_vk, &ProofType::Plain(Box::new(invalid_plain_proof)), &valid_pubs).unwrap_err(),
-        //                 VerifyError::VerificationError {
-        //                     message: format!("Shplemini Failed. Cause: Point for proof commitment field '\"{field}\"' is not on curve")
-        //             });
-        //         }
-        //     }
+            let gemini_fields: Vec<(ProofCommitmentField, usize)> = (0..log_n - 1)
+                .map(|i| {
+                    (
+                        ProofCommitmentField::GEMINI_FOLD_COMMS(i),
+                        gemini_fold_comms_0_offset + i * GROUP_ELEMENT_SIZE,
+                    )
+                })
+                .collect();
+
+            let final_fields: [(ProofCommitmentField, usize); 2] = [
+                (ProofCommitmentField::SHPLONK_Q, shplonk_q_offset),
+                (
+                    ProofCommitmentField::KZG_QUOTIENT,
+                    shplonk_q_offset + GROUP_ELEMENT_SIZE,
+                ),
+            ];
+
+            let mut field_offset_vec: Vec<(ProofCommitmentField, usize)> = fixed_fields.to_vec();
+            field_offset_vec.extend(gemini_fields);
+            field_offset_vec.extend(final_fields.to_vec());
+
+            let field_offset = field_offset_vec.to_owned();
+
+            for (field, offset) in field_offset {
+                let mut invalid_plain_proof = valid_plain_proof.to_vec();
+                // Alter current field; notice that (1, 3) ∉ G1
+                invalid_plain_proof[offset..offset + GROUP_ELEMENT_SIZE].fill(0);
+                invalid_plain_proof[offset + EVM_WORD_SIZE - 1] = 1;
+                invalid_plain_proof[offset + GROUP_ELEMENT_SIZE - 1] = 3;
+
+                assert_eq!(
+                    PlainProof::<()>::from_bytes(&invalid_plain_proof[..], logn()),
+                    Err(ProofError::GroupConversionError {
+                        conv_error: ConversionError {
+                            group: GroupError::NotOnCurve,
+                            field: Some(field.into())
+                        }
+                    })
+                );
+            }
+        }
+
+        #[rstest]
+        fn a_plain_proof_containing_points_with_coordinates_outside_fq(
+            valid_plain_proof: Box<[u8]>,
+        ) {
+            let log_n = logn() as usize;
+            let w_1_offset = PAIRING_POINTS_SIZE * EVM_WORD_SIZE;
+            let gemini_fold_comms_0_offset: usize = w_1_offset
+                + NUM_WITNESS_ENTITIES * GROUP_ELEMENT_SIZE
+                + log_n * BATCHED_RELATION_PARTIAL_LENGTH * EVM_WORD_SIZE
+                + NUMBER_OF_ENTITIES * EVM_WORD_SIZE;
+            let shplonk_q_offset: usize = gemini_fold_comms_0_offset
+                + (log_n - 1) * GROUP_ELEMENT_SIZE
+                + (log_n) * EVM_WORD_SIZE;
+
+            let fixed_fields: [(ProofCommitmentField, usize); NUM_WITNESS_ENTITIES] = [
+                (ProofCommitmentField::W_1, w_1_offset),
+                (ProofCommitmentField::W_2, w_1_offset + GROUP_ELEMENT_SIZE),
+                (
+                    ProofCommitmentField::W_3,
+                    w_1_offset + 2 * GROUP_ELEMENT_SIZE,
+                ),
+                (
+                    ProofCommitmentField::LOOKUP_READ_COUNTS,
+                    w_1_offset + 3 * GROUP_ELEMENT_SIZE,
+                ),
+                (
+                    ProofCommitmentField::LOOKUP_READ_TAGS,
+                    w_1_offset + 4 * GROUP_ELEMENT_SIZE,
+                ),
+                (
+                    ProofCommitmentField::W_4,
+                    w_1_offset + 5 * GROUP_ELEMENT_SIZE,
+                ),
+                (
+                    ProofCommitmentField::LOOKUP_INVERSES,
+                    w_1_offset + 6 * GROUP_ELEMENT_SIZE,
+                ),
+                (
+                    ProofCommitmentField::Z_PERM,
+                    w_1_offset + 7 * GROUP_ELEMENT_SIZE,
+                ),
+            ];
+
+            let gemini_fields: Vec<(ProofCommitmentField, usize)> = (0..log_n - 1)
+                .map(|i| {
+                    (
+                        ProofCommitmentField::GEMINI_FOLD_COMMS(i),
+                        gemini_fold_comms_0_offset + i * GROUP_ELEMENT_SIZE,
+                    )
+                })
+                .collect();
+
+            let final_fields: [(ProofCommitmentField, usize); 2] = [
+                (ProofCommitmentField::SHPLONK_Q, shplonk_q_offset),
+                (
+                    ProofCommitmentField::KZG_QUOTIENT,
+                    shplonk_q_offset + GROUP_ELEMENT_SIZE,
+                ),
+            ];
+
+            let mut field_offset_vec: Vec<(ProofCommitmentField, usize)> = fixed_fields.to_vec();
+            field_offset_vec.extend(gemini_fields);
+            field_offset_vec.extend(final_fields.to_vec());
+
+            let field_offset = field_offset_vec.to_owned();
+
+            let invalid_bytes = Fq::MODULUS.into_be_bytes32();
+            for (field, offset) in field_offset {
+                let mut invalid_plain_proof = valid_plain_proof.to_vec();
+                // Copy the base field modulus bytes into the coordinate position to
+                // simulate an out-of-bounds coordinate.
+                invalid_plain_proof[offset..offset + EVM_WORD_SIZE].copy_from_slice(&invalid_bytes);
+
+                assert_eq!(
+                    PlainProof::<()>::from_bytes(&invalid_plain_proof[..], logn()),
+                    Err(ProofError::GroupConversionError {
+                        conv_error: ConversionError {
+                            group: GroupError::CoordinateExceedsModulus {
+                                coordinate_value: Fq::MODULUS,
+                                modulus: Fq::MODULUS,
+                            },
+                            field: Some(field.into())
+                        }
+                    })
+                );
+            }
+        }
     }
 }

@@ -587,11 +587,10 @@ fn generate_libra_challenge<H: CurveHooks>(
 
 fn generate_sumcheck_challenges<H: CurveHooks>(
     parsed_proof: &ParsedProof<H>,
-    previous_challenge: Fr,
+    mut previous_challenge: Fr,
     log_n: u64,
 ) -> ([Fr; CONST_PROOF_SIZE_LOG_N], Fr) {
     let mut sumcheck_challenges = [Fr::ZERO; CONST_PROOF_SIZE_LOG_N];
-    let mut previous_challenge = previous_challenge;
 
     for (i, sumcheck_univariate) in parsed_proof
         .sumcheck_univariates()

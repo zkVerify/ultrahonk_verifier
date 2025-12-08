@@ -579,7 +579,7 @@ mod should {
         fn a_vk_with_log_circuit_size_zero(valid_vk: [u8; VK_SIZE]) {
             let mut invalid_vk = [0u8; VK_SIZE];
             invalid_vk.copy_from_slice(&valid_vk);
-            invalid_vk[..32].fill(0);
+            invalid_vk[..EVM_WORD_SIZE].fill(0);
             assert_eq!(
                 VerificationKey::<()>::try_from(&invalid_vk[..]),
                 Err(VerificationKeyError::InvalidLogCircuitSize)
@@ -597,17 +597,6 @@ mod should {
                 Err(VerificationKeyError::LogCircuitSizeTooBig)
             );
         }
-
-        // #[rstest]
-        // fn a_vk_with_an_invalid_log_circuit_size(valid_vk: [u8; VK_SIZE]) {
-        //     let mut invalid_vk = [0u8; VK_SIZE];
-        //     invalid_vk.copy_from_slice(&valid_vk);
-        //     invalid_vk[8..16].fill(0);
-        //     assert_eq!(
-        //         VerificationKey::<()>::try_from(&invalid_vk[..]),
-        //         Err(VerificationKeyError::InvalidLogCircuitSize)
-        //     );
-        // }
 
         #[rstest]
         fn a_vk_with_a_point_not_on_curve_for_any_commitment_field(valid_vk: [u8; VK_SIZE]) {

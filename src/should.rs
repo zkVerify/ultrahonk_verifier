@@ -14,10 +14,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::*;
+use crate::{utils::IntoBEBytes32, *};
 use alloc::boxed::Box;
 use rstest::{fixture, rstest};
-// use sha3::{digest::Update, Digest, Keccak256};
 
 #[fixture]
 fn valid_zk_proof() -> Box<[u8]> {
@@ -42,6 +41,32 @@ fn valid_pubs() -> [PublicInput; 1] {
 }
 
 #[rstest]
+fn foobar(valid_vk: [u8; VK_SIZE]) {
+    let vk = crate::key::VerificationKey::<()>::try_from(&valid_vk[..]).unwrap();
+    dbg!(U256::from(vk.log_circuit_size).into_be_bytes32());
+}
+
+// #[rstest]
+// fn bar(valid_vk: [u8; VK_SIZE]) {
+//     let res = crate::hash0::keccak256_bytes(&valid_vk);
+//     println!("{}", crate::utils::to_hex_string(&res));
+// }
+
+// #[rstest]
+// fn foo(valid_vk: [u8; VK_SIZE]) {
+//     use tiny_keccak::*;
+//     // let mut hasher = Keccak::v256(); // Ethereum Keccak-256
+//     // output = 0x6ae4d158b4567ebd9765fecc3fffaf7274e6adad2bebfd0a281cfadd3b01c4bf
+
+//     // let mut hasher = Sha3::v256();
+//     // output = 0xc418b8ca38214305766f39c34acb62ddcd9c7ff74fa1e7b2a7eeeb51e8c455f3
+
+//     let output = keccak256(&valid_vk);
+
+//     println!("{}", crate::utils::to_hex_string(&output));
+// }
+
+#[rstest]
 fn verify_valid_zk_proof(
     valid_vk: [u8; VK_SIZE],
     valid_zk_proof: Box<[u8]>,
@@ -58,45 +83,6 @@ fn verify_valid_plain_proof(
 ) {
     assert!(verify::<()>(&valid_vk, &ProofType::Plain(valid_plain_proof), &valid_pubs).is_ok());
 }
-
-fn get_eth_keccak_hash(data: &[u8]) -> [u8; 32] {
-    // Use the Keccak variant (non-SHA3), specified for 256-bit output
-    // let mut hasher = Keccak::v256();
-    use tiny_keccak::{Hasher, Keccak};
-    let mut hasher = Keccak::v256();
-    let mut output = [0u8; 32];
-
-    // Absorb data
-    hasher.update(data);
-
-    // Finalize hash
-    hasher.finalize(&mut output);
-
-    output
-}
-
-// fn get_sha3_256_hash(data: &[u8]) -> [u8; 32] {
-//     use tiny_keccak::{Hasher, Sha3};
-//     // Use Sha3::v256(), which applies the FIPS-standard padding.
-//     let mut hasher = Sha3::v256();
-
-//     hasher.update(data);
-
-//     let mut output = [0u8; 32];
-//     hasher.finalize(&mut output);
-
-//     output
-// }
-
-// #[rstest]
-// fn foo(valid_vk: [u8; VK_SIZE]) {
-//     let eth_hash = get_eth_keccak_hash(&valid_vk);
-
-//     assert_eq!(
-//         to_hex_string(&eth_hash),
-//         "0x0a1c3472f1f33e6a26c5735f3cfcfeb8247edd1c38791be7a0590fb55b01c4bd"
-//     );
-// }
 
 mod reject {
     use super::*;
@@ -214,16 +200,11 @@ mod reject {
     ) {
         let mut invalid_zk_proof = valid_zk_proof.to_vec();
         invalid_zk_proof.copy_from_slice(&valid_zk_proof);
-        invalid_zk_proof[PAIRING_POINTS_SIZE * EVM_WORD_SIZE
+        let offset = PAIRING_POINTS_SIZE * EVM_WORD_SIZE
             + 11 * GROUP_ELEMENT_SIZE
             + EVM_WORD_SIZE
-            + 108 * EVM_WORD_SIZE
-            ..(PAIRING_POINTS_SIZE * EVM_WORD_SIZE
-                + 11 * GROUP_ELEMENT_SIZE
-                + EVM_WORD_SIZE
-                + 108 * EVM_WORD_SIZE
-                + EVM_WORD_SIZE)]
-            .fill(0); // Alter sumcheck_evaluations
+            + 108 * EVM_WORD_SIZE;
+        invalid_zk_proof[offset..offset + EVM_WORD_SIZE].fill(0); // Alter sumcheck_evaluations
 
         assert_eq!(
                 verify::<()>(&valid_vk, &ProofType::ZK(invalid_zk_proof.into_boxed_slice()), &valid_pubs).unwrap_err(),
@@ -242,16 +223,11 @@ mod reject {
         valid_pubs: [PublicInput; 1],
     ) {
         let mut invalid_plain_proof = valid_plain_proof.into_vec();
-        invalid_plain_proof[PAIRING_POINTS_SIZE * EVM_WORD_SIZE
+        let offset = PAIRING_POINTS_SIZE * EVM_WORD_SIZE
             + 11 * GROUP_ELEMENT_SIZE
             + EVM_WORD_SIZE
-            + 108 * EVM_WORD_SIZE
-            ..(PAIRING_POINTS_SIZE * EVM_WORD_SIZE
-                + 11 * GROUP_ELEMENT_SIZE
-                + EVM_WORD_SIZE
-                + 108 * EVM_WORD_SIZE
-                + EVM_WORD_SIZE)]
-            .fill(0); // Alter sumcheck_evaluations
+            + 108 * EVM_WORD_SIZE;
+        invalid_plain_proof[offset..offset + EVM_WORD_SIZE].fill(0); // Alter sumcheck_evaluations
 
         assert_eq!(
                 verify::<()>(&valid_vk, &ProofType::Plain(invalid_plain_proof.into_boxed_slice()), &valid_pubs).unwrap_err(),
@@ -276,7 +252,7 @@ mod reject {
         let offset = zk_proof_size
             - 2 * GROUP_ELEMENT_SIZE
             - FIELD_ELEMENT_SIZE * NUM_LIBRA_EVALUATIONS
-            - FIELD_ELEMENT_SIZE * log_circuit_size as usize; // offset for gemini_a_evaluations[0]
+            - FIELD_ELEMENT_SIZE * log_circuit_size as usize;
         let mut invalid_zk_proof = valid_zk_proof.into_vec();
         // Alter field; notice that (1, 3) ∉ G1
         invalid_zk_proof[offset..offset + GROUP_ELEMENT_SIZE].fill(0);
@@ -308,8 +284,7 @@ mod reject {
         let plain_proof_size = PlainProof::<()>::calculate_proof_byte_size(log_circuit_size);
         let offset = plain_proof_size
             - 2 * GROUP_ELEMENT_SIZE
-            - FIELD_ELEMENT_SIZE * 27 as usize
-            - 12 * EVM_WORD_SIZE; // offset for gemini_a_evaluations[0]
+            - FIELD_ELEMENT_SIZE * log_circuit_size as usize;
 
         let mut invalid_plain_proof = valid_plain_proof.into_vec();
         // Alter field; notice that (1, 3) ∉ G1
