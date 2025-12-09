@@ -474,6 +474,7 @@ impl<H: CurveHooks> TryFrom<&[u8]> for VerificationKey<H> {
 }
 
 impl<H: CurveHooks> VerificationKey<H> {
+    /// Computes the hash of the verification key using Keccak256.
     pub fn compute_vk_hash(&self) -> EVMWord {
         Keccak256::new()
             .chain(U256::from(self.log_circuit_size).into_be_bytes32())

@@ -4,7 +4,7 @@ PROVER_FILE=Prover.toml
 ARTIFACTS_DIR=artifacts
 ORACLE_HASH=keccak
 SCHEME=ultra_honk
-VERSIONS=("0.86.0" "0.87.0" "1.0.0" "1.1.0" "1.2.0" "2.0.2" "2.0.3" "2.0.4" "2.1.2" "2.1.3" "2.1.4" "2.1.5" "2.1.6" "2.1.7" "2.1.8") # "2.1.1" (404)
+VERSIONS=("0.86.0" "0.87.0" "1.0.0" "1.1.0" "1.2.0" "2.0.2" "2.0.3" "2.0.4" "2.1.2" "2.1.3" "2.1.4" "2.1.5" "2.1.6" "2.1.7" "2.1.8" "2.1.9") # "2.1.1" (404)
 
 function generate_artifacts() {
     BB_VERSION=$1
@@ -225,7 +225,7 @@ function generate_artifacts() {
         bb write_solidity_verifier -s "${SCHEME}" --disable_zk -k ./target/vk -o "${PLAIN_CONTRACTS_DIR}/PlainVerifier.sol"
         bb write_solidity_verifier -s "${SCHEME}" --disable_zk --optimized -k ./target/vk -o "${PLAIN_CONTRACTS_DIR}/OptimizedPlainVerifier.sol"
         mv ./target/vk ./target/proof ./target/public_inputs ./target/vk_hash "${PLAIN_OUTPUT_DIR}"
-    elif [[ "${BB_VERSION}" =~ ^2\.1\.[2-8]$ ]]; then
+    elif [[ "${BB_VERSION}" =~ ^2\.1\.[2-9]$ ]]; then
         # Use noirup to 1.0.0-beta.15 for proof generation to work (earlier versions might work).
         noirup -v 1.0.0-beta.15
 

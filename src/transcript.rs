@@ -78,6 +78,7 @@ pub(crate) trait CommonTranscriptData {
 }
 
 impl CommonTranscriptData for PlainTranscript {
+    // getters
     fn relation_parameters_challenges(&self) -> &RelationParametersChallenges {
         &self.relation_parameters_challenges
     }
@@ -112,6 +113,7 @@ impl CommonTranscriptData for PlainTranscript {
 }
 
 impl CommonTranscriptData for ZKTranscript {
+    // getters
     fn relation_parameters_challenges(&self) -> &RelationParametersChallenges {
         &self.relation_parameters_challenges
     }
@@ -146,6 +148,7 @@ impl CommonTranscriptData for ZKTranscript {
 }
 
 impl CommonTranscriptData for Transcript {
+    // getters
     fn relation_parameters_challenges(&self) -> &RelationParametersChallenges {
         match self {
             Transcript::ZK(zkt) => zkt.relation_parameters_challenges(),
@@ -216,6 +219,7 @@ pub(crate) struct RelationParametersChallenges {
 }
 
 impl RelationParametersChallenges {
+    // Constructor
     pub(crate) fn new(eta: Fr, eta_two: Fr, eta_three: Fr, beta: Fr, gamma: Fr) -> Self {
         RelationParametersChallenges {
             eta,
@@ -226,6 +230,7 @@ impl RelationParametersChallenges {
         }
     }
 
+    // Compute the public input delta
     pub(crate) fn compute_public_input_delta(
         &self,
         public_inputs: &Pubs,
@@ -253,6 +258,7 @@ impl RelationParametersChallenges {
     }
 }
 
+/// Generate the full transcript for a given proof.
 pub(crate) fn generate_transcript<H: CurveHooks>(
     parsed_proof: &ParsedProof<H>,
     public_inputs: &Pubs,
@@ -317,6 +323,7 @@ fn split_challenge(challenge: Fr) -> (Fr, Fr) {
     (lower, upper)
 }
 
+// Generate the relation parameters challenges: eta, eta_two, eta_three, beta, gamma
 fn generate_relation_parameters_challenges<H: CurveHooks>(
     parsed_proof: &ParsedProof<H>,
     public_inputs: &Pubs,
@@ -336,6 +343,7 @@ fn generate_relation_parameters_challenges<H: CurveHooks>(
     )
 }
 
+// Generate the eta challenges
 fn generate_eta_challenge<H: CurveHooks>(
     parsed_proof: &ParsedProof<H>,
     public_inputs: &Pubs,
@@ -412,6 +420,7 @@ fn generate_eta_challenge<H: CurveHooks>(
     [eta, eta_two, eta_three, previous_challenge]
 }
 
+// Generate beta and gamma challenges
 fn generate_beta_and_gamma_challenges<H: CurveHooks>(
     previous_challenge: Fr,
     parsed_proof: &ParsedProof<H>,
@@ -536,6 +545,7 @@ fn generate_alpha_challenges<H: CurveHooks>(
     (alphas, next_previous_challenge)
 }
 
+// Generate the gate challenges
 fn generate_gate_challenges(
     previous_challenge: Fr,
     log_n: u64,
@@ -585,6 +595,7 @@ fn generate_libra_challenge<H: CurveHooks>(
     (libra_challenge, next_previous_challenge)
 }
 
+// Generate the sumcheck u challenges
 fn generate_sumcheck_challenges<H: CurveHooks>(
     parsed_proof: &ParsedProof<H>,
     mut previous_challenge: Fr,
@@ -682,6 +693,7 @@ fn generate_rho_challenge<H: CurveHooks>(
     (rho, next_previous_challenge)
 }
 
+// Generate the gemini r challenge
 fn generate_gemini_r_challenge<H: CurveHooks>(
     parsed_proof: &ParsedProof<H>,
     previous_challenge: Fr,
@@ -715,6 +727,7 @@ fn generate_gemini_r_challenge<H: CurveHooks>(
     (gemini_r, next_previous_challenge)
 }
 
+// Generate the shplonk nu challenge
 fn generate_shplonk_nu_challenge<H: CurveHooks>(
     parsed_proof: &ParsedProof<H>,
     prev_challenge: Fr,
@@ -743,6 +756,7 @@ fn generate_shplonk_nu_challenge<H: CurveHooks>(
     (shplonk_nu, next_previous_challenge)
 }
 
+// Generate the shplonk z challenge
 fn generate_shplonk_z_challenge<H: CurveHooks>(
     parsed_proof: &ParsedProof<H>,
     previous_challenge: Fr,

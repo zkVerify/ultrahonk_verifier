@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// #![cfg_attr(not(feature = "std"), no_std)]
+#![cfg_attr(not(feature = "std"), no_std)]
 #![doc = include_str!("../README.md")]
 #![allow(non_camel_case_types)]
 
@@ -46,12 +46,12 @@ use crate::{
     relations::accumulate_relation_evaluations,
     srs::{SRS_G2, SRS_G2_VK},
     transcript::{generate_transcript, CommonTranscriptData, Transcript},
-    utils::read_g2,
+    utils::{read_g2, IntoBEBytes32},
 };
 use alloc::{boxed::Box, format, string::ToString, vec::Vec};
 use ark_bn254_ext::CurveHooks;
 use ark_ec::{pairing::Pairing, AffineRepr, CurveGroup};
-use ark_ff::{batch_inversion, AdditiveGroup, Field, One};
+use ark_ff::{batch_inversion, AdditiveGroup, Field, One, PrimeField};
 use ark_models_ext::bn::{G1Prepared, G2Prepared};
 use constants::{SUBGROUP_GENERATOR, SUBGROUP_GENERATOR_INVERSE};
 use errors::VerifyError;
@@ -64,6 +64,7 @@ pub use types::*;
 pub type PublicInput = [u8; PUB_SIZE];
 pub type Pubs = [PublicInput];
 
+/// Verifies a proof against a verification key and public inputs.
 pub fn verify<H: CurveHooks + Default>(
     vk_bytes: &[u8],
     proof: &ProofType,
@@ -71,9 +72,7 @@ pub fn verify<H: CurveHooks + Default>(
 ) -> Result<(), VerifyError> {
     let vk = VerificationKey::<H>::try_from(vk_bytes).map_err(|_| VerifyError::KeyError)?;
 
-    // TODO: Move check inside the from_bytes functions if possible.
     check_proof_size::<H>(proof, vk.log_circuit_size)?;
-
     check_public_input_number(&vk, pubs)?;
 
     let proof = match proof {
@@ -93,23 +92,17 @@ pub fn verify<H: CurveHooks + Default>(
         )),
     };
 
-    verify_inner(&vk, &proof, pubs)
+    verify_internal(&vk, &proof, pubs)
 }
 
-fn verify_inner<H: CurveHooks>(
+// Core verification logic.
+fn verify_internal<H: CurveHooks>(
     vk: &VerificationKey<H>,
     parsed_proof: &ParsedProof<H>,
     public_inputs: &Pubs,
 ) -> Result<(), VerifyError> {
-    // TODO: Fix this so that we do not rely on a hard-coded hash
-    // let vk_hash = vk.compute_vk_hash();
-
-    let vk_hash =
-        hex_literal::hex!("0a1c3472f1f33e6a26c5735f3cfcfeb8247edd1c38791be7a0590fb55b01c4bd");
-
-    // println!("vk_hash = {}", to_hex_string(&vk_hash));
-    // What I actually get: 0x6ae4d158b4567ebd9765fecc3fffaf7274e6adad2bebfd0a281cfadd3b01c4bf
-    // The correct hash is: 0x0a1c3472f1f33e6a26c5735f3cfcfeb8247edd1c38791be7a0590fb55b01c4bd
+    // Compute the verification key hash
+    let vk_hash = Fr::from_be_bytes_mod_order(&vk.compute_vk_hash()).into_be_bytes32();
 
     // Generate the Fiat-Shamir challenges for the whole protocol and derive public inputs delta
     let t: Transcript =
@@ -158,6 +151,7 @@ fn check_public_input_number<H: CurveHooks>(
     }
 }
 
+// Verify the sumcheck part of the proof.
 fn verify_sumcheck<H: CurveHooks>(
     parsed_proof: &ParsedProof<H>,
     tp: &Transcript,
@@ -267,6 +261,7 @@ fn compute_next_target_sum<H: CurveHooks>(
     Ok(target_sum)
 }
 
+// Verify the shplemini part of the proof.
 fn verify_shplemini<H: CurveHooks>(
     parsed_proof: &ParsedProof<H>,
     vk: &VerificationKey<H>,
@@ -545,6 +540,7 @@ fn verify_shplemini<H: CurveHooks>(
     }
 }
 
+// Check the consistency conditions for the Libra evaluations.
 fn check_evals_consistency(
     libra_poly_evals: &[Fr; NUM_LIBRA_EVALUATIONS],
     gemini_r: Fr,
@@ -626,6 +622,7 @@ fn check_evals_consistency(
     Ok(())
 }
 
+// Check that the proof size matches the expected size for the given log_n.
 fn check_proof_size<H: CurveHooks>(proof: &ProofType, log_n: u64) -> Result<(), VerifyError> {
     // Calculate expected proof size based on log_n.
     let (expected_proof_size, proof_length) = match proof {
