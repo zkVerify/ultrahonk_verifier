@@ -36,7 +36,7 @@ use crate::{
     types::G1,
     EVMWord, Fq, Fq2, Fr, G2, U256,
 };
-use alloc::string::String;
+use alloc::{format, string::String};
 use ark_bn254_ext::CurveHooks;
 use ark_ec::AffineRepr;
 use ark_ff::{AdditiveGroup, PrimeField};
