@@ -27,7 +27,7 @@ use crate::{
     utils::{read_g1_by_splitting, IntoBEBytes32, IntoU256},
     EVMWord, Fr, G1,
 };
-use alloc::boxed::Box;
+use alloc::{boxed::Box, string::ToString};
 use ark_bn254_ext::{CurveHooks, Fq};
 use ark_ec::AffineRepr;
 use ark_ff::{AdditiveGroup, MontFp, PrimeField};
