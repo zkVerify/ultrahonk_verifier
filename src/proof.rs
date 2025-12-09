@@ -962,120 +962,85 @@ impl<H: CurveHooks> CommonProofData<H> for ParsedProof<H> {
     }
 }
 
+// Convert a single G1 point from 8 EVM words.
+fn convert_g1_point_from_words<H: CurveHooks>(
+    words: &[EVMWord], // words must be an 8-element slice
+) -> Result<G1<H>, ProofError> {
+    // Combine 4 words for the x-coordinate
+    let mut x_coord = words[0].into_u256();
+    x_coord |= words[1].into_u256() << 68;
+    x_coord |= words[2].into_u256() << 136;
+    x_coord |= words[3].into_u256() << 204;
+
+    // Combine 4 words for the y-coordinate
+    let mut y_coord = words[4].into_u256();
+    y_coord |= words[5].into_u256() << 68;
+    y_coord |= words[6].into_u256() << 136;
+    y_coord |= words[7].into_u256() << 204;
+
+    // Convert x to Fq (check modulus)
+    let x_coord =
+        Fq::from_bigint(x_coord)
+            .ok_or(())
+            .map_err(|_| ProofError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: GroupError::CoordinateExceedsModulus {
+                        coordinate_value: x_coord,
+                        modulus: Fq::MODULUS,
+                    },
+                    field: None,
+                },
+            })?;
+
+    // Convert y to Fq (check modulus)
+    let y_coord =
+        Fq::from_bigint(y_coord)
+            .ok_or(())
+            .map_err(|_| ProofError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: GroupError::CoordinateExceedsModulus {
+                        coordinate_value: y_coord,
+                        modulus: Fq::MODULUS,
+                    },
+                    field: None,
+                },
+            })?;
+
+    // Construct and validate the G1 point
+    let p;
+    if x_coord == Fq::ZERO && y_coord == Fq::ZERO {
+        // (0, 0) is the point at infinity
+        p = G1::zero();
+    } else {
+        p = G1::new_unchecked(x_coord, y_coord);
+
+        // Validate point
+        if !p.is_on_curve() {
+            return Err(ProofError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: GroupError::NotOnCurve,
+                    field: None,
+                },
+            });
+        }
+        // This is always true for G1 with the BN254 curve.
+        debug_assert!(p.is_in_correct_subgroup_assuming_on_curve());
+    }
+
+    Ok(p)
+}
+
 // Convert pairing points from EVM words to G1 points.
 // The first 8 EVM words correspond to the x and y coordinates of the first G1 point,
 // and the next 8 EVM words correspond to the x and y coordinates of the second G1 point.
 pub(crate) fn convert_pairing_points_to_g1<H: CurveHooks>(
     pairing_points: &[EVMWord; PAIRING_POINTS_SIZE],
 ) -> Result<(G1<H>, G1<H>), ProofError> {
-    let p0;
-    let p1;
+    // Convert the first G1 point (words 0-7)
+    let p0 = convert_g1_point_from_words(&pairing_points[0..8])?;
 
-    let mut lhs_x = pairing_points[0].into_u256();
-    lhs_x |= pairing_points[1].into_u256() << 68;
-    lhs_x |= pairing_points[2].into_u256() << 136;
-    lhs_x |= pairing_points[3].into_u256() << 204;
-
-    let mut lhs_y = pairing_points[4].into_u256();
-    lhs_y |= pairing_points[5].into_u256() << 68;
-    lhs_y |= pairing_points[6].into_u256() << 136;
-    lhs_y |= pairing_points[7].into_u256() << 204;
-
-    let lhs_x = Fq::from_bigint(lhs_x)
-        .ok_or(())
-        .map_err(|_| ProofError::GroupConversionError {
-            conv_error: ConversionError {
-                group: GroupError::CoordinateExceedsModulus {
-                    coordinate_value: lhs_x,
-                    modulus: Fq::MODULUS,
-                },
-                field: None,
-            },
-        })?;
-    let lhs_y = Fq::from_bigint(lhs_y)
-        .ok_or(())
-        .map_err(|_| ProofError::GroupConversionError {
-            conv_error: ConversionError {
-                group: GroupError::CoordinateExceedsModulus {
-                    coordinate_value: lhs_y,
-                    modulus: Fq::MODULUS,
-                },
-                field: None,
-            },
-        })?;
-
-    // If (0, 0) is given, we interpret this as the point at infinity:
-    // https://docs.rs/ark-ec/0.5.0/src/ark_ec/models/short_weierstrass/affine.rs.html#212-218
-    if lhs_x == Fq::ZERO && lhs_y == Fq::ZERO {
-        p0 = G1::zero();
-    } else {
-        p0 = G1::new_unchecked(lhs_x, lhs_y);
-
-        // Validate point
-        if !p0.is_on_curve() {
-            return Err(ProofError::GroupConversionError {
-                conv_error: ConversionError {
-                    group: GroupError::NotOnCurve,
-                    field: None,
-                },
-            });
-        }
-        // This is always true for G1 with the BN254 curve.
-        debug_assert!(p0.is_in_correct_subgroup_assuming_on_curve());
-    }
-
-    let mut rhs_x = pairing_points[8].into_u256();
-    rhs_x |= pairing_points[9].into_u256() << 68;
-    rhs_x |= pairing_points[10].into_u256() << 136;
-    rhs_x |= pairing_points[11].into_u256() << 204;
-
-    let mut rhs_y = pairing_points[12].into_u256();
-    rhs_y |= pairing_points[13].into_u256() << 68;
-    rhs_y |= pairing_points[14].into_u256() << 136;
-    rhs_y |= pairing_points[15].into_u256() << 204;
-
-    let rhs_x = Fq::from_bigint(rhs_x)
-        .ok_or(())
-        .map_err(|_| ProofError::GroupConversionError {
-            conv_error: ConversionError {
-                group: GroupError::CoordinateExceedsModulus {
-                    coordinate_value: rhs_x,
-                    modulus: Fq::MODULUS,
-                },
-                field: None,
-            },
-        })?;
-    let rhs_y = Fq::from_bigint(rhs_y)
-        .ok_or(())
-        .map_err(|_| ProofError::GroupConversionError {
-            conv_error: ConversionError {
-                group: GroupError::CoordinateExceedsModulus {
-                    coordinate_value: rhs_y,
-                    modulus: Fq::MODULUS,
-                },
-                field: None,
-            },
-        })?;
-
-    // If (0, 0) is given, we interpret this as the point at infinity:
-    // https://docs.rs/ark-ec/0.5.0/src/ark_ec/models/short_weierstrass/affine.rs.html#212-218
-    if rhs_x == Fq::ZERO && rhs_y == Fq::ZERO {
-        p1 = G1::zero();
-    } else {
-        p1 = G1::new_unchecked(rhs_x, rhs_y);
-
-        // Validate point
-        if !p1.is_on_curve() {
-            return Err(ProofError::GroupConversionError {
-                conv_error: ConversionError {
-                    group: GroupError::NotOnCurve,
-                    field: None,
-                },
-            });
-        }
-        // This is always true for G1 with the BN254 curve.
-        debug_assert!(p1.is_in_correct_subgroup_assuming_on_curve());
-    }
+    // Convert the second G1 point (words 8-15)
+    let p1 = convert_g1_point_from_words(&pairing_points[8..16])?;
 
     Ok((p0, p1))
 }
