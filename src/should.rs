@@ -550,12 +550,6 @@ fn valid_pubs() -> [PublicInput; 1] {
 }
 
 #[rstest]
-fn foobar(valid_vk: [u8; VK_SIZE]) {
-    let vk = crate::key::VerificationKey::<()>::try_from(&valid_vk[..]).unwrap();
-    dbg!(U256::from(vk.log_circuit_size).into_be_bytes32());
-}
-
-#[rstest]
 fn verify_valid_zk_proof(
     valid_vk: [u8; VK_SIZE],
     valid_zk_proof: Box<[u8]>,
