@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 
+PROJECT_NAME=hello_future
 PROVER_FILE=Prover.toml
 ARTIFACTS_DIR=artifacts
 ORACLE_HASH=keccak
@@ -85,13 +86,13 @@ function generate_artifacts() {
         generate_prover_witness_and_compile
 
         # ZK variant
-        bb prove -s "${SCHEME}" --zk -b ./target/hello_future.json -w ./target/hello_future.gz --oracle_hash "${ORACLE_HASH}" -o ./target --write_vk
+        bb prove -s "${SCHEME}" --zk -b ./target/${PROJECT_NAME}.json -w ./target/${PROJECT_NAME}.gz --oracle_hash "${ORACLE_HASH}" -o ./target --write_vk
         generate_zkv_artifacts "ZK" "./target/proof" "./target/vk" "./target/public_inputs"
         bb write_solidity_verifier -s "${SCHEME}" -k ./target/vk -o "${ZK_CONTRACTS_DIR}/ZKVerifier.sol" --zk
         mv ./target/vk ./target/proof ./target/public_inputs "${ZK_OUTPUT_DIR}"
 
         # Plain (non-zk) variant
-        bb prove -s "${SCHEME}" -b ./target/hello_future.json -w ./target/hello_future.gz --oracle_hash "${ORACLE_HASH}" -o ./target --write_vk
+        bb prove -s "${SCHEME}" -b ./target/${PROJECT_NAME}.json -w ./target/${PROJECT_NAME}.gz --oracle_hash "${ORACLE_HASH}" -o ./target --write_vk
         generate_zkv_artifacts "Plain" "./target/proof" "./target/vk" "./target/public_inputs"
         bb write_solidity_verifier -s "${SCHEME}" -k ./target/vk -o "${PLAIN_CONTRACTS_DIR}/PlainVerifier.sol"
         mv ./target/vk ./target/proof ./target/public_inputs "${PLAIN_OUTPUT_DIR}"
@@ -102,13 +103,13 @@ function generate_artifacts() {
         generate_prover_witness_and_compile
 
         # ZK variant
-        bb prove -s "${SCHEME}" --zk -b ./target/hello_future.json -w ./target/hello_future.gz --oracle_hash "${ORACLE_HASH}" -o ./target --write_vk
+        bb prove -s "${SCHEME}" --zk -b ./target/${PROJECT_NAME}.json -w ./target/${PROJECT_NAME}.gz --oracle_hash "${ORACLE_HASH}" -o ./target --write_vk
         generate_zkv_artifacts "ZK" "./target/proof" "./target/vk" "./target/public_inputs"
         bb write_solidity_verifier -s "${SCHEME}" -k ./target/vk -o "${ZK_CONTRACTS_DIR}/ZKVerifier.sol" --zk
         mv ./target/vk ./target/proof ./target/public_inputs "${ZK_OUTPUT_DIR}"
 
         # Plain (non-zk) variant
-        bb prove -s "${SCHEME}" -b ./target/hello_future.json -w ./target/hello_future.gz --oracle_hash "${ORACLE_HASH}" -o ./target --write_vk
+        bb prove -s "${SCHEME}" -b ./target/${PROJECT_NAME}.json -w ./target/${PROJECT_NAME}.gz --oracle_hash "${ORACLE_HASH}" -o ./target --write_vk
         generate_zkv_artifacts "Plain" "./target/proof" "./target/vk" "./target/public_inputs"
         bb write_solidity_verifier -s "${SCHEME}" -k ./target/vk -o "${PLAIN_CONTRACTS_DIR}/PlainVerifier.sol"
         mv ./target/vk ./target/proof ./target/public_inputs "${PLAIN_OUTPUT_DIR}"
@@ -121,13 +122,13 @@ function generate_artifacts() {
         # Starting from this version, --zk is removed and --disable_zk is introduced.
         # By default, proofs are now ZK.
         # ZK variant
-        bb prove -s "${SCHEME}" -b ./target/hello_future.json -w ./target/hello_future.gz --oracle_hash "${ORACLE_HASH}" -o ./target --write_vk
+        bb prove -s "${SCHEME}" -b ./target/${PROJECT_NAME}.json -w ./target/${PROJECT_NAME}.gz --oracle_hash "${ORACLE_HASH}" -o ./target --write_vk
         generate_zkv_artifacts "ZK" "./target/proof" "./target/vk" "./target/public_inputs"
         bb write_solidity_verifier -s "${SCHEME}" -k ./target/vk -o "${ZK_CONTRACTS_DIR}/ZKVerifier.sol"
         mv ./target/vk ./target/proof ./target/public_inputs "${ZK_OUTPUT_DIR}"
 
         # Plain (non-zk) variant
-        bb prove -s "${SCHEME}" --disable_zk -b ./target/hello_future.json -w ./target/hello_future.gz --oracle_hash "${ORACLE_HASH}" -o ./target --write_vk
+        bb prove -s "${SCHEME}" --disable_zk -b ./target/${PROJECT_NAME}.json -w ./target/${PROJECT_NAME}.gz --oracle_hash "${ORACLE_HASH}" -o ./target --write_vk
         generate_zkv_artifacts "Plain" "./target/proof" "./target/vk" "./target/public_inputs"
         bb write_solidity_verifier -s "${SCHEME}" --disable_zk -k ./target/vk -o "${PLAIN_CONTRACTS_DIR}/PlainVerifier.sol"
         mv ./target/vk ./target/proof ./target/public_inputs "${PLAIN_OUTPUT_DIR}"
@@ -138,13 +139,13 @@ function generate_artifacts() {
         generate_prover_witness_and_compile
 
         # ZK variant
-        bb prove -s "${SCHEME}" -b ./target/hello_future.json -w ./target/hello_future.gz --oracle_hash "${ORACLE_HASH}" -o ./target --write_vk
+        bb prove -s "${SCHEME}" -b ./target/${PROJECT_NAME}.json -w ./target/${PROJECT_NAME}.gz --oracle_hash "${ORACLE_HASH}" -o ./target --write_vk
         generate_zkv_artifacts "ZK" "./target/proof" "./target/vk" "./target/public_inputs"
         bb write_solidity_verifier -s "${SCHEME}" -k ./target/vk -o "${ZK_CONTRACTS_DIR}/ZKVerifier.sol"
         mv ./target/vk ./target/proof ./target/public_inputs "${ZK_OUTPUT_DIR}"
 
         # Plain (non-zk) variant
-        bb prove -s "${SCHEME}" --disable_zk -b ./target/hello_future.json -w ./target/hello_future.gz --oracle_hash "${ORACLE_HASH}" -o ./target --write_vk
+        bb prove -s "${SCHEME}" --disable_zk -b ./target/${PROJECT_NAME}.json -w ./target/${PROJECT_NAME}.gz --oracle_hash "${ORACLE_HASH}" -o ./target --write_vk
         generate_zkv_artifacts "Plain" "./target/proof" "./target/vk" "./target/public_inputs"
         bb write_solidity_verifier -s "${SCHEME}" --disable_zk -k ./target/vk -o "${PLAIN_CONTRACTS_DIR}/PlainVerifier.sol"
         mv ./target/vk ./target/proof ./target/public_inputs "${PLAIN_OUTPUT_DIR}"
@@ -155,13 +156,13 @@ function generate_artifacts() {
         generate_prover_witness_and_compile
 
         # ZK variant
-        bb prove -s "${SCHEME}" -b ./target/hello_future.json -w ./target/hello_future.gz --oracle_hash "${ORACLE_HASH}" -o ./target --write_vk
+        bb prove -s "${SCHEME}" -b ./target/${PROJECT_NAME}.json -w ./target/${PROJECT_NAME}.gz --oracle_hash "${ORACLE_HASH}" -o ./target --write_vk
         generate_zkv_artifacts "ZK" "./target/proof" "./target/vk" "./target/public_inputs"
         bb write_solidity_verifier -s "${SCHEME}" -k ./target/vk -o "${ZK_CONTRACTS_DIR}/ZKVerifier.sol"
         mv ./target/vk ./target/proof ./target/public_inputs "${ZK_OUTPUT_DIR}"
 
         # Plain (non-zk) variant
-        bb prove -s "${SCHEME}" --disable_zk -b ./target/hello_future.json -w ./target/hello_future.gz --oracle_hash "${ORACLE_HASH}" -o ./target --write_vk
+        bb prove -s "${SCHEME}" --disable_zk -b ./target/${PROJECT_NAME}.json -w ./target/${PROJECT_NAME}.gz --oracle_hash "${ORACLE_HASH}" -o ./target --write_vk
         generate_zkv_artifacts "Plain" "./target/proof" "./target/vk" "./target/public_inputs"
         bb write_solidity_verifier -s "${SCHEME}" --disable_zk -k ./target/vk -o "${PLAIN_CONTRACTS_DIR}/PlainVerifier.sol"
         mv ./target/vk ./target/proof ./target/public_inputs "${PLAIN_OUTPUT_DIR}"
@@ -175,14 +176,14 @@ function generate_artifacts() {
         # From now on, a vk_hash artifact is also generated.
 
         # ZK variant
-        bb prove -s "${SCHEME}" -b ./target/hello_future.json -w ./target/hello_future.gz --oracle_hash "${ORACLE_HASH}" -o ./target --write_vk
+        bb prove -s "${SCHEME}" -b ./target/${PROJECT_NAME}.json -w ./target/${PROJECT_NAME}.gz --oracle_hash "${ORACLE_HASH}" -o ./target --write_vk
         generate_zkv_artifacts "ZK" "./target/proof" "./target/vk" "./target/public_inputs"
         bb write_solidity_verifier -s "${SCHEME}" -k ./target/vk -o "${ZK_CONTRACTS_DIR}/ZKVerifier.sol"
         bb write_solidity_verifier -s "${SCHEME}" --optimized -k ./target/vk -o "${ZK_CONTRACTS_DIR}/OptimizedZKVerifier.sol"
         mv ./target/vk ./target/proof ./target/public_inputs ./target/vk_hash "${ZK_OUTPUT_DIR}"
 
         # Plain (non-zk) variant
-        bb prove -s "${SCHEME}" --disable_zk -b ./target/hello_future.json -w ./target/hello_future.gz --oracle_hash "${ORACLE_HASH}" -o ./target --write_vk
+        bb prove -s "${SCHEME}" --disable_zk -b ./target/${PROJECT_NAME}.json -w ./target/${PROJECT_NAME}.gz --oracle_hash "${ORACLE_HASH}" -o ./target --write_vk
         generate_zkv_artifacts "Plain" "./target/proof" "./target/vk" "./target/public_inputs"
         bb write_solidity_verifier -s "${SCHEME}" --disable_zk -k ./target/vk -o "${PLAIN_CONTRACTS_DIR}/PlainVerifier.sol"
         bb write_solidity_verifier -s "${SCHEME}" --disable_zk --optimized -k ./target/vk -o "${PLAIN_CONTRACTS_DIR}/OptimizedPlainVerifier.sol"
@@ -194,14 +195,14 @@ function generate_artifacts() {
         generate_prover_witness_and_compile
 
         # ZK variant
-        bb prove -s "${SCHEME}" -b ./target/hello_future.json -w ./target/hello_future.gz --oracle_hash "${ORACLE_HASH}" -o ./target --write_vk
+        bb prove -s "${SCHEME}" -b ./target/${PROJECT_NAME}.json -w ./target/${PROJECT_NAME}.gz --oracle_hash "${ORACLE_HASH}" -o ./target --write_vk
         generate_zkv_artifacts "ZK" "./target/proof" "./target/vk" "./target/public_inputs"
         bb write_solidity_verifier -s "${SCHEME}" -k ./target/vk -o "${ZK_CONTRACTS_DIR}/ZKVerifier.sol"
         bb write_solidity_verifier -s "${SCHEME}" --optimized -k ./target/vk -o "${ZK_CONTRACTS_DIR}/OptimizedZKVerifier.sol"
         mv ./target/vk ./target/proof ./target/public_inputs ./target/vk_hash "${ZK_OUTPUT_DIR}"
 
         # Plain (non-zk) variant
-        bb prove -s "${SCHEME}" --disable_zk -b ./target/hello_future.json -w ./target/hello_future.gz --oracle_hash "${ORACLE_HASH}" -o ./target --write_vk
+        bb prove -s "${SCHEME}" --disable_zk -b ./target/${PROJECT_NAME}.json -w ./target/${PROJECT_NAME}.gz --oracle_hash "${ORACLE_HASH}" -o ./target --write_vk
         generate_zkv_artifacts "Plain" "./target/proof" "./target/vk" "./target/public_inputs"
         bb write_solidity_verifier -s "${SCHEME}" --disable_zk -k ./target/vk -o "${PLAIN_CONTRACTS_DIR}/PlainVerifier.sol"
         bb write_solidity_verifier -s "${SCHEME}" --disable_zk --optimized -k ./target/vk -o "${PLAIN_CONTRACTS_DIR}/OptimizedPlainVerifier.sol"
@@ -213,14 +214,14 @@ function generate_artifacts() {
         generate_prover_witness_and_compile
 
         # ZK variant
-        bb prove -s "${SCHEME}" -b ./target/hello_future.json -w ./target/hello_future.gz --oracle_hash "${ORACLE_HASH}" -o ./target --write_vk
+        bb prove -s "${SCHEME}" -b ./target/${PROJECT_NAME}.json -w ./target/${PROJECT_NAME}.gz --oracle_hash "${ORACLE_HASH}" -o ./target --write_vk
         generate_zkv_artifacts "ZK" "./target/proof" "./target/vk" "./target/public_inputs"
         bb write_solidity_verifier -s "${SCHEME}" -k ./target/vk -o "${ZK_CONTRACTS_DIR}/ZKVerifier.sol"
         bb write_solidity_verifier -s "${SCHEME}" --optimized -k ./target/vk -o "${ZK_CONTRACTS_DIR}/OptimizedZKVerifier.sol"
         mv ./target/vk ./target/proof ./target/public_inputs ./target/vk_hash "${ZK_OUTPUT_DIR}"
 
         # Plain (non-zk) variant
-        bb prove -s "${SCHEME}" --disable_zk -b ./target/hello_future.json -w ./target/hello_future.gz --oracle_hash "${ORACLE_HASH}" -o ./target --write_vk
+        bb prove -s "${SCHEME}" --disable_zk -b ./target/${PROJECT_NAME}.json -w ./target/${PROJECT_NAME}.gz --oracle_hash "${ORACLE_HASH}" -o ./target --write_vk
         generate_zkv_artifacts "Plain" "./target/proof" "./target/vk" "./target/public_inputs"
         bb write_solidity_verifier -s "${SCHEME}" --disable_zk -k ./target/vk -o "${PLAIN_CONTRACTS_DIR}/PlainVerifier.sol"
         bb write_solidity_verifier -s "${SCHEME}" --disable_zk --optimized -k ./target/vk -o "${PLAIN_CONTRACTS_DIR}/OptimizedPlainVerifier.sol"
@@ -232,14 +233,14 @@ function generate_artifacts() {
         generate_prover_witness_and_compile
 
         # ZK variant
-        bb prove -s "${SCHEME}" -b ./target/hello_future.json -w ./target/hello_future.gz --oracle_hash "${ORACLE_HASH}" -o ./target --write_vk
+        bb prove -s "${SCHEME}" -b ./target/${PROJECT_NAME}.json -w ./target/${PROJECT_NAME}.gz --oracle_hash "${ORACLE_HASH}" -o ./target --write_vk
         generate_zkv_artifacts "ZK" "./target/proof" "./target/vk" "./target/public_inputs"
         bb write_solidity_verifier -s "${SCHEME}" -k ./target/vk -o "${ZK_CONTRACTS_DIR}/ZKVerifier.sol"
         bb write_solidity_verifier -s "${SCHEME}" --optimized -k ./target/vk -o "${ZK_CONTRACTS_DIR}/OptimizedZKVerifier.sol"
         mv ./target/vk ./target/proof ./target/public_inputs ./target/vk_hash "${ZK_OUTPUT_DIR}"
 
         # Plain (non-zk) variant
-        bb prove -s "${SCHEME}" --disable_zk -b ./target/hello_future.json -w ./target/hello_future.gz --oracle_hash "${ORACLE_HASH}" -o ./target --write_vk
+        bb prove -s "${SCHEME}" --disable_zk -b ./target/${PROJECT_NAME}.json -w ./target/${PROJECT_NAME}.gz --oracle_hash "${ORACLE_HASH}" -o ./target --write_vk
         generate_zkv_artifacts "Plain" "./target/proof" "./target/vk" "./target/public_inputs"
         bb write_solidity_verifier -s "${SCHEME}" --disable_zk -k ./target/vk -o "${PLAIN_CONTRACTS_DIR}/PlainVerifier.sol"
         bb write_solidity_verifier -s "${SCHEME}" --disable_zk --optimized -k ./target/vk -o "${PLAIN_CONTRACTS_DIR}/OptimizedPlainVerifier.sol"
