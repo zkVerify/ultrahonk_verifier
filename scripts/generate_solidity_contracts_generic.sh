@@ -1,11 +1,29 @@
 #!/usr/bin/env bash
 
-PROJECT_NAME=hello_future
+PROJECT_NAME=hello_world
 PROVER_FILE=Prover.toml
 ARTIFACTS_DIR=artifacts
 ORACLE_HASH=keccak
 SCHEME=ultra_honk
-VERSIONS=("0.86.0" "0.87.0" "1.0.0" "1.1.0" "1.2.0" "2.0.2" "2.0.3" "2.0.4" "2.1.2" "2.1.3" "2.1.4" "2.1.5" "2.1.6" "2.1.7" "2.1.8" "2.1.9") # "2.1.1" (404)
+VERSIONS=(
+  "0.86.0"
+  "0.87.0"
+  "1.0.0"
+  "1.1.0"
+  "1.2.0"
+  "2.0.2"
+  "2.0.3"
+  "2.0.4"
+  # "2.1.1" (404)
+  "2.1.2"
+  "2.1.3"
+  "2.1.4"
+  "2.1.5"
+  "2.1.6"
+  "2.1.7"
+  "2.1.8"
+  "2.1.9"
+)
 
 function generate_artifacts() {
     BB_VERSION=$1
@@ -250,6 +268,8 @@ function generate_artifacts() {
     fi
 }
 
+nargo new "${PROJECT_NAME}"
+
 for v in "${VERSIONS[@]}"; do
-    generate_artifacts "${v}"
+    (cd "${PROJECT_NAME}" && generate_artifacts "${v}")
 done
