@@ -1036,12 +1036,8 @@ fn convert_g1_point_from_words<H: CurveHooks>(
 pub(crate) fn convert_pairing_points_to_g1<H: CurveHooks>(
     pairing_points: &[EVMWord; PAIRING_POINTS_SIZE],
 ) -> Result<(G1<H>, G1<H>), ProofError> {
-    // Convert the first G1 point (words 0-7)
     let p0 = convert_g1_point_from_words(&pairing_points[0..8])?;
-
-    // Convert the second G1 point (words 8-15)
     let p1 = convert_g1_point_from_words(&pairing_points[8..16])?;
-
     Ok((p0, p1))
 }
 
