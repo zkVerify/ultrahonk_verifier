@@ -23,6 +23,8 @@ VERSIONS=(
   "2.1.7"
   "2.1.8"
   "2.1.9"
+  "3.0.1"
+  "3.0.2"
 )
 
 function generate_artifacts() {
@@ -262,6 +264,25 @@ function generate_artifacts() {
         generate_zkv_artifacts "Plain" "./target/proof" "./target/vk" "./target/public_inputs"
         bb write_solidity_verifier -s "${SCHEME}" --disable_zk -k ./target/vk -o "${PLAIN_CONTRACTS_DIR}/PlainVerifier.sol"
         bb write_solidity_verifier -s "${SCHEME}" --disable_zk --optimized -k ./target/vk -o "${PLAIN_CONTRACTS_DIR}/OptimizedPlainVerifier.sol"
+        mv ./target/vk ./target/proof ./target/public_inputs ./target/vk_hash "${PLAIN_OUTPUT_DIR}"
+    elif [[ "${BB_VERSION}" =~ ^3\.0\.[1-2]$ ]]; then
+        # Use noirup to 1.0.0-beta.17 for proof generation to work (earlier versions might also work).
+        noirup -v 1.0.0-beta.17
+
+        generate_prover_witness_and_compile
+
+        # ZK variant
+        bb prove -t evm -b ./target/${PROJECT_NAME}.json -w ./target/${PROJECT_NAME}.gz -o ./target --write_vk
+        generate_zkv_artifacts "ZK" "./target/proof" "./target/vk" "./target/public_inputs"
+        bb write_solidity_verifier -t evm -k ./target/vk -o "${ZK_CONTRACTS_DIR}/ZKVerifier.sol"
+        bb write_solidity_verifier -t evm --optimized -k ./target/vk -o "${ZK_CONTRACTS_DIR}/OptimizedZKVerifier.sol"
+        mv ./target/vk ./target/proof ./target/public_inputs ./target/vk_hash "${ZK_OUTPUT_DIR}"
+
+        # Plain (non-zk) variant
+        bb prove -t evm-no-zk -b ./target/${PROJECT_NAME}.json -w ./target/${PROJECT_NAME}.gz -o ./target --write_vk
+        generate_zkv_artifacts "Plain" "./target/proof" "./target/vk" "./target/public_inputs"
+        bb write_solidity_verifier -t evm-no-zk -k ./target/vk -o "${PLAIN_CONTRACTS_DIR}/PlainVerifier.sol"
+        bb write_solidity_verifier -t evm-no-zk --optimized -k ./target/vk -o "${PLAIN_CONTRACTS_DIR}/OptimizedPlainVerifier.sol"
         mv ./target/vk ./target/proof ./target/public_inputs ./target/vk_hash "${PLAIN_OUTPUT_DIR}"
     else
         echo "Unrecognized version: ${BB_VERSION}"
