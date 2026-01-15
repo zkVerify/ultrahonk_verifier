@@ -35,8 +35,9 @@ extern crate core;
 use crate::{
     commitment::{compute_fold_pos_evaluations, compute_squares},
     constants::{
-        CONST_PROOF_SIZE_LOG_N, LIBRA_UNIVARIATES_LENGTH, NUMBER_TO_BE_SHIFTED, NUMBER_UNSHIFTED,
-        NUM_LIBRA_COMMITMENTS, NUM_LIBRA_EVALUATIONS, PAIRING_POINTS_SIZE, SUBGROUP_SIZE,
+        CONST_PROOF_SIZE_LOG_N, LIBRA_UNIVARIATES_LENGTH, NUMBER_OF_ENTITIES, NUMBER_TO_BE_SHIFTED,
+        NUM_LIBRA_COMMITMENTS, NUM_LIBRA_EVALUATIONS, NUM_MASKING_POLYNOMIALS, PAIRING_POINTS_SIZE,
+        SUBGROUP_SIZE,
     },
     key::VerificationKey,
     proof::{
@@ -70,11 +71,14 @@ pub fn verify<H: CurveHooks + Default>(
     proof: &ProofType,
     pubs: &Pubs,
 ) -> Result<(), VerifyError> {
+    // Parse VK
     let vk = VerificationKey::<H>::try_from(vk_bytes).map_err(|_| VerifyError::KeyError)?;
 
-    check_proof_size::<H>(proof, vk.log_circuit_size)?;
+    // Perform preliminary checks on inputs
+    check_proof_byte_len::<H>(proof, vk.log_circuit_size)?;
     check_public_input_number(&vk, pubs)?;
 
+    // Parse proof
     let proof = match proof {
         ProofType::ZK(proof_bytes) => ParsedProof::ZK(Box::new(
             ZKProof::from_bytes(&proof_bytes[..], vk.log_circuit_size).map_err(|_| {
@@ -104,10 +108,11 @@ fn verify_internal<H: CurveHooks>(
     // Compute the verification key hash
     let vk_hash = Fr::from_be_bytes_mod_order(&vk.compute_vk_hash()).into_be_bytes32();
 
-    // Generate the Fiat-Shamir challenges for the whole protocol and derive public inputs delta
+    // Generate the Fiat-Shamir challenges for the whole protocol
     let t: Transcript =
         generate_transcript(parsed_proof, public_inputs, &vk_hash, vk.log_circuit_size);
 
+    // Derive public inputs delta
     let public_inputs_delta = t
         .relation_parameters_challenges()
         .compute_public_input_delta(
@@ -136,7 +141,7 @@ fn check_public_input_number<H: CurveHooks>(
     vk: &VerificationKey<H>,
     pubs: &Pubs,
 ) -> Result<(), VerifyError> {
-    // In bb 0.86.0, public inputs and the pairing point object are combined under the hood.
+    // In bb 0.86.0, public inputs and the pairing point object are combined under the hood
     // see: https://github.com/AztecProtocol/barretenberg/issues/1331
     if vk.combined_input_size - PAIRING_POINTS_SIZE as u64 != pubs.len() as u64 {
         Err(VerifyError::PublicInputError {
@@ -169,7 +174,10 @@ fn verify_sumcheck<H: CurveHooks>(
         _ => unreachable!("parsed_proof and transcript will always have the same type"),
     };
 
-    let mut pow_partial_evaluation = Fr::ONE;
+    let mut pow_partial_evaluation: ark_ff::Fp<ark_ff::MontBackend<FrConfig, 4>, 4> = Fr::ONE;
+
+    let sumcheck_u_challenges = tp.sumcheck_u_challenges();
+    let gate_challenges = tp.gate_challenges();
 
     // We perform sumcheck reductions over log n rounds (i.e., the multivariate degree)
     for (round, round_univariate) in parsed_proof
@@ -182,18 +190,31 @@ fn verify_sumcheck<H: CurveHooks>(
             return Err("Total Sum differs from Round Target Sum.");
         }
 
-        let round_challenge = tp.sumcheck_u_challenges()[round];
+        let round_challenge = sumcheck_u_challenges[round];
 
         // Update round target for the next round
         round_target_sum = compute_next_target_sum(round_univariate, round_challenge, parsed_proof)
             .expect("compute_next_target_sum should always return an Ok variant");
-        pow_partial_evaluation *=
-            Fr::ONE + round_challenge * (tp.gate_challenges()[round] - Fr::ONE);
+        pow_partial_evaluation *= Fr::ONE + round_challenge * (gate_challenges[round] - Fr::ONE);
     }
 
     // Final round
+
+    // For ZK flavors: sumcheck_evaluations has 42 elements
+    // Index 0 is gemini_masking_poly, indices 1-41 are the regular entities used in relations
+    let relations_evaluations: &[Fr; NUMBER_OF_ENTITIES] = match parsed_proof {
+        ParsedProof::ZK(_) => parsed_proof.sumcheck_evaluations()
+            [NUM_MASKING_POLYNOMIALS..parsed_proof.get_number_of_entities()] // Skip gemini_masking_poly
+            .try_into()
+            .expect("sumcheck_evaluations length mismatch"),
+        ParsedProof::Plain(_) => parsed_proof
+            .sumcheck_evaluations()
+            .try_into()
+            .expect("sumcheck_evaluations length mismatch"),
+    };
+
     let mut grand_honk_relation_sum = accumulate_relation_evaluations(
-        parsed_proof.sumcheck_evaluations(),
+        relations_evaluations,
         tp.relation_parameters_challenges(),
         tp.alphas(),
         public_inputs_delta,
@@ -202,8 +223,10 @@ fn verify_sumcheck<H: CurveHooks>(
 
     if let ParsedProof::ZK(zk_proof) = parsed_proof {
         let mut evaluation = Fr::ONE;
-        for i in 2..log_circuit_size {
-            evaluation *= tp.sumcheck_u_challenges()[i];
+        let challenges = tp.sumcheck_u_challenges();
+
+        for &c in &challenges[2..log_circuit_size] {
+            evaluation *= c;
         }
 
         // This will always be the case
@@ -267,18 +290,22 @@ fn verify_shplemini<H: CurveHooks>(
     vk: &VerificationKey<H>,
     tp: &Transcript,
 ) -> Result<(), ProofError> {
-    // - Compute vector (r, r², ..., r²⁽ⁿ⁻¹⁾), where n := log_circuit_size
+    // Compute vector (r, r², ..., r²⁽ⁿ⁻¹⁾), where n := log_circuit_size
     let powers_of_evaluation_challenge = compute_squares(tp.gemini_r(), vk.log_circuit_size);
     // Vectors hold values that will be linearly combined for the gemini and shplonk batch openings
-    let capacity = if matches!(parsed_proof, ParsedProof::ZK(_)) {
-        NUMBER_UNSHIFTED + vk.log_circuit_size as usize + NUM_LIBRA_COMMITMENTS + 3
+    let msm_size = if matches!(parsed_proof, ParsedProof::ZK(_)) {
+        parsed_proof.get_number_of_unshifted()
+            + vk.log_circuit_size as usize
+            + NUM_LIBRA_COMMITMENTS
+            + 2
     } else {
-        NUMBER_UNSHIFTED + vk.log_circuit_size as usize + 2
+        parsed_proof.get_number_of_unshifted() + vk.log_circuit_size as usize + 2
     };
-    let mut scalars = Vec::with_capacity(capacity);
-    scalars.resize(capacity, Fr::ZERO);
-    let mut commitments = Vec::with_capacity(capacity);
-    commitments.resize(capacity, G1::<H>::default());
+
+    let mut scalars = Vec::with_capacity(msm_size);
+    scalars.resize(msm_size, Fr::ZERO);
+    let mut commitments = Vec::with_capacity(msm_size);
+    commitments.resize(msm_size, G1::<H>::default());
 
     // NOTE: Can use batching here to go from 2 inversions to 1 inversion + 3 multiplications
     // but the benefit is probably not worth it.
@@ -302,19 +329,25 @@ fn verify_shplemini<H: CurveHooks>(
     let unshifted_scalar_neg = -unshifted_scalar;
     let shifted_scalar_neg = -shifted_scalar;
 
-    let (mut batched_evaluation, mut batching_challenge, offset) = match parsed_proof {
-        ParsedProof::ZK(zkp) => {
-            scalars[1] = unshifted_scalar_neg;
-            (zkp.gemini_masking_eval, tp.rho(), 1)
-        }
-        ParsedProof::Plain(_) => (Fr::ZERO, Fr::ONE, 0),
+    let mut batching_challenge = Fr::ONE;
+    let mut batched_evaluation = Fr::ZERO;
+
+    let offset = match parsed_proof {
+        ParsedProof::ZK(_) => NUM_MASKING_POLYNOMIALS,
+        ParsedProof::Plain(_) => 1,
     };
 
-    for i in (1 - offset)..=(NUMBER_UNSHIFTED - offset) {
-        scalars[i + 2 * offset] = unshifted_scalar_neg * batching_challenge;
-        batched_evaluation +=
-            parsed_proof.sumcheck_evaluations()[i + offset - 1] * batching_challenge;
-        batching_challenge *= tp.rho();
+    let number_unshifted = parsed_proof.get_number_of_unshifted();
+    let sumcheck_slice = &parsed_proof.sumcheck_evaluations()[(1 - offset)..number_unshifted];
+    let rho = tp.rho();
+
+    for (scalar, eval) in scalars[1..=number_unshifted]
+        .iter_mut()
+        .zip(sumcheck_slice.iter())
+    {
+        *scalar = unshifted_scalar_neg * batching_challenge;
+        batched_evaluation += *eval * batching_challenge;
+        batching_challenge *= rho;
     }
 
     // g commitments are accumulated at r
@@ -324,19 +357,22 @@ fn verify_shplemini<H: CurveHooks>(
     // `a * c + b * c = (a + b) * c` this will allow us to reduce memory and compute.
     // Applied to w1, w2, w3, w4 and zPerm
     let shifted_commitments_start = parsed_proof.get_shifted_commitments_start();
+    let sumcheck_evaluations = parsed_proof.sumcheck_evaluations();
+    let rho = tp.rho();
 
     for i in 0..NUMBER_TO_BE_SHIFTED {
         let scalar_off = i + shifted_commitments_start;
-        let evaluation_off = i + NUMBER_UNSHIFTED;
+        let evaluation_off = i + number_unshifted;
 
         scalars[scalar_off] += shifted_scalar_neg * batching_challenge;
-        batched_evaluation +=
-            parsed_proof.sumcheck_evaluations()[evaluation_off] * batching_challenge;
-        batching_challenge *= tp.rho();
+        batched_evaluation += sumcheck_evaluations[evaluation_off] * batching_challenge;
+        batching_challenge *= rho;
     }
 
+    let mut offset = 0;
     if let ParsedProof::ZK(zkp) = parsed_proof {
         commitments[1] = zkp.gemini_masking_poly;
+        offset = 1;
     }
 
     commitments[1 + offset] = vk.q_m;
@@ -399,7 +435,7 @@ fn verify_shplemini<H: CurveHooks>(
     // Compute scalar multipliers for each fold commitment.
     let mut scaling_factor_pos: Fr;
     let mut scaling_factor_neg: Fr;
-    let mut boundary = NUMBER_UNSHIFTED + 1 + offset;
+    let mut boundary = parsed_proof.get_number_of_unshifted() + 1;
 
     let num_non_dummy_rounds = vk.log_circuit_size as usize - 1;
     let mut inverted_denominators: Vec<_> = (0..num_non_dummy_rounds)
@@ -622,20 +658,20 @@ fn check_evals_consistency(
     Ok(())
 }
 
-// Check that the proof size matches the expected size for the given log_n.
-fn check_proof_size<H: CurveHooks>(proof: &ProofType, log_n: u64) -> Result<(), VerifyError> {
-    // Calculate expected proof size based on log_n.
-    let (expected_proof_size, proof_length) = match proof {
-        ProofType::ZK(zkp) => (ZKProof::<H>::calculate_proof_size(log_n), zkp.len()),
-        ProofType::Plain(p) => (PlainProof::<H>::calculate_proof_size(log_n), p.len()),
+// Check that the proof byte length matches the expected size for the given log_n.
+fn check_proof_byte_len<H: CurveHooks>(proof: &ProofType, log_n: u64) -> Result<(), VerifyError> {
+    // Calculate expected proof byte length based on log_n.
+    let (expected_word_len, actual_byte_len) = match proof {
+        ProofType::ZK(zkp) => (ZKProof::<H>::calculate_proof_word_len(log_n), zkp.len()),
+        ProofType::Plain(p) => (PlainProof::<H>::calculate_proof_word_len(log_n), p.len()),
     };
-    let expected_proof_length = 32 * expected_proof_size;
+    let expected_byte_len = 32 * expected_word_len;
 
-    // Check the received proof is the expected size where each field element is 32 bytes
-    if proof_length != expected_proof_length {
+    // Check the received proof is the expected byte length where each field element is 32 bytes
+    if actual_byte_len != expected_byte_len {
         Err(VerifyError::InvalidProofError {
             message: format!(
-                "Provided proof length does not match expected length. Expected: {expected_proof_length}; Got: {proof_length}"
+                "Provided proof byte length does not match expected byte length. Expected: {expected_byte_len}; Got: {actual_byte_len}"
             ),
         })
     } else {

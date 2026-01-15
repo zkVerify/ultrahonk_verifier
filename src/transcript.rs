@@ -16,7 +16,7 @@
 
 use crate::{
     constants::{
-        CONST_PROOF_SIZE_LOG_N, NUMBER_OF_ALPHAS, NUMBER_OF_ENTITIES, PAIRING_POINTS_SIZE,
+        CONST_PROOF_SIZE_LOG_N, NUMBER_OF_ALPHAS, PAIRING_POINTS_SIZE,
         PERMUTATION_ARGUMENT_VALUE_SEPARATOR,
     },
     proof::{CommonProofData, ZKProof},
@@ -38,7 +38,7 @@ pub(crate) enum Transcript {
 pub(crate) struct PlainTranscript {
     // Oink
     pub(crate) relation_parameters_challenges: RelationParametersChallenges,
-    pub(crate) alphas: [Fr; NUMBER_OF_ALPHAS],
+    pub(crate) alphas: [Fr; NUMBER_OF_ALPHAS], // Powers of alpha: [alpha, alpha^2, ..., alpha^(NUM_SUBRELATIONS-1)]
     pub(crate) gate_challenges: [Fr; CONST_PROOF_SIZE_LOG_N],
     // Sumcheck
     pub(crate) sumcheck_u_challenges: [Fr; CONST_PROOF_SIZE_LOG_N],
@@ -53,7 +53,7 @@ pub(crate) struct PlainTranscript {
 pub(crate) struct ZKTranscript {
     // Oink
     pub(crate) relation_parameters_challenges: RelationParametersChallenges,
-    pub(crate) alphas: [Fr; NUMBER_OF_ALPHAS],
+    pub(crate) alphas: [Fr; NUMBER_OF_ALPHAS], // Powers of alpha: [alpha, alpha^2, ..., alpha^(NUM_SUBRELATIONS-1)]
     pub(crate) gate_challenges: [Fr; CONST_PROOF_SIZE_LOG_N],
     // Sumcheck
     pub(crate) libra_challenge: Fr,
@@ -312,14 +312,17 @@ pub(crate) fn generate_transcript<H: CurveHooks>(
 }
 
 /// Utility for splitting a given challenge into two "halves": one containing its
-/// 128 lower significance bits and one containing its higher significance bits.
+/// 127 lower significance bits and one containing its higher significance bits.
 /// The two "halves" are interpreted and returned as `Fr`.
 fn split_challenge(challenge: Fr) -> (Fr, Fr) {
     let limbs = challenge.into_bigint().0;
-    // compose lower 128 bits as an `Fr`
-    let lower = Fr::from(((limbs[1] as u128) << 64) | (limbs[0] as u128));
-    // compose upper 128 bits as an `Fr`
-    let upper = Fr::from(((limbs[3] as u128) << 64) | (limbs[2] as u128));
+    // compose lower 127 bits as an `Fr`
+    let lower = Fr::from((limbs[0] as u128) | ((limbs[1] as u128 & ((1u128 << 63) - 1)) << 64));
+    // compose upper 127 bits as an `Fr`
+    let upper = Fr::from(
+        ((limbs[1] as u128) >> 63) | ((limbs[2] as u128) << 1) | ((limbs[3] as u128) << 65),
+    );
+
     (lower, upper)
 }
 
@@ -357,6 +360,23 @@ fn generate_eta_challenge<H: CurveHooks>(
     {
         round0 = round0.chain_update(word);
     }
+
+    // For ZK flavors: hash the gemini masking poly commitment (sent right after public inputs)
+    if let ParsedProof::ZK(zkp) = parsed_proof {
+        round0 = round0
+            .chain_update(
+                zkp.gemini_masking_poly
+                    .x()
+                    .expect("Coordinate should be set")
+                    .into_be_bytes32(),
+            )
+            .chain_update(
+                zkp.gemini_masking_poly
+                    .y()
+                    .expect("Coordinate should be set")
+                    .into_be_bytes32(),
+            );
+    };
 
     // Create the first challenge
     // Note: w4 is added to the challenge later on
@@ -478,7 +498,7 @@ fn generate_beta_and_gamma_challenges<H: CurveHooks>(
     [beta, gamma, next_previous_challenge]
 }
 
-// Alpha challenges non-linearise the gate contributions
+// Alpha challenges non-linearize the gate contributions
 fn generate_alpha_challenges<H: CurveHooks>(
     previous_challenge: Fr,
     parsed_proof: &ParsedProof<H>,
@@ -519,27 +539,14 @@ fn generate_alpha_challenges<H: CurveHooks>(
         .finalize()
         .into();
 
-    let mut next_previous_challenge = Fr::from_be_bytes_mod_order(&alpha0);
-    (alphas[0], alphas[1]) = split_challenge(next_previous_challenge);
+    let next_previous_challenge = Fr::from_be_bytes_mod_order(&alpha0);
+    let (alpha, _) = split_challenge(next_previous_challenge);
 
-    for i in 1..(NUMBER_OF_ALPHAS / 2) {
-        let hash: EVMWord = Keccak256::new()
-            .chain_update(next_previous_challenge.into_be_bytes32())
-            .finalize()
-            .into();
-        next_previous_challenge = Fr::from_be_bytes_mod_order(&hash);
-        (alphas[2 * i], alphas[2 * i + 1]) = split_challenge(next_previous_challenge);
-    }
-
-    // If NUMBER_OF_ALPHAS is an odd number > 2, squeeze one more alpha challenge
-    if ((NUMBER_OF_ALPHAS & 1) == 1) && NUMBER_OF_ALPHAS > 2 {
-        let hash: EVMWord = Keccak256::new()
-            .chain_update(next_previous_challenge.into_be_bytes32())
-            .finalize()
-            .into();
-        next_previous_challenge = Fr::from_be_bytes_mod_order(&hash);
-
-        (alphas[NUMBER_OF_ALPHAS - 1], _) = split_challenge(next_previous_challenge);
+    // Compute powers of alpha for batching subrelations
+    let mut acc = alpha;
+    for a in &mut alphas {
+        *a = acc;
+        acc *= alpha;
     }
 
     (alphas, next_previous_challenge)
@@ -625,7 +632,7 @@ fn generate_sumcheck_challenges<H: CurveHooks>(
     (sumcheck_challenges, next_previous_challenge)
 }
 
-// For ZKProofs, we add Libra claimed eval + 3 commitments + 1 more eval
+// Generate the rho challenges
 fn generate_rho_challenge<H: CurveHooks>(
     parsed_proof: &ParsedProof<H>,
     previous_challenge: Fr,
@@ -634,11 +641,11 @@ fn generate_rho_challenge<H: CurveHooks>(
 
     hasher.update(previous_challenge.into_be_bytes32());
 
-    for i in 0..NUMBER_OF_ENTITIES {
-        hasher.update(parsed_proof.sumcheck_evaluations()[i].into_be_bytes32());
+    for evaluation in parsed_proof.sumcheck_evaluations() {
+        hasher.update(evaluation.into_be_bytes32());
     }
 
-    // ZKProof only
+    // For ZKProofs, we add Libra claimed eval + 2 libra commitments (grand_sum, quotient)
     if let ParsedProof::ZK(zk_proof) = parsed_proof {
         hasher.update(zk_proof.libra_evaluation.into_be_bytes32());
 
@@ -667,23 +674,6 @@ fn generate_rho_challenge<H: CurveHooks>(
                 .expect("Coordinate should be set")
                 .into_be_bytes32(),
         );
-
-        hasher.update(
-            zk_proof
-                .gemini_masking_poly
-                .x()
-                .expect("Coordinate should be set")
-                .into_be_bytes32(),
-        );
-        hasher.update(
-            zk_proof
-                .gemini_masking_poly
-                .y()
-                .expect("Coordinate should be set")
-                .into_be_bytes32(),
-        );
-
-        hasher.update(zk_proof.gemini_masking_eval.into_be_bytes32());
     }
 
     let hash: EVMWord = hasher.finalize().into();

@@ -89,7 +89,7 @@ const MINUS_THREE: Fr =
 pub(crate) fn accumulate_relation_evaluations(
     purported_evaluations: &[Fr; NUMBER_OF_ENTITIES],
     rp_challenges: &RelationParametersChallenges,
-    alphas: &[Fr; NUMBER_OF_ALPHAS],
+    subrelation_challenges: &[Fr; NUMBER_OF_ALPHAS],
     public_inputs_delta: Fr,
     pow_partial_eval: Fr,
 ) -> Fr {
@@ -130,8 +130,8 @@ pub(crate) fn accumulate_relation_evaluations(
         pow_partial_eval,
     );
 
-    // batch the subrelations with the alpha challenges to obtain the full honk relation
-    scale_and_batch_subrelations(&evaluations, alphas) // accumulator
+    // batch the subrelations with the precomputed alpha powers to obtain the full honk relation
+    scale_and_batch_subrelations(&evaluations, subrelation_challenges) // accumulator
 }
 
 /// Ultra Arithmetic Relation.
@@ -695,6 +695,9 @@ fn accumulate_poseidon_internal_relation(
     evals[27] += q_pos_by_scaling * (v4 - wire(p, Wire::W_4_SHIFT));
 }
 
+// Batch subrelation evaluations using precomputed powers of alpha.
+// First subrelation is implicitly scaled by 1, subsequent ones
+// use powers from the subrelation_challenges array.
 fn scale_and_batch_subrelations(
     evaluations: &[Fr; NUMBER_OF_SUBRELATIONS],
     subrelation_challenges: &[Fr; NUMBER_OF_ALPHAS],

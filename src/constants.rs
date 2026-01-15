@@ -22,10 +22,18 @@ pub const NUMBER_OF_SUBRELATIONS: usize = 28;
 pub const BATCHED_RELATION_PARTIAL_LENGTH: usize = 8; // for Plain case (i.e., non-ZK)
 pub const ZK_BATCHED_RELATION_PARTIAL_LENGTH: usize = 9; // for ZK case
 pub const NUMBER_OF_ENTITIES: usize = 41;
+// The number of entities added for ZK (gemini_masking_poly)
+pub const NUM_MASKING_POLYNOMIALS: usize = 1;
+pub const NUMBER_OF_ENTITIES_ZK: usize = NUMBER_OF_ENTITIES + NUM_MASKING_POLYNOMIALS;
+
 pub const NUMBER_UNSHIFTED: usize = 36;
+pub const NUMBER_UNSHIFTED_ZK: usize = NUMBER_UNSHIFTED + NUM_MASKING_POLYNOMIALS;
 pub const NUMBER_TO_BE_SHIFTED: usize = NUMBER_OF_ENTITIES - NUMBER_UNSHIFTED;
 
-// Alphas are used as relation separators so there should be NUMBER_OF_SUBRELATIONS - 1
+pub const NUMBER_OF_WITNESS_ENTITIES: usize = 8;
+pub const NUMBER_OF_WITNESS_ENTITIES_ZK: usize = 8 + NUM_MASKING_POLYNOMIALS;
+
+// Powers of alpha used to batch subrelations (alpha, alpha^2, ..., alpha^(NUM_SUBRELATIONS-1))
 pub const NUMBER_OF_ALPHAS: usize = NUMBER_OF_SUBRELATIONS - 1;
 
 pub const NUM_LIBRA_COMMITMENTS: usize = 3;
@@ -41,8 +49,6 @@ pub(crate) const EVM_WORD_SIZE: usize = 32;
 // Number of entries in the Pairing Point Object array
 pub const PAIRING_POINTS_SIZE: usize = 16;
 
-// Constants for proof length calculation (matching both UltraKeccakZKFlavor and UltraKeccakFlavor)
-pub(crate) const NUM_WITNESS_ENTITIES: usize = 8;
 pub(crate) const NUM_ELEMENTS_COMM: usize = 2; // U256 elements for curve points
 pub(crate) const NUM_ELEMENTS_FR: usize = 1; // U256 elements for field elements
 
