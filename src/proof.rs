@@ -868,14 +868,6 @@ impl<H: CurveHooks> ParsedProof<H> {
             ParsedProof::Plain(_) => PlainProof::<H>::NUMBER_OF_ENTITIES,
         }
     }
-
-    // Get the number of witness entities.
-    pub(crate) fn get_number_of_witness_entities(&self) -> usize {
-        match self {
-            ParsedProof::ZK(_) => ZKProof::<H>::NUMBER_OF_WITNESS_ENTITIES,
-            ParsedProof::Plain(_) => PlainProof::<H>::NUMBER_OF_WITNESS_ENTITIES,
-        }
-    }
 }
 
 impl<H: CurveHooks> CommonProofData<H> for ParsedProof<H> {
