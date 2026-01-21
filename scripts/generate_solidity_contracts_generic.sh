@@ -25,6 +25,7 @@ VERSIONS=(
   "2.1.9"
   "3.0.1"
   "3.0.2"
+  "3.0.3"
 )
 
 function generate_artifacts() {
@@ -265,7 +266,7 @@ function generate_artifacts() {
         bb write_solidity_verifier -s "${SCHEME}" --disable_zk -k ./target/vk -o "${PLAIN_CONTRACTS_DIR}/PlainVerifier.sol"
         bb write_solidity_verifier -s "${SCHEME}" --disable_zk --optimized -k ./target/vk -o "${PLAIN_CONTRACTS_DIR}/OptimizedPlainVerifier.sol"
         mv ./target/vk ./target/proof ./target/public_inputs ./target/vk_hash "${PLAIN_OUTPUT_DIR}"
-    elif [[ "${BB_VERSION}" =~ ^3\.0\.[1-2]$ ]]; then
+    elif [[ "${BB_VERSION}" =~ ^3\.0\.[1-3]$ ]]; then
         # Use noirup to 1.0.0-beta.17 for proof generation to work (earlier versions might also work).
         noirup -v 1.0.0-beta.17
 
