@@ -55,17 +55,17 @@ pub(crate) fn compute_fold_pos_evaluations(
 
     batch_inversion(&mut inverted_denominators);
 
-    for i in (1..=log_size as usize).rev() {
-        let challenge_power = gemini_eval_challenge_powers[i - 1];
-        let u = sumcheck_u_challenges[i - 1];
+    for i in (0..log_size as usize).rev() {
+        let challenge_power = gemini_eval_challenge_powers[i];
+        let u = sumcheck_u_challenges[i];
 
         let mut batched_eval_round_acc = challenge_power * (*batched_eval_accumulator) * TWO
-            - gemini_evaluations[i - 1] * (challenge_power * (Fr::ONE - u) - u);
+            - gemini_evaluations[i] * (challenge_power * (Fr::ONE - u) - u);
         // Divide by the denominator
-        batched_eval_round_acc *= inverted_denominators[log_size as usize - i];
+        batched_eval_round_acc *= inverted_denominators[log_size as usize - (i + 1)];
 
         *batched_eval_accumulator = batched_eval_round_acc;
-        fold_pos_evaluations[i - 1] = batched_eval_round_acc;
+        fold_pos_evaluations[i] = batched_eval_round_acc;
     }
 
     fold_pos_evaluations

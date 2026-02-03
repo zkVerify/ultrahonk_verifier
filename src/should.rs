@@ -683,11 +683,12 @@ mod reject {
     ) {
         let mut invalid_zk_proof = valid_zk_proof.to_vec();
         invalid_zk_proof.copy_from_slice(&valid_zk_proof);
-        let offset = PAIRING_POINTS_SIZE * EVM_WORD_SIZE
+        let sumcheck_evaluations_offset = PAIRING_POINTS_SIZE * EVM_WORD_SIZE
             + 11 * GROUP_ELEMENT_SIZE
             + EVM_WORD_SIZE
             + 108 * EVM_WORD_SIZE;
-        invalid_zk_proof[offset..offset + EVM_WORD_SIZE].fill(0); // Alter sumcheck_evaluations
+        invalid_zk_proof[sumcheck_evaluations_offset..sumcheck_evaluations_offset + EVM_WORD_SIZE]
+            .fill(0); // Alter sumcheck_evaluations
 
         assert_eq!(
                 verify::<()>(&valid_vk, &ProofType::ZK(invalid_zk_proof.into_boxed_slice()), &valid_pubs).unwrap_err(),
@@ -706,11 +707,13 @@ mod reject {
         valid_pubs: [PublicInput; 1],
     ) {
         let mut invalid_plain_proof = valid_plain_proof.into_vec();
-        let offset = PAIRING_POINTS_SIZE * EVM_WORD_SIZE
+        let sumcheck_evaluations_offset = PAIRING_POINTS_SIZE * EVM_WORD_SIZE
             + 11 * GROUP_ELEMENT_SIZE
             + EVM_WORD_SIZE
             + 108 * EVM_WORD_SIZE;
-        invalid_plain_proof[offset..offset + EVM_WORD_SIZE].fill(0); // Alter sumcheck_evaluations
+        invalid_plain_proof
+            [sumcheck_evaluations_offset..sumcheck_evaluations_offset + EVM_WORD_SIZE]
+            .fill(0); // Alter sumcheck_evaluations
 
         assert_eq!(
                 verify::<()>(&valid_vk, &ProofType::Plain(invalid_plain_proof.into_boxed_slice()), &valid_pubs).unwrap_err(),

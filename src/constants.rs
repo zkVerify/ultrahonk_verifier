@@ -41,25 +41,25 @@ pub const NUM_LIBRA_EVALUATIONS: usize = 4;
 pub const LIBRA_UNIVARIATES_LENGTH: usize = 9;
 
 // Scalar size (in bytes)
-pub(crate) const FIELD_ELEMENT_SIZE: usize = 32;
+pub const FIELD_ELEMENT_SIZE: usize = 32;
 // G1 Point Size (in bytes)
-pub(crate) const GROUP_ELEMENT_SIZE: usize = 64;
+pub const GROUP_ELEMENT_SIZE: usize = 64;
 // EVM words are 32 bytes long
-pub(crate) const EVM_WORD_SIZE: usize = 32;
+pub const EVM_WORD_SIZE: usize = 32;
 // Number of entries in the Pairing Point Object array
 pub const PAIRING_POINTS_SIZE: usize = 16;
 
-pub(crate) const NUM_ELEMENTS_COMM: usize = 2; // U256 elements for curve points
-pub(crate) const NUM_ELEMENTS_FR: usize = 1; // U256 elements for field elements
+pub const NUM_ELEMENTS_COMM: usize = 2; // U256 elements for curve points
+pub const NUM_ELEMENTS_FR: usize = 1; // U256 elements for field elements
 
 pub const VK_SIZE: usize = 28 * GROUP_ELEMENT_SIZE + 3 * EVM_WORD_SIZE;
 
 pub const PUB_SIZE: usize = 32;
 
-pub(crate) const SUBGROUP_SIZE: u32 = 256;
-pub(crate) const SUBGROUP_GENERATOR: Fr =
+pub const SUBGROUP_SIZE: u32 = 256;
+pub const SUBGROUP_GENERATOR: Fr =
     MontFp!("0x07b0c561a6148404f086204a9f36ffb0617942546750f230c893619174a57a76");
-pub(crate) const SUBGROUP_GENERATOR_INVERSE: Fr =
+pub const SUBGROUP_GENERATOR_INVERSE: Fr =
     MontFp!("0x204bd3277422fad364751ad938e2b5e6a54cf8c68712848a692c553d0329f5d6");
 
-pub(crate) const PERMUTATION_ARGUMENT_VALUE_SEPARATOR: u64 = 1 << 28;
+pub const PERMUTATION_ARGUMENT_VALUE_SEPARATOR: u64 = 1 << 28;
