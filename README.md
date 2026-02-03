@@ -13,9 +13,9 @@ use alloc::boxed::Box;
 use ultrahonk_no_std::{ProofType, verify};
 
 // Sample zero-knowledge proof, vk, and public inputs
-let zk_proof_data = Box::from(include_bytes!("../tests/data/zk_proof").as_slice());
-let vk: &[u8] = include_bytes!("../tests/data/vk");
-let pubs: Vec<[u8; 32]> = include_bytes!("../tests/data/pubs")
+let zk_proof_data = Box::from(include_bytes!(".././tests/data/zk_proof").as_slice());
+let vk: &[u8] = include_bytes!(".././tests/data/vk");
+let pubs: Vec<[u8; 32]> = include_bytes!(".././tests/data/pubs")
     .chunks_exact(32)
     .map(|c| c.try_into().unwrap())
     .collect();
