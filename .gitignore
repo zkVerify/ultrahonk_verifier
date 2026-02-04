@@ -7,9 +7,3 @@ bb_artifacts
 bb_artifacts/*
 contracts/zkVerifier-recursive.sol
 conversion_script.sh
-proof
-public_inputs
-vk
-zkv_proof.hex
-zkv_pubs.hex
-zkv_vk.hex
