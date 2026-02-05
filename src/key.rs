@@ -191,7 +191,7 @@ impl<H: CurveHooks> VerificationKey<H> {
     // Only parses the log_circuit_size from the provided raw verification key without
     // doing any validation whatsoever on the rest of the verification key's fields.
     #[allow(unused)]
-    fn extract_log_circuit_size(raw_vk: &[u8]) -> Result<u64, VerificationKeyError> {
+    pub fn extract_log_circuit_size(raw_vk: &[u8]) -> Result<u64, VerificationKeyError> {
         match read_u64_from_evm_word(raw_vk) {
             Ok(0) => Err(VerificationKeyError::InvalidLogCircuitSize)?,
             Ok(log_n) => Ok(log_n),
