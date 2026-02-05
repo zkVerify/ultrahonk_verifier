@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 NOIR_VERSION="1.0.0-beta.17"
-BB_VERSION="3.0.2"
+BB_VERSION="3.0.3"
 
 set -e
 
@@ -57,44 +57,41 @@ fi
   echo "Generating src/main.nr with $N public input(s) and padding=$PADDING"
 
   # Function arguments
-  ARGS="x: u64"
+  ARGS=""
+  for ((i=1; i<=PADDING; i++)); do
+    ARGS+="x$i: Field, "
+  done
   for i in $(seq 1 "$N"); do
-    ARGS+=", y$i: pub u64"
+    ARGS+="y$i: pub Field, "
   done
 
   # Normal asserts
   ASSERTS=""
+  for ((i=1; i<=PADDING; i++)); do
+    ASSERTS+="    assert(0 != x$i);\n"
+  done
   for i in $(seq 1 "$N"); do
-    ASSERTS+="    assert(x != y$i);\n"
+    ASSERTS+="    assert(0 != y$i);\n"
   done
 
   # Test arguments
-  TEST_ARGS="0"
+  TEST_ARGS=""
+  for ((i=1; i<=PADDING; i++)); do
+    TEST_ARGS+="$i, "
+  done
   for i in $(seq 1 "$N"); do
-    TEST_ARGS+=", $i"
+    TEST_ARGS+="$i, "
   done
 
   # Generate main.nr with loop for padding
   cat <<EOF > src/main.nr
-global PAD_FACTOR: u32 = $PADDING;
 fn main($ARGS) {
 $(printf "$ASSERTS")
-
-    let mut val = x;
-
-    for _ in 0..PAD_FACTOR {
-        val = (val + 1) - 1; 
-    }
-
-    assert(val == x);
 }
 
 #[test]
 fn test_main() {
     main($TEST_ARGS);
-
-    // Uncomment to make test fail
-    // main(0$(for i in $(seq 1 "$N"); do printf ", 0"; done));
 }
 EOF
 
@@ -105,7 +102,9 @@ EOF
   echo "Populating Prover.toml"
 
   {
-    echo "x = \"0\""
+    for ((i=1; i<=PADDING; i++)); do
+      echo "x$i =\"$i\""
+    done
     for i in $(seq 1 "$N"); do
       echo "y$i = \"$i\""
     done
@@ -120,31 +119,38 @@ EOF
   nargo execute
 
   CONTRACTS_DIR=contracts
-  mkdir "${CONTRACTS_DIR}"
+  mkdir -p "$CONTRACTS_DIR"
 
-  bb prove \
-    -t evm \
-    -b "./target/${PROJECT_NAME}.json" \
-    -w "./target/${PROJECT_NAME}.gz" \
-    -o ./target \
-    --write_vk
+  for flavor in zk plain; do
+    case "$flavor" in
+      zk)
+        bb_target=evm
+        verifier_prefix=ZKVerifier
+        ;;
+      plain)
+        bb_target=evm-no-zk
+        verifier_prefix=PlainVerifier
+        ;;
+    esac
 
-  bb write_solidity_verifier \
-    -t evm \
-    -k ./target/vk \
-    -o "${CONTRACTS_DIR}/ZKVerifier_${N}_pad_${PADDING}.sol"
+    mkdir -p "${CONTRACTS_DIR}/${flavor}"
 
-  bb prove \
-    -t evm-no-zk \
-    -b "./target/${PROJECT_NAME}.json" \
-    -w "./target/${PROJECT_NAME}.gz" \
-    -o ./target \
-    --write_vk
+    bb prove \
+      -t "$bb_target" \
+      -b "./target/${PROJECT_NAME}.json" \
+      -w "./target/${PROJECT_NAME}.gz" \
+      -o ./target \
+      --write_vk
 
-  bb write_solidity_verifier \
-    -t evm-no-zk \
-    -k ./target/vk \
-    -o "${CONTRACTS_DIR}/PlainVerifier_${N}_pad_${PADDING}.sol"
+    bb write_solidity_verifier \
+      -t "$bb_target" \
+      -k ./target/vk \
+      -o "${CONTRACTS_DIR}/${verifier_prefix}_${N}_pad_${PADDING}.sol"
+
+    mv target/proof         "${CONTRACTS_DIR}/${flavor}/proof"
+    mv target/vk            "${CONTRACTS_DIR}/${flavor}/vk"
+    mv target/public_inputs "${CONTRACTS_DIR}/${flavor}/pubs"
+  done
 )
 
 echo
