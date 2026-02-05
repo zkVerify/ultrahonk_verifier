@@ -119,7 +119,9 @@ EOF
   nargo execute
 
   CONTRACTS_DIR=contracts
-  mkdir -p "$CONTRACTS_DIR"
+  ARTIFACTS_DIR="artifacts"
+
+  mkdir -p "${CONTRACTS_DIR}"
 
   for flavor in zk plain; do
     case "$flavor" in
@@ -133,7 +135,7 @@ EOF
         ;;
     esac
 
-    mkdir -p "${CONTRACTS_DIR}/${flavor}"
+    mkdir -p "${ARTIFACTS_DIR}/${flavor}"
 
     bb prove \
       -t "$bb_target" \
@@ -147,9 +149,9 @@ EOF
       -k ./target/vk \
       -o "${CONTRACTS_DIR}/${verifier_prefix}_${N}_pad_${PADDING}.sol"
 
-    mv target/proof         "${CONTRACTS_DIR}/${flavor}/proof"
-    mv target/vk            "${CONTRACTS_DIR}/${flavor}/vk"
-    mv target/public_inputs "${CONTRACTS_DIR}/${flavor}/pubs"
+    mv target/proof         "${ARTIFACTS_DIR}/${flavor}/proof"
+    mv target/vk            "${ARTIFACTS_DIR}/${flavor}/vk"
+    mv target/public_inputs "${ARTIFACTS_DIR}/${flavor}/pubs"
   done
 )
 
