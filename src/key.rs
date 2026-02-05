@@ -19,7 +19,10 @@
 use crate::{
     constants::CONST_PROOF_SIZE_LOG_N,
     errors::ConversionError,
-    utils::{read_g1_by_splitting, read_u64_from_evm_word, IntoBEBytes32},
+    utils::{
+        read_g1_by_splitting, read_u64_from_evm_word, read_u64_from_evm_word_by_splitting,
+        IntoBEBytes32,
+    },
     EVMWord, G1, U256, VK_SIZE,
 };
 use ark_bn254_ext::CurveHooks;
@@ -184,6 +187,18 @@ pub struct VerificationKey<H: CurveHooks> {
     pub lagrange_last: G1<H>,
 }
 
+impl<H: CurveHooks> VerificationKey<H> {
+    // Parses the log_circuit_size without doing any validation whatsoever.
+    #[allow(unused)]
+    fn extract_log_circuit_size(raw_vk: &[u8]) -> Result<u64, VerificationKeyError> {
+        match read_u64_from_evm_word(raw_vk) {
+            Ok(0) => Err(VerificationKeyError::InvalidLogCircuitSize)?,
+            Ok(log_n) => Ok(log_n),
+            _ => Err(VerificationKeyError::ParsingError)?,
+        }
+    }
+}
+
 impl<H: CurveHooks> TryFrom<&[u8]> for VerificationKey<H> {
     type Error = VerificationKeyError;
 
@@ -192,7 +207,7 @@ impl<H: CurveHooks> TryFrom<&[u8]> for VerificationKey<H> {
             return Err(VerificationKeyError::BufferTooShort);
         }
 
-        let log_circuit_size = match read_u64_from_evm_word(&mut raw_vk) {
+        let log_circuit_size = match read_u64_from_evm_word_by_splitting(&mut raw_vk) {
             Ok(0) => Err(VerificationKeyError::InvalidLogCircuitSize)?,
             Ok(log_n) => log_n,
             _ => Err(VerificationKeyError::ParsingError)?,
@@ -202,12 +217,12 @@ impl<H: CurveHooks> TryFrom<&[u8]> for VerificationKey<H> {
             return Err(VerificationKeyError::LogCircuitSizeTooBig);
         }
 
-        let combined_input_size = match read_u64_from_evm_word(&mut raw_vk) {
+        let combined_input_size = match read_u64_from_evm_word_by_splitting(&mut raw_vk) {
             Ok(num_pubs) => num_pubs,
             _ => Err(VerificationKeyError::ParsingError)?,
         };
 
-        let pub_inputs_offset = match read_u64_from_evm_word(&mut raw_vk) {
+        let pub_inputs_offset = match read_u64_from_evm_word_by_splitting(&mut raw_vk) {
             Ok(pi_offset) => pi_offset,
             _ => Err(VerificationKeyError::ParsingError)?,
         };
@@ -619,7 +634,15 @@ mod should {
         assert!(VerificationKey::<()>::try_from(&valid_vk[..]).is_ok());
     }
 
+    #[rstest]
+    fn extract_log_circuit_size_from_valid_vk(valid_vk: [u8; VK_SIZE]) {
+        assert!(VerificationKey::<()>::extract_log_circuit_size(&valid_vk[..]).is_ok());
+    }
+
     mod reject {
+        use ark_bn254::Fr;
+        use ark_ff::{Field, PrimeField};
+
         use crate::{
             constants::{EVM_WORD_SIZE, GROUP_ELEMENT_SIZE},
             errors::CommitmentField,
@@ -657,6 +680,31 @@ mod should {
                 VerificationKey::<()>::try_from(&invalid_vk[..]),
                 Err(VerificationKeyError::LogCircuitSizeTooBig)
             );
+        }
+
+        #[rstest]
+        fn a_vk_with_insufficient_bytes_for_log_circuit_size(valid_vk: [u8; VK_SIZE]) {
+            let invalid_vk = &valid_vk[..EVM_WORD_SIZE - 1];
+            assert!(VerificationKey::<()>::extract_log_circuit_size(invalid_vk).is_err());
+        }
+
+        #[rstest]
+        fn a_vk_where_extracted_log_circuit_size_is_zero(valid_vk: [u8; VK_SIZE]) {
+            let mut invalid_vk = [0u8; VK_SIZE];
+            invalid_vk.copy_from_slice(&valid_vk);
+            invalid_vk[..EVM_WORD_SIZE].fill(0);
+            assert!(VerificationKey::<()>::extract_log_circuit_size(&invalid_vk[..]).is_err());
+        }
+
+        #[rstest]
+        fn a_vk_where_extracted_log_circuit_size_does_not_fit_in_an_u64(valid_vk: [u8; VK_SIZE]) {
+            let mut invalid_vk = [0u8; VK_SIZE];
+            invalid_vk.copy_from_slice(&valid_vk);
+            let invalid_bytes = (Fr::from_be_bytes_mod_order(&u64::MAX.into_be_bytes32())
+                + Fr::ONE)
+                .into_be_bytes32();
+            invalid_vk[..EVM_WORD_SIZE].copy_from_slice(&invalid_bytes);
+            assert!(VerificationKey::<()>::extract_log_circuit_size(&invalid_vk[..]).is_err());
         }
 
         #[rstest]
