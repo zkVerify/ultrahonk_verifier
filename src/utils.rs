@@ -31,15 +31,12 @@
 // limitations under the License.
 
 use crate::{
-    // errors::{FieldError, GroupError},
-    errors::FieldError,
+    constants::{EVM_WORD_SIZE, GROUP_ELEMENT_SIZE},
+    errors::{FieldError, GroupError},
     types::G1,
-    Fq,
-    Fq2,
-    Fr,
-    G2,
-    U256,
+    EVMWord, Fq, Fq2, Fr, G2, U256,
 };
+use alloc::{format, string::String};
 use ark_bn254_ext::CurveHooks;
 use ark_ec::AffineRepr;
 use ark_ff::{AdditiveGroup, PrimeField};
@@ -58,7 +55,7 @@ pub(crate) trait IntoU256 {
     fn into_u256(self) -> U256;
 }
 
-impl IntoU256 for &[u8; 32] {
+impl IntoU256 for &EVMWord {
     fn into_u256(self) -> U256 {
         let mut rchunks_iter = self.rchunks_exact(8);
         let limbs: [_; 4] = core::array::from_fn(|_| {
@@ -70,81 +67,101 @@ impl IntoU256 for &[u8; 32] {
     }
 }
 
-impl IntoU256 for [u8; 32] {
-    fn into_u256(self) -> U256 {
-        (&self).into_u256()
-    }
-}
-
-/// Trait for returning a big-endian representation of some object as a `[u8; 32]`.
+/// Trait for returning a big-endian representation of some object as an `EVMWord`.
 pub(crate) trait IntoBEBytes32 {
-    fn into_be_bytes32(self) -> [u8; 32];
+    fn into_be_bytes32(self) -> EVMWord;
 }
 
 impl IntoBEBytes32 for U256 {
-    fn into_be_bytes32(self) -> [u8; 32] {
+    fn into_be_bytes32(self) -> EVMWord {
         let mut rev_iter_be = self.0.iter().rev().flat_map(|limb| limb.to_be_bytes());
         core::array::from_fn(|_| rev_iter_be.next().unwrap())
     }
 }
 
 impl IntoBEBytes32 for Fr {
-    fn into_be_bytes32(self) -> [u8; 32] {
+    fn into_be_bytes32(self) -> EVMWord {
         self.into_bigint().into_be_bytes32()
     }
 }
 
 impl IntoBEBytes32 for Fq {
-    fn into_be_bytes32(self) -> [u8; 32] {
+    fn into_be_bytes32(self) -> EVMWord {
         self.into_bigint().into_be_bytes32()
     }
 }
 
 impl IntoBEBytes32 for u64 {
-    fn into_be_bytes32(self) -> [u8; 32] {
+    fn into_be_bytes32(self) -> EVMWord {
         let be = self.to_be_bytes();
-        let mut arr = [0u8; 32];
-        arr[24..].copy_from_slice(&be);
+        let mut arr = [0u8; EVM_WORD_SIZE];
+        arr[EVM_WORD_SIZE - 8..].copy_from_slice(&be);
         arr
     }
 }
 
-pub(crate) fn read_u64(data: &[u8]) -> Result<(u64, &[u8]), ()> {
-    let value = u64::from_be_bytes(data[..8].try_into().map_err(|_| ())?);
-    Ok((value, &data[8..]))
+pub(crate) fn read_u64_from_evm_word_by_splitting(data: &mut &[u8]) -> Result<u64, ()> {
+    let chunk = data.split_off(..EVM_WORD_SIZE).ok_or(())?;
+    let value = read_u256(chunk)?;
+    if value > U256::new([u64::MAX, 0, 0, 0]) {
+        return Err(());
+    }
+    Ok(value.0[0])
+}
+
+pub(crate) fn read_u64_from_evm_word(data: &[u8]) -> Result<u64, ()> {
+    let chunk = data.get(..EVM_WORD_SIZE).ok_or(())?;
+    let value = read_u256(chunk)?;
+    if value > U256::new([u64::MAX, 0, 0, 0]) {
+        return Err(());
+    }
+    Ok(value.0[0])
 }
 
 pub(crate) fn read_u256(bytes: &[u8]) -> Result<U256, ()> {
-    <&[u8; 32]>::try_from(bytes)
+    <&EVMWord>::try_from(bytes)
         .map_err(|_| ())
         .map(IntoU256::into_u256)
 }
 
 // Parse point in G1.
-pub(crate) fn read_g1<H: CurveHooks>(data: &[u8]) -> Result<(G1<H>, &[u8]), ()> {
-    if data.len() < 64 {
-        return Err(());
-    }
+pub(crate) fn read_g1_by_splitting<H: CurveHooks>(data: &mut &[u8]) -> Result<G1<H>, GroupError> {
+    let chunk = data
+        .split_off(..GROUP_ELEMENT_SIZE)
+        .ok_or(GroupError::InvalidSliceLength {
+            actual_length: data.len(),
+            expected_length: GROUP_ELEMENT_SIZE,
+        })?;
 
-    let x = Fq::from_bigint(read_u256(&data[0..32])?).ok_or(())?;
-    let y = Fq::from_bigint(read_u256(&data[32..64])?).ok_or(())?;
+    let tmp_x = read_u256(&chunk[0..EVM_WORD_SIZE]).expect("Conversion should work at this point");
+    let x = Fq::from_bigint(tmp_x).ok_or(GroupError::CoordinateExceedsModulus {
+        coordinate_value: tmp_x,
+        modulus: Fq::MODULUS,
+    })?;
+
+    let tmp_y = read_u256(&chunk[EVM_WORD_SIZE..GROUP_ELEMENT_SIZE])
+        .expect("Conversion should work at this point");
+    let y = Fq::from_bigint(tmp_y).ok_or(GroupError::CoordinateExceedsModulus {
+        coordinate_value: tmp_y,
+        modulus: Fq::MODULUS,
+    })?;
 
     // If (0, 0) is given, we interpret this as the point at infinity:
     // https://docs.rs/ark-ec/0.5.0/src/ark_ec/models/short_weierstrass/affine.rs.html#212-218
     if x == Fq::ZERO && y == Fq::ZERO {
-        return Ok((G1::zero(), &data[64..]));
+        return Ok(G1::zero());
     }
 
     let point = G1::new_unchecked(x, y);
 
     // Validate point
     if !point.is_on_curve() {
-        return Err(());
+        return Err(GroupError::NotOnCurve);
     }
     // This is always true for G1 with the BN254 curve.
     debug_assert!(point.is_in_correct_subgroup_assuming_on_curve());
 
-    Ok((point, &data[64..]))
+    Ok(point)
 }
 
 // Parse point in G2.
@@ -182,4 +199,10 @@ pub(crate) fn read_fq_util(data: &[u8]) -> Result<Fq, FieldError> {
     });
 
     Ok(U256::new(limbs).into_fq())
+}
+
+// Utility for logging and debugging.
+pub(crate) fn to_hex_string(data: &[u8]) -> String {
+    let hex_string: String = data.iter().map(|b| format!("{b:02x}")).collect();
+    format!("0x{hex_string}")
 }

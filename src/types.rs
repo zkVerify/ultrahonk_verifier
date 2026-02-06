@@ -14,9 +14,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::constants::EVM_WORD_SIZE;
 pub use ark_bn254_ext::{Fq, Fq2, Fr, FrConfig};
 use ark_bn254_ext::{G1Affine, G2Affine};
 
+pub type EVMWord = [u8; EVM_WORD_SIZE];
 pub type U256 = ark_ff::BigInteger256;
 pub type G1<H> = G1Affine<H>;
 pub type G2<H> = G2Affine<H>;

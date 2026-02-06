@@ -16,32 +16,36 @@
 
 #![allow(non_camel_case_types)]
 
-use crate::utils::{read_g1, read_u64};
-use crate::{G1, VK_SIZE};
+use crate::{
+    constants::CONST_PROOF_SIZE_LOG_N,
+    errors::ConversionError,
+    utils::{
+        read_g1_by_splitting, read_u64_from_evm_word, read_u64_from_evm_word_by_splitting,
+        IntoBEBytes32,
+    },
+    EVMWord, G1, U256, VK_SIZE,
+};
 use ark_bn254_ext::CurveHooks;
+use core::fmt;
+use sha3::{digest::Update, Digest, Keccak256};
 use snafu::Snafu;
 
 #[derive(Debug, PartialEq, Snafu)]
 pub enum VerificationKeyError {
     #[snafu(display("Buffer too short"))]
     BufferTooShort,
-    #[snafu(display("Point for field '{field:?}' is not on curve"))]
-    PointNotOnCurve { field: &'static str },
-
-    // // #[snafu(display("Point for field '{}' is not in the correct subgroup", field))]
-    // // PointNotInCorrectSubgroup { field: &'static str },
-    #[snafu(display("Invalid circuit size. Must be a power of 2."))]
-    InvalidCircuitSize,
-
-    #[snafu(display("Invalid log circuit size. Must be consistent with circuit size."))]
+    #[snafu(display("Invalid log circuit size. Must be a positive integer."))]
     InvalidLogCircuitSize,
-
-    #[snafu(display("Could not parse vk"))]
+    #[snafu(display("Invalid log circuit size. Must not exceed {CONST_PROOF_SIZE_LOG_N}."))]
+    LogCircuitSizeTooBig,
+    #[snafu(display("Group element conversion error: {conv_error}"))]
+    GroupConversionError { conv_error: ConversionError },
+    #[snafu(display("Parsing error"))]
     ParsingError,
 }
 
-#[derive(Debug, Hash, Eq, PartialEq)]
-pub enum CommitmentField {
+#[derive(Debug, Hash, Eq, PartialEq, Clone)]
+pub enum VkCommitmentField {
     Q_M,
     Q_C,
     Q_L,
@@ -52,7 +56,8 @@ pub enum CommitmentField {
     Q_ARITH,
     Q_DELTARANGE,
     Q_ELLIPTIC,
-    Q_AUX,
+    Q_MEMORY,
+    Q_NNF,
     Q_POSEIDON2EXTERNAL,
     Q_POSEIDON2INTERNAL,
     S_1,
@@ -71,36 +76,72 @@ pub enum CommitmentField {
     Lagrange_Last,
 }
 
-impl CommitmentField {
+impl fmt::Display for VkCommitmentField {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            VkCommitmentField::Q_M => write!(f, "Q_M"),
+            VkCommitmentField::Q_C => write!(f, "Q_C"),
+            VkCommitmentField::Q_L => write!(f, "Q_L"),
+            VkCommitmentField::Q_R => write!(f, "Q_R"),
+            VkCommitmentField::Q_O => write!(f, "Q_O"),
+            VkCommitmentField::Q_4 => write!(f, "Q_4"),
+            VkCommitmentField::Q_LOOKUP => write!(f, "Q_LOOKUP"),
+            VkCommitmentField::Q_ARITH => write!(f, "Q_ARITH"),
+            VkCommitmentField::Q_DELTARANGE => write!(f, "Q_DELTARANGE"),
+            VkCommitmentField::Q_ELLIPTIC => write!(f, "Q_ELLIPTIC"),
+            VkCommitmentField::Q_MEMORY => write!(f, "Q_MEMORY"),
+            VkCommitmentField::Q_NNF => write!(f, "Q_NNF"),
+            VkCommitmentField::Q_POSEIDON2EXTERNAL => write!(f, "Q_POSEIDON2EXTERNAL"),
+            VkCommitmentField::Q_POSEIDON2INTERNAL => write!(f, "Q_POSEIDON2INTERNAL"),
+            VkCommitmentField::S_1 => write!(f, "S_1"),
+            VkCommitmentField::S_2 => write!(f, "S_2"),
+            VkCommitmentField::S_3 => write!(f, "S_3"),
+            VkCommitmentField::S_4 => write!(f, "S_4"),
+            VkCommitmentField::ID_1 => write!(f, "ID_1"),
+            VkCommitmentField::ID_2 => write!(f, "ID_2"),
+            VkCommitmentField::ID_3 => write!(f, "ID_3"),
+            VkCommitmentField::ID_4 => write!(f, "ID_4"),
+            VkCommitmentField::T_1 => write!(f, "T_1"),
+            VkCommitmentField::T_2 => write!(f, "T_2"),
+            VkCommitmentField::T_3 => write!(f, "T_3"),
+            VkCommitmentField::T_4 => write!(f, "T_4"),
+            VkCommitmentField::Lagrange_First => write!(f, "Lagrange_First"),
+            VkCommitmentField::Lagrange_Last => write!(f, "Lagrange_Last"),
+        }
+    }
+}
+
+impl VkCommitmentField {
     pub fn str(&self) -> &'static str {
         match self {
-            CommitmentField::Q_M => "Q_M",
-            CommitmentField::Q_C => "Q_C",
-            CommitmentField::Q_L => "Q_L",
-            CommitmentField::Q_R => "Q_R",
-            CommitmentField::Q_O => "Q_O",
-            CommitmentField::Q_4 => "Q_4",
-            CommitmentField::Q_LOOKUP => "Q_LOOKUP",
-            CommitmentField::Q_ARITH => "Q_ARITH",
-            CommitmentField::Q_DELTARANGE => "Q_DELTARANGE",
-            CommitmentField::Q_ELLIPTIC => "Q_ELLIPTIC",
-            CommitmentField::Q_AUX => "Q_AUX",
-            CommitmentField::Q_POSEIDON2EXTERNAL => "Q_POSEIDON2EXTERNAL",
-            CommitmentField::Q_POSEIDON2INTERNAL => "Q_POSEIDON2INTERNAL",
-            CommitmentField::S_1 => "S_1",
-            CommitmentField::S_2 => "S_2",
-            CommitmentField::S_3 => "S_3",
-            CommitmentField::S_4 => "S_4",
-            CommitmentField::ID_1 => "ID_1",
-            CommitmentField::ID_2 => "ID_2",
-            CommitmentField::ID_3 => "ID_3",
-            CommitmentField::ID_4 => "ID_4",
-            CommitmentField::T_1 => "T_1",
-            CommitmentField::T_2 => "T_2",
-            CommitmentField::T_3 => "T_3",
-            CommitmentField::T_4 => "T_4",
-            CommitmentField::Lagrange_First => "Lagrange_First",
-            CommitmentField::Lagrange_Last => "Lagrange_Last",
+            VkCommitmentField::Q_M => "Q_M",
+            VkCommitmentField::Q_C => "Q_C",
+            VkCommitmentField::Q_L => "Q_L",
+            VkCommitmentField::Q_R => "Q_R",
+            VkCommitmentField::Q_O => "Q_O",
+            VkCommitmentField::Q_4 => "Q_4",
+            VkCommitmentField::Q_LOOKUP => "Q_LOOKUP",
+            VkCommitmentField::Q_ARITH => "Q_ARITH",
+            VkCommitmentField::Q_DELTARANGE => "Q_DELTARANGE",
+            VkCommitmentField::Q_ELLIPTIC => "Q_ELLIPTIC",
+            VkCommitmentField::Q_MEMORY => "Q_MEMORY",
+            VkCommitmentField::Q_NNF => "Q_NNF",
+            VkCommitmentField::Q_POSEIDON2EXTERNAL => "Q_POSEIDON2EXTERNAL",
+            VkCommitmentField::Q_POSEIDON2INTERNAL => "Q_POSEIDON2INTERNAL",
+            VkCommitmentField::S_1 => "S_1",
+            VkCommitmentField::S_2 => "S_2",
+            VkCommitmentField::S_3 => "S_3",
+            VkCommitmentField::S_4 => "S_4",
+            VkCommitmentField::ID_1 => "ID_1",
+            VkCommitmentField::ID_2 => "ID_2",
+            VkCommitmentField::ID_3 => "ID_3",
+            VkCommitmentField::ID_4 => "ID_4",
+            VkCommitmentField::T_1 => "T_1",
+            VkCommitmentField::T_2 => "T_2",
+            VkCommitmentField::T_3 => "T_3",
+            VkCommitmentField::T_4 => "T_4",
+            VkCommitmentField::Lagrange_First => "Lagrange_First",
+            VkCommitmentField::Lagrange_Last => "Lagrange_Last",
         }
     }
 }
@@ -108,10 +149,9 @@ impl CommitmentField {
 #[derive(PartialEq, Eq, Debug)]
 pub struct VerificationKey<H: CurveHooks> {
     // Misc Params
-    pub circuit_size: u64,
     pub log_circuit_size: u64,
-    pub num_public_inputs: u64,
-    pub pub_inputs_offset: u64, // NOTE: May end up being removed in the future
+    pub combined_input_size: u64, // Since bb 0.86.0, this is num_public_inputs + PAIRING_OBJECT_SIZE
+    pub pub_inputs_offset: u64,
     // Selectors
     pub q_m: G1<H>,
     pub q_c: G1<H>,
@@ -119,11 +159,12 @@ pub struct VerificationKey<H: CurveHooks> {
     pub q_r: G1<H>,
     pub q_o: G1<H>,
     pub q_4: G1<H>,
-    pub q_lookup: G1<H>,
-    pub q_arith: G1<H>,
-    pub q_deltarange: G1<H>,
+    pub q_lookup: G1<H>,     // Lookup
+    pub q_arith: G1<H>,      // Arithmetic widget
+    pub q_deltarange: G1<H>, // Delta Range sort
     pub q_elliptic: G1<H>,
-    pub q_aux: G1<H>,
+    pub q_memory: G1<H>, // Memory
+    pub q_nnf: G1<H>,    // Non-Native Field
     pub q_poseidon2external: G1<H>,
     pub q_poseidon2internal: G1<H>,
     // Copy Constraints
@@ -146,157 +187,275 @@ pub struct VerificationKey<H: CurveHooks> {
     pub lagrange_last: G1<H>,
 }
 
+impl<H: CurveHooks> VerificationKey<H> {
+    // Only parses the log_circuit_size from the provided raw verification key without
+    // doing any validation whatsoever on the rest of the verification key's fields.
+    #[allow(unused)]
+    pub fn extract_log_circuit_size(raw_vk: &[u8]) -> Result<u64, VerificationKeyError> {
+        match read_u64_from_evm_word(raw_vk) {
+            Ok(0) => Err(VerificationKeyError::InvalidLogCircuitSize)?,
+            Ok(log_n) => Ok(log_n),
+            _ => Err(VerificationKeyError::ParsingError)?,
+        }
+    }
+}
+
 impl<H: CurveHooks> TryFrom<&[u8]> for VerificationKey<H> {
     type Error = VerificationKeyError;
 
-    fn try_from(raw_vk: &[u8]) -> Result<Self, Self::Error> {
+    fn try_from(mut raw_vk: &[u8]) -> Result<Self, Self::Error> {
         if raw_vk.len() < VK_SIZE {
             return Err(VerificationKeyError::BufferTooShort);
         }
 
-        let (circuit_size, raw_vk) = match read_u64(raw_vk) {
-            Ok((n, raw_vk)) => (n, raw_vk),
+        let log_circuit_size = match read_u64_from_evm_word_by_splitting(&mut raw_vk) {
+            Ok(0) => Err(VerificationKeyError::InvalidLogCircuitSize)?,
+            Ok(log_n) => log_n,
             _ => Err(VerificationKeyError::ParsingError)?,
         };
 
-        // Assert: circuit_size > 0 and also(?) a power of 2
-        if circuit_size == 0 || (circuit_size & (circuit_size - 1) != 0) {
-            return Err(VerificationKeyError::InvalidCircuitSize);
+        if log_circuit_size > CONST_PROOF_SIZE_LOG_N as u64 {
+            return Err(VerificationKeyError::LogCircuitSizeTooBig);
         }
 
-        let (log_circuit_size, raw_vk) = match read_u64(raw_vk) {
-            Ok((log_n, raw_vk)) => (log_n, raw_vk),
+        let combined_input_size = match read_u64_from_evm_word_by_splitting(&mut raw_vk) {
+            Ok(num_pubs) => num_pubs,
             _ => Err(VerificationKeyError::ParsingError)?,
         };
 
-        // Assert: log_circuit_size == log_2(circuit_size)
-        if 1 << log_circuit_size != circuit_size {
-            return Err(VerificationKeyError::InvalidLogCircuitSize);
-        }
-
-        let (num_public_inputs, raw_vk) = match read_u64(raw_vk) {
-            Ok((num_pubs, raw_vk)) => (num_pubs, raw_vk),
+        let pub_inputs_offset = match read_u64_from_evm_word_by_splitting(&mut raw_vk) {
+            Ok(pi_offset) => pi_offset,
             _ => Err(VerificationKeyError::ParsingError)?,
         };
 
-        let (pub_inputs_offset, raw_vk) = match read_u64(raw_vk) {
-            Ok((pi_offset, raw_vk)) => (pi_offset, raw_vk),
-            _ => Err(VerificationKeyError::ParsingError)?,
-        };
-
-        let (q_m, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::Q_M.str(),
-            })?;
-        let (q_c, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::Q_C.str(),
-            })?;
-        let (q_l, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::Q_L.str(),
-            })?;
-        let (q_r, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::Q_R.str(),
-            })?;
-        let (q_o, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::Q_O.str(),
-            })?;
-        let (q_4, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::Q_4.str(),
-            })?;
-        let (q_lookup, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::Q_LOOKUP.str(),
-            })?;
-        let (q_arith, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::Q_ARITH.str(),
-            })?;
-        let (q_deltarange, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::Q_DELTARANGE.str(),
-            })?;
-        let (q_elliptic, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::Q_ELLIPTIC.str(),
-            })?;
-        let (q_aux, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::Q_AUX.str(),
-            })?;
-        let (q_poseidon2external, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::Q_POSEIDON2EXTERNAL.str(),
-            })?;
-        let (q_poseidon2internal, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::Q_POSEIDON2INTERNAL.str(),
-            })?;
-        let (s_1, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::S_1.str(),
-            })?;
-        let (s_2, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::S_2.str(),
-            })?;
-        let (s_3, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::S_3.str(),
-            })?;
-        let (s_4, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::S_4.str(),
-            })?;
-        let (id_1, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::ID_1.str(),
-            })?;
-        let (id_2, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::ID_2.str(),
-            })?;
-        let (id_3, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::ID_3.str(),
-            })?;
-        let (id_4, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::ID_4.str(),
-            })?;
-        let (t_1, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::T_1.str(),
-            })?;
-        let (t_2, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::T_2.str(),
-            })?;
-        let (t_3, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::T_3.str(),
-            })?;
-        let (t_4, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::T_4.str(),
-            })?;
-        let (lagrange_first, raw_vk) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::Lagrange_First.str(),
-            })?;
-        let (lagrange_last, _) =
-            read_g1::<H>(raw_vk).map_err(|_| VerificationKeyError::PointNotOnCurve {
-                field: CommitmentField::Lagrange_Last.str(),
-            })?;
+        let q_m = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::Q_M.into()),
+                },
+            }
+        })?;
+        let q_c = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::Q_C.into()),
+                },
+            }
+        })?;
+        let q_l = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::Q_L.into()),
+                },
+            }
+        })?;
+        let q_r = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::Q_R.into()),
+                },
+            }
+        })?;
+        let q_o = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::Q_O.into()),
+                },
+            }
+        })?;
+        let q_4 = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::Q_4.into()),
+                },
+            }
+        })?;
+        let q_lookup = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::Q_LOOKUP.into()),
+                },
+            }
+        })?;
+        let q_arith = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::Q_ARITH.into()),
+                },
+            }
+        })?;
+        let q_deltarange = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::Q_DELTARANGE.into()),
+                },
+            }
+        })?;
+        let q_elliptic = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::Q_ELLIPTIC.into()),
+                },
+            }
+        })?;
+        let q_memory = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::Q_MEMORY.into()),
+                },
+            }
+        })?;
+        let q_nnf = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::Q_NNF.into()),
+                },
+            }
+        })?;
+        let q_poseidon2external = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::Q_POSEIDON2EXTERNAL.into()),
+                },
+            }
+        })?;
+        let q_poseidon2internal = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::Q_POSEIDON2INTERNAL.into()),
+                },
+            }
+        })?;
+        let s_1 = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::S_1.into()),
+                },
+            }
+        })?;
+        let s_2 = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::S_2.into()),
+                },
+            }
+        })?;
+        let s_3 = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::S_3.into()),
+                },
+            }
+        })?;
+        let s_4 = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::S_4.into()),
+                },
+            }
+        })?;
+        let id_1 = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::ID_1.into()),
+                },
+            }
+        })?;
+        let id_2 = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::ID_2.into()),
+                },
+            }
+        })?;
+        let id_3 = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::ID_3.into()),
+                },
+            }
+        })?;
+        let id_4 = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::ID_4.into()),
+                },
+            }
+        })?;
+        let t_1 = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::T_1.into()),
+                },
+            }
+        })?;
+        let t_2 = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::T_2.into()),
+                },
+            }
+        })?;
+        let t_3 = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::T_3.into()),
+                },
+            }
+        })?;
+        let t_4 = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::T_4.into()),
+                },
+            }
+        })?;
+        let lagrange_first = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::Lagrange_First.into()),
+                },
+            }
+        })?;
+        let lagrange_last = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+            VerificationKeyError::GroupConversionError {
+                conv_error: ConversionError {
+                    group: e,
+                    field: Some(VkCommitmentField::Lagrange_Last.into()),
+                },
+            }
+        })?;
 
         Ok(Self {
-            circuit_size,
             log_circuit_size,
-            num_public_inputs,
+            combined_input_size,
             pub_inputs_offset,
             q_m,
             q_c,
@@ -308,7 +467,8 @@ impl<H: CurveHooks> TryFrom<&[u8]> for VerificationKey<H> {
             q_arith,
             q_deltarange,
             q_elliptic,
-            q_aux,
+            q_memory,
+            q_nnf,
             q_poseidon2external,
             q_poseidon2internal,
             s_1,
@@ -329,70 +489,143 @@ impl<H: CurveHooks> TryFrom<&[u8]> for VerificationKey<H> {
     }
 }
 
+impl<H: CurveHooks> VerificationKey<H> {
+    /// Computes the hash of the verification key using Keccak256.
+    pub fn compute_vk_hash(&self) -> EVMWord {
+        Keccak256::new()
+            .chain(U256::from(self.log_circuit_size).into_be_bytes32())
+            .chain(U256::from(self.combined_input_size).into_be_bytes32())
+            .chain(U256::from(self.pub_inputs_offset).into_be_bytes32())
+            .chain(self.q_m.x.into_be_bytes32())
+            .chain(self.q_m.y.into_be_bytes32())
+            .chain(self.q_c.x.into_be_bytes32())
+            .chain(self.q_c.y.into_be_bytes32())
+            .chain(self.q_l.x.into_be_bytes32())
+            .chain(self.q_l.y.into_be_bytes32())
+            .chain(self.q_r.x.into_be_bytes32())
+            .chain(self.q_r.y.into_be_bytes32())
+            .chain(self.q_o.x.into_be_bytes32())
+            .chain(self.q_o.y.into_be_bytes32())
+            .chain(self.q_4.x.into_be_bytes32())
+            .chain(self.q_4.y.into_be_bytes32())
+            .chain(self.q_lookup.x.into_be_bytes32())
+            .chain(self.q_lookup.y.into_be_bytes32())
+            .chain(self.q_arith.x.into_be_bytes32())
+            .chain(self.q_arith.y.into_be_bytes32())
+            .chain(self.q_deltarange.x.into_be_bytes32())
+            .chain(self.q_deltarange.y.into_be_bytes32())
+            .chain(self.q_elliptic.x.into_be_bytes32())
+            .chain(self.q_elliptic.y.into_be_bytes32())
+            .chain(self.q_memory.x.into_be_bytes32())
+            .chain(self.q_memory.y.into_be_bytes32())
+            .chain(self.q_nnf.x.into_be_bytes32())
+            .chain(self.q_nnf.y.into_be_bytes32())
+            .chain(self.q_poseidon2external.x.into_be_bytes32())
+            .chain(self.q_poseidon2external.y.into_be_bytes32())
+            .chain(self.q_poseidon2internal.x.into_be_bytes32())
+            .chain(self.q_poseidon2internal.y.into_be_bytes32())
+            .chain(self.s_1.x.into_be_bytes32())
+            .chain(self.s_1.y.into_be_bytes32())
+            .chain(self.s_2.x.into_be_bytes32())
+            .chain(self.s_2.y.into_be_bytes32())
+            .chain(self.s_3.x.into_be_bytes32())
+            .chain(self.s_3.y.into_be_bytes32())
+            .chain(self.s_4.x.into_be_bytes32())
+            .chain(self.s_4.y.into_be_bytes32())
+            .chain(self.id_1.x.into_be_bytes32())
+            .chain(self.id_1.y.into_be_bytes32())
+            .chain(self.id_2.x.into_be_bytes32())
+            .chain(self.id_2.y.into_be_bytes32())
+            .chain(self.id_3.x.into_be_bytes32())
+            .chain(self.id_3.y.into_be_bytes32())
+            .chain(self.id_4.x.into_be_bytes32())
+            .chain(self.id_4.y.into_be_bytes32())
+            .chain(self.t_1.x.into_be_bytes32())
+            .chain(self.t_1.y.into_be_bytes32())
+            .chain(self.t_2.x.into_be_bytes32())
+            .chain(self.t_2.y.into_be_bytes32())
+            .chain(self.t_3.x.into_be_bytes32())
+            .chain(self.t_3.y.into_be_bytes32())
+            .chain(self.t_4.x.into_be_bytes32())
+            .chain(self.t_4.y.into_be_bytes32())
+            .chain(self.lagrange_first.x.into_be_bytes32())
+            .chain(self.lagrange_first.y.into_be_bytes32())
+            .chain(self.lagrange_last.x.into_be_bytes32())
+            .chain(self.lagrange_last.y.into_be_bytes32())
+            .finalize()
+            .into()
+    }
+}
+
 #[cfg(test)]
 mod should {
     use super::*;
+    use crate::errors::GroupError;
     use rstest::{fixture, rstest};
 
     #[fixture]
     fn valid_vk() -> [u8; VK_SIZE] {
         hex_literal::hex!(
             "
-            0000000000000020000000000000000500000000000000020000000000000001
-            1d4e2b662cf75598ae75c80cb6190d6d86bc92fd69f1420fc9e6d5be8ba09e2c
-            30210ded34398f54e3048f65c3f1dac749cc5022828668a6b345712af7369cbb
-            1c3736f27bc34afe8eb1021704555717e76024100c144933330df5d9a6fb7e7f
-            215612b168ecf42291b6df40da24069d5a0d5f2599d8be1ec34c5095e0922151
-            059aecd0bba76edd4de929d587575b50c50f4be99a4615bfbd4ece89cb1442f1
-            121b12b8bfa67425811621a1be826bcc5add41edb51fdce6c134c8e3ff5b1578
-            2ad6f88dd8a25590c065ad43adb6f3d4ccba5a7312f27dd564b12325a2594ae5
-            038c0c60a3dfed43a24eefcc0331f08074bea7bb5c7f65191ec2c3fe59a239cc
-            17bebc96661564acc3f5c59647e9270570e0c238916df6390c8590445f256d1d
-            0bf23741444a9bf150d33f19d70a31863256e71d2bb1adf96b04d61f2c95a2c4
-            1b8058db3a5b9890b24d2545b7dd4aca37844bb0964691811a3dfe7b9fd24f8f
-            28362861904e4b69161d7f43201c9213ede6e74eb63800123b82c73ad0156c40
-            3058b7f62cbcbdc8763b05935e9965bea86cd205281d331fb426ef4232ffe5c5
-            2b312f13fea65176bc0fe06aef8724f256898d215c78835f40bfe56fbf3f0de3
-            0ac6c48b063b744bbeecb29c8962cf27853ae788601a92a0420ba047a7f7a643
-            265a8af9070f8bd5e18bc97a13c985d35a59c188d3d5ee626bbc4589bba9ff9f
-            024236bda126650fb5228cf424a0878775499e69e8bd2c39af33bd5fa0b4079a
-            233cda9292be02cfa2da9d0fc7b0eab0eb1a867b06854066589b967455259b32
-            0ca0bc4b1cd9eadbbf49eae56a99a4502ef13d965226a634d0981555e4a4da56
-            1a8a818e6c61f68cefa329f2fabc95c80ad56a538d852f75eda858ed1a616c74
-            09dfd2992ac1708f0dd1d28c2ad910d9cf21a1510948580f406bc9416113d620
-            205f76eebda12f565c98c775c4e4f3534b5dcc29e57eed899b1a1a880534dcb9
-            1b8afad764d2cbe67c94249535bba7fcbd3f412f868487222aa54f3268ab64a2
-            01b70a90a334c9bd5096aad8a0cc5d4c1d1cdb0fe415445bd0c84309caaf213e
-            13240f97a584b45184c8ec31319b5f6c04ee19ec1dfec87ed47d6d04aa158de2
-            2dad22022121d689f57fb38ca21349cefb5d240b07ceb4be26ea429b6dc9d9e0
-            2dbea5caeded6749d2ef2e2074dbea56c8d54fa043a54c6e6a40238fb0a52c8e
-            1f299b74e3867e8c8bc149ef3a308007a3bd6f9935088ec247cce992c33a5336
-            06652c2a72cb81284b190e235ee029a9463f36b2e29a1775c984b9d9b2714bab
-            268e8d1e619fde85a71e430b77974326d790cb64c87558085332df639b8ce410
-            2849ce9f77669190ed63388b3cc4a6d4e0d895c683ae0057f36a00e62416de5e
-            2f8d58d08d4b4bb3a63e23e091e7a1f13c581c8a98c75014d5ec8a20890c62a5
-            0fff3b4e49a2e6e05bc63d8438368182639ef435c89f30e3a3a9053d97bea5f2
-            1820cafe7ffbef14880565ed976d53ed31c844187447d21f09100e8e569d3aec
-            2e89eeb660cac820de50be4c53b608dd67c6977f5f1746fcf0fb6475d81ccd93
-            18ca593957d2677420236138b3659a6b95b580bcc09a3dfbdadfa58a38222c15
-            0c756ba6a0c66b05655349f04c61dff94dddf3a4d0117fafda741f9518c42f00
-            0f87a1201ebad9bd23fed33824ae4ba2a1a307a45fb15594f8d553d2ebf9c285
-            248460656ec9bc0ad940051e3b0751d25bb97885d8bc362eb06b96ea78d82f84
-            0a5eebc538dc40185864706e22d850e3c02ce38e325761a59132bdb9e9d795be
-            161edd8773a3b74c0553b690b4b80b2a5cbd4a1a25fda097bef23e349531b43e
-            287139da895215c216aebe8cce7d3b944f4a3b051bd407126007921cb1fbc5fc
-            20d671263cad88c119d0a5d172679309087e385f8e76d4cfa834fab61ebd6603
-            0f9e6dfd3e6f4584b28e2cb00483dc2ffd9bf5f7ae2cc3f1ea0869c5ae71d9a1
-            101e267b586089a8bb447e83ab3b7029ed788cc214e0be44485e2f39afbb7ae6
-            13410d68bce429dc36e23023cfe21c5f2ced7e136529a4bcd4317232f2fc16b6
-            1054a26ae3aeeeedc653cf5c5e3c09e2258141e67f4a5a48b50cbf48958b40bd
-            2d14190edcf9b2aa697b677c779083aaf0151cc4f673dcf4bdba392d6280e376
-            2e9e762a66fed77eb0e72645e5ba54f32c1d1bfbc4bd862361dafd7ebd6c68dd
-            0b4a012fbc876f57da669215383f3595383f787bca153e972e6cfb9dfebeaa1b
+            000000000000000000000000000000000000000000000000000000000000000c
+            0000000000000000000000000000000000000000000000000000000000000011
+            0000000000000000000000000000000000000000000000000000000000000001
+            142bd66bdb7a2bc125c78e040da5a5cbe6f296ee1a11b55dce82f38413640a64
+            0d1415082e63c88eaa34836fe60428f70dee92853dc8a5d19d0bf85b0fa95ad4
+            2deae537974aa5697c77ce4f20f0fd5a3a264861cd51216bd8c56683467cd704
+            068627460599c3db714496966bf5f4374fb6087ba1179c7a8ed5c59a1015e784
+            06681df238df2a0f864a67847d46222c9aee090f36d34df5c2aab80f85a218f2
+            18e37167fd19d013b9c1b8da3c671ec025fe40eebc5d11d2d55e4ac8adccae27
+            177c7a07701c29d13dc4669f3d97f847e96e4bcefe3f9cf39c6f73896b06e821
+            2d31ea12ba12ee2338f1a638b192ffc9b995fd687c23cf6fe4a49a8e4f4c5aba
+            2d623ef9f6f62903ac68b01fa7f3faaa5a881854d8b0a3fb6597416a145754e3
+            20b75671e0dd20da52b442fa3ce1643a24c7ac8e6059e6db24a7e1bfc51be2ac
+            07ea8dd8b4d3fd18e2edafe7a56dfd287d677b48528aeba6bdb01913c3236ff8
+            2826602478d64dc4e23f777f35827a35ea2716bc853ad38b76968342e932d84b
+            0c4032c3079594eb75a8449d3d5ce8bc3661650d53f9b24d923d8f404cb0bbc9
+            1084d709650356d40f0158fd6da81f54eb5fe796a0ca89441369b7c24301f851
+            3057f9cfd5edb0e7c2c72a3c00da41d4c7c7b6d01c518c7ea0b38257198a9523
+            027eb0839ef4980d6a98575cedc65ee5700a7148f647b842154c13fa145167b7
+            1775fbd3ba5e43163b9a8bc08ae2fdbd8e9dc005befcd8cd631818993e143702
+            1d8011ee756abfa19e409fcb2e19a72238c07631bdde06678d3bce4455d2086f
+            09c706e73a00d84450fb0eae1d72783faba96bc3990b1eaa86226b3574e5c43f
+            276d401f1c0f9a2668fcae74683a84de1084739f9b1f547ec36638d7b5a1ecd9
+            12b12523f7d04a83276f3537c64334419e05b13fc20dedd7ff81c5677d3286ce
+            2e741be4fe42cc1155a526829445f3fda95e243c4e602d1c13a77a2472f082da
+            16a1350662e14b4ce4e8e364439d0abba02dc62a5526834f93c6db848d56dcb0
+            0563b1f480cad9069296d71489889503dda143f0b2e746ed0b6e85782c26040e
+            20e1bb3056279dc342f6c756379f231d5f472088e4d88b5517e40b2a0133f401
+            23ee36ecb11b62789eb4da763de77062d23ce01e2c8d1a5a6b3bd0ec93b42e77
+            0d1611c856951969fdda50b3205d5aa4486b632519d18424d0e92f60a31671d9
+            0ce97ee59d45d76230c0b534ea958de4c47e2f4c94aa3cadd7cd42e719521e0f
+            20c3e9857d73168eb049a6954dc31925100f44ca6398ee5652af680e254a4fc3
+            0be4d7b7685a137af9634d95d97f6024ba3216202ee80fc5fccac6b5cf2e4582
+            17e8098747feaf6d1854b8f18b6cb27185a672f5f5f16c2d0d6e7789a8d6ae00
+            0be3a351f7b48a0266a64c4eb69c19bbd4064ee848538cd46be7f549bb19fa05
+            2234971cd4054b723b6dca8ef55e4c62d67459e24f49c3326d2bfe01486af77a
+            0e96a04cc899f1e6aecc74fc7409cce5bd5318cd1bb72d1735d0cdb199cd179a
+            2c1a60dd4bc15efd19338957640268374683cc8417ae895b99f3215f597e7c48
+            1102b6dd02b49e3ea8f160d2e0ac2b9db8285906c17ad250a1bfa97f1731a183
+            13d9a8f63fda3aafaf71dd2eca25b293627bede4427bb7d9484fd637ec9c3339
+            0a08d0e381b054e808a8a780038559f35c06b650aa54cd26caac1f3f317ad73a
+            07ccc476d535a06f9f7388b04387bf331db992875edc3658257a7c25651f395c
+            00651fb2654053aedf8c01651ca7e5c11988ef1c0d084df3a8988bd89d930f83
+            0c133f1122a6aa216331840ab987b2f15217d3ee50ec9f9702abeb71b79e9645
+            2ff1de9d5413b8ccf0a625d78323e3c0f0beedb8abd96cda2f25a7f615ace981
+            16de4faf175d977b285160405a07f4a6503eaf75a2445d0be75cb81b1fb244af
+            226e2bc5a7f92698bd1ecfbcf1259a054128400368d40f11b37956404b1b6668
+            099e3bd5a0a00ab7fe18040105b9b395b5d8b7b4a63b05df652b0d10ef146d26
+            0015b8d2515d76e2ccec99dcd194592129af3a637f5a622a32440f860d1e2a7f
+            1b917517920bad3d8bc01c9595092a222b888108dc25d1aa450e0b4bc212c37e
+            305e8992b148eedb22e6e992077a84482141c7ebe42000a1d58ccb74381f6d19
+            061f64497996e8915722501e9e367938ed8da2375186b518c7345c60b1134b2d
+            1b84d38339321f405ebaf6a2f830842ad3d7cb59792e11c0d2691f317fd50e6e
+            043d063b130adfb37342af45d0155a28edd1a7e46c840d9c943fdf45521c64ce
+            261522c4089330646aff96736194949330952ae74c573d1686d9cb4a00733854
             0000000000000000000000000000000000000000000000000000000000000001
             0000000000000000000000000000000000000000000000000000000000000002
-            0af3884ecad3331429af995779c2602e93ca1ea976e9e1bc64bbcdbb9fe79212
-            1f18803add8ad686e13dc2a989dcfb010cb69b0b38200df51787b7104bc74fb6
+            06a032e44c27b0ce9ed4d186a2debd4bfe72be9bc894b742744cf102a554d06f
+            053396ef4f905183ad76960162ff0d8c34d25b6126660c8385d13a63d2078399
             "
         )
     }
@@ -402,7 +635,20 @@ mod should {
         assert!(VerificationKey::<()>::try_from(&valid_vk[..]).is_ok());
     }
 
+    #[rstest]
+    fn extract_log_circuit_size_from_valid_vk(valid_vk: [u8; VK_SIZE]) {
+        assert!(VerificationKey::<()>::extract_log_circuit_size(&valid_vk[..]).is_ok());
+    }
+
     mod reject {
+        use ark_bn254::Fr;
+        use ark_ff::{Field, PrimeField};
+
+        use crate::{
+            constants::{EVM_WORD_SIZE, GROUP_ELEMENT_SIZE},
+            errors::CommitmentField,
+        };
+
         use super::*;
 
         #[rstest]
@@ -415,32 +661,10 @@ mod should {
         }
 
         #[rstest]
-        fn a_vk_with_circuit_size_zero(valid_vk: [u8; VK_SIZE]) {
+        fn a_vk_with_log_circuit_size_zero(valid_vk: [u8; VK_SIZE]) {
             let mut invalid_vk = [0u8; VK_SIZE];
             invalid_vk.copy_from_slice(&valid_vk);
-            invalid_vk[..8].fill(0);
-            assert_eq!(
-                VerificationKey::<()>::try_from(&invalid_vk[..]),
-                Err(VerificationKeyError::InvalidCircuitSize)
-            );
-        }
-
-        #[rstest]
-        fn a_vk_with_an_invalid_circuit_size(valid_vk: [u8; VK_SIZE]) {
-            let mut invalid_vk = [0u8; VK_SIZE];
-            invalid_vk.copy_from_slice(&valid_vk);
-            invalid_vk[..8].fill(1); // not a power of 2
-            assert_eq!(
-                VerificationKey::<()>::try_from(&invalid_vk[..]),
-                Err(VerificationKeyError::InvalidCircuitSize)
-            );
-        }
-
-        #[rstest]
-        fn a_vk_with_an_invalid_log_circuit_size(valid_vk: [u8; VK_SIZE]) {
-            let mut invalid_vk = [0u8; VK_SIZE];
-            invalid_vk.copy_from_slice(&valid_vk);
-            invalid_vk[8..16].fill(0);
+            invalid_vk[..EVM_WORD_SIZE].fill(0);
             assert_eq!(
                 VerificationKey::<()>::try_from(&invalid_vk[..]),
                 Err(VerificationKeyError::InvalidLogCircuitSize)
@@ -448,45 +672,92 @@ mod should {
         }
 
         #[rstest]
+        fn a_vk_with_log_circuit_size_too_big(valid_vk: [u8; VK_SIZE]) {
+            let mut invalid_vk = [0u8; VK_SIZE];
+            invalid_vk.copy_from_slice(&valid_vk);
+            let invalid_bytes = U256::from(CONST_PROOF_SIZE_LOG_N as u64 + 1).into_be_bytes32();
+            invalid_vk[0..EVM_WORD_SIZE].copy_from_slice(&invalid_bytes);
+            assert_eq!(
+                VerificationKey::<()>::try_from(&invalid_vk[..]),
+                Err(VerificationKeyError::LogCircuitSizeTooBig)
+            );
+        }
+
+        #[rstest]
+        fn a_vk_with_insufficient_bytes_for_log_circuit_size(valid_vk: [u8; VK_SIZE]) {
+            let invalid_vk = &valid_vk[..EVM_WORD_SIZE - 1];
+            assert!(VerificationKey::<()>::extract_log_circuit_size(invalid_vk).is_err());
+        }
+
+        #[rstest]
+        fn a_vk_where_extracted_log_circuit_size_is_zero(valid_vk: [u8; VK_SIZE]) {
+            let mut invalid_vk = [0u8; VK_SIZE];
+            invalid_vk.copy_from_slice(&valid_vk);
+            invalid_vk[..EVM_WORD_SIZE].fill(0);
+            assert!(VerificationKey::<()>::extract_log_circuit_size(&invalid_vk[..]).is_err());
+        }
+
+        #[rstest]
+        fn a_vk_where_extracted_log_circuit_size_does_not_fit_in_an_u64(valid_vk: [u8; VK_SIZE]) {
+            let mut invalid_vk = [0u8; VK_SIZE];
+            invalid_vk.copy_from_slice(&valid_vk);
+            let invalid_bytes = (Fr::from_be_bytes_mod_order(&u64::MAX.into_be_bytes32())
+                + Fr::ONE)
+                .into_be_bytes32();
+            invalid_vk[..EVM_WORD_SIZE].copy_from_slice(&invalid_bytes);
+            assert!(VerificationKey::<()>::extract_log_circuit_size(&invalid_vk[..]).is_err());
+        }
+
+        #[rstest]
         fn a_vk_with_a_point_not_on_curve_for_any_commitment_field(valid_vk: [u8; VK_SIZE]) {
             let commitment_fields = [
-                CommitmentField::Q_M,
-                CommitmentField::Q_C,
-                CommitmentField::Q_L,
-                CommitmentField::Q_R,
-                CommitmentField::Q_O,
-                CommitmentField::Q_4,
-                CommitmentField::Q_LOOKUP,
-                CommitmentField::Q_ARITH,
-                CommitmentField::Q_DELTARANGE,
-                CommitmentField::Q_ELLIPTIC,
-                CommitmentField::Q_AUX,
-                CommitmentField::Q_POSEIDON2EXTERNAL,
-                CommitmentField::Q_POSEIDON2INTERNAL,
-                CommitmentField::S_1,
-                CommitmentField::S_2,
-                CommitmentField::S_3,
-                CommitmentField::S_4,
-                CommitmentField::ID_1,
-                CommitmentField::ID_2,
-                CommitmentField::ID_3,
-                CommitmentField::ID_4,
-                CommitmentField::T_1,
-                CommitmentField::T_2,
-                CommitmentField::T_3,
-                CommitmentField::T_4,
-                CommitmentField::Lagrange_First,
-                CommitmentField::Lagrange_Last,
+                VkCommitmentField::Q_M,
+                VkCommitmentField::Q_C,
+                VkCommitmentField::Q_L,
+                VkCommitmentField::Q_R,
+                VkCommitmentField::Q_O,
+                VkCommitmentField::Q_4,
+                VkCommitmentField::Q_LOOKUP,
+                VkCommitmentField::Q_ARITH,
+                VkCommitmentField::Q_DELTARANGE,
+                VkCommitmentField::Q_ELLIPTIC,
+                VkCommitmentField::Q_MEMORY,
+                VkCommitmentField::Q_NNF,
+                VkCommitmentField::Q_POSEIDON2EXTERNAL,
+                VkCommitmentField::Q_POSEIDON2INTERNAL,
+                VkCommitmentField::S_1,
+                VkCommitmentField::S_2,
+                VkCommitmentField::S_3,
+                VkCommitmentField::S_4,
+                VkCommitmentField::ID_1,
+                VkCommitmentField::ID_2,
+                VkCommitmentField::ID_3,
+                VkCommitmentField::ID_4,
+                VkCommitmentField::T_1,
+                VkCommitmentField::T_2,
+                VkCommitmentField::T_3,
+                VkCommitmentField::T_4,
+                VkCommitmentField::Lagrange_First,
+                VkCommitmentField::Lagrange_Last,
             ];
+            const OFFSET: usize = 3 * EVM_WORD_SIZE;
             for (i, cm) in commitment_fields.iter().enumerate() {
                 let mut invalid_vk = [0u8; VK_SIZE];
                 invalid_vk.copy_from_slice(&valid_vk);
                 // Please note that (0, 0) is treated as the point at infinity
-                invalid_vk[32 + i * 64..32 + (i + 1) * 64].fill(1);
+                invalid_vk[OFFSET + i * GROUP_ELEMENT_SIZE..OFFSET + (i + 1) * GROUP_ELEMENT_SIZE]
+                    .fill(1);
 
                 assert_eq!(
                     VerificationKey::<()>::try_from(&invalid_vk[..]).unwrap_err(),
-                    VerificationKeyError::PointNotOnCurve { field: cm.str() }
+                    VerificationKeyError::GroupConversionError {
+                        conv_error: ConversionError {
+                            group: GroupError::NotOnCurve,
+                            field: Some(<CommitmentField as From<VkCommitmentField>>::from(
+                                cm.clone()
+                            )),
+                        }
+                    }
                 );
             }
         }

@@ -35,7 +35,8 @@ pub enum Wire {
     Q_ARITH,
     Q_RANGE,
     Q_ELLIPTIC,
-    Q_AUX,
+    Q_MEMORY,
+    Q_NNF,
     Q_POSEIDON2_EXTERNAL,
     Q_POSEIDON2_INTERNAL,
     SIGMA_1,
@@ -73,7 +74,7 @@ fn wire(p: &[Fr; NUMBER_OF_ENTITIES], wire: Wire) -> Fr {
     p[wire as usize]
 }
 
-// Constants for the auxiliary relation.
+// Constants for the memory relation.
 const LIMB_SIZE: Fr = MontFp!("295147905179352825856"); // 1 << 68
 const SUBLIMB_SHIFT: Fr = MontFp!("16384"); // 1 << 14
 
@@ -88,7 +89,7 @@ const MINUS_THREE: Fr =
 pub(crate) fn accumulate_relation_evaluations(
     purported_evaluations: &[Fr; NUMBER_OF_ENTITIES],
     rp_challenges: &RelationParametersChallenges,
-    alphas: &[Fr; NUMBER_OF_ALPHAS],
+    subrelation_challenges: &[Fr; NUMBER_OF_ALPHAS],
     public_inputs_delta: Fr,
     pow_partial_eval: Fr,
 ) -> Fr {
@@ -111,12 +112,13 @@ pub(crate) fn accumulate_relation_evaluations(
     );
     accumulate_delta_range_relation(purported_evaluations, &mut evaluations, pow_partial_eval);
     accumulate_elliptic_relation(purported_evaluations, &mut evaluations, pow_partial_eval);
-    accumulate_auxillary_relation(
+    accumulate_memory_relation(
         purported_evaluations,
         rp_challenges,
         &mut evaluations,
         pow_partial_eval,
     );
+    accumulate_nnf_relation(purported_evaluations, &mut evaluations, pow_partial_eval);
     accumulate_poseidon_external_relation(
         purported_evaluations,
         &mut evaluations,
@@ -128,8 +130,8 @@ pub(crate) fn accumulate_relation_evaluations(
         pow_partial_eval,
     );
 
-    // batch the subrelations with the alpha challenges to obtain the full honk relation
-    scale_and_batch_subrelations(&evaluations, alphas) // accumulator
+    // batch the subrelations with the precomputed alpha powers to obtain the full honk relation
+    scale_and_batch_subrelations(&evaluations, subrelation_challenges) // accumulator
 }
 
 /// Ultra Arithmetic Relation.
@@ -141,12 +143,12 @@ fn accumulate_arithmetic_relation(
     // Relation 0
     let q_arith = wire(p, Wire::Q_ARITH);
 
-    const NEG_HALF: Fr =
-        MontFp!("10944121435919637611123202872628637544274182200208017171849102093287904247808"); // neg half modulo r
+    const NEG_HALF_MOD_R: Fr =
+        MontFp!("10944121435919637611123202872628637544274182200208017171849102093287904247808");
 
     let mut accum = (q_arith + MINUS_THREE)
         * (wire(p, Wire::Q_M) * wire(p, Wire::W_R) * wire(p, Wire::W_L))
-        * NEG_HALF;
+        * NEG_HALF_MOD_R;
     accum += (wire(p, Wire::Q_L) * wire(p, Wire::W_L))
         + (wire(p, Wire::Q_R) * wire(p, Wire::W_R))
         + (wire(p, Wire::Q_O) * wire(p, Wire::W_O))
@@ -241,8 +243,13 @@ fn accumulate_log_derivative_lookup_relation(
     let accumulator_one =
         wire(p, Wire::Q_LOOKUP) * read_inverse - wire(p, Wire::LOOKUP_READ_COUNTS) * write_inverse;
 
+    let read_tag = wire(p, Wire::LOOKUP_READ_TAGS);
+
+    let read_tag_boolean_relation = read_tag * read_tag - read_tag;
+
     evals[4] = accumulator_none;
     evals[5] = accumulator_one;
+    evals[6] = read_tag_boolean_relation * domain_sep;
 }
 
 fn accumulate_delta_range_relation(
@@ -263,7 +270,7 @@ fn accumulate_delta_range_relation(
     acc *= delta_1 + MINUS_THREE;
     acc *= wire(p, Wire::Q_RANGE);
     acc *= domain_sep;
-    evals[6] = acc;
+    evals[7] = acc;
 
     // Contribution 7
     let mut acc = delta_2;
@@ -272,7 +279,7 @@ fn accumulate_delta_range_relation(
     acc *= delta_2 + MINUS_THREE;
     acc *= wire(p, Wire::Q_RANGE);
     acc *= domain_sep;
-    evals[7] = acc;
+    evals[8] = acc;
 
     // Contribution 8
     let mut acc = delta_3;
@@ -281,7 +288,7 @@ fn accumulate_delta_range_relation(
     acc *= delta_3 + MINUS_THREE;
     acc *= wire(p, Wire::Q_RANGE);
     acc *= domain_sep;
-    evals[8] = acc;
+    evals[9] = acc;
 
     // Contribution 9
     let mut acc = delta_4;
@@ -290,7 +297,7 @@ fn accumulate_delta_range_relation(
     acc *= delta_4 + MINUS_THREE;
     acc *= wire(p, Wire::Q_RANGE);
     acc *= domain_sep;
-    evals[9] = acc;
+    evals[10] = acc;
 }
 
 fn accumulate_elliptic_relation(
@@ -323,7 +330,7 @@ fn accumulate_elliptic_relation(
         x_add_identity *= x_diff * x_diff;
         x_add_identity += y1y2 + y1y2 - y2_sqr - y1_sqr; // x_add_identity = x_add_identity - y2_sqr - y1_sqr + y1y2 + y1y2;
 
-        evals[10] =
+        evals[11] =
             x_add_identity * partial_eval * wire(p, Wire::Q_ELLIPTIC) * (Fr::ONE - q_is_double);
     }
 
@@ -333,7 +340,7 @@ fn accumulate_elliptic_relation(
         let y1_plus_y3 = y_1 + y_3;
         let y_diff = y_2 * q_sign - y_1;
         let y_add_identity = y1_plus_y3 * x_diff + (x_3 - x_1) * y_diff;
-        evals[11] =
+        evals[12] =
             y_add_identity * domain_sep * wire(p, Wire::Q_ELLIPTIC) * (Fr::ONE - q_is_double);
     }
 
@@ -346,7 +353,7 @@ fn accumulate_elliptic_relation(
         let x1_pow_4_mul_9 = x_pow_4 * MontFp!("9");
         let x_double_identity = (x_3 + x_1.double()) * y1_sqr_mul_4 - x1_pow_4_mul_9;
 
-        evals[10] += x_double_identity * domain_sep * wire(p, Wire::Q_ELLIPTIC) * q_is_double;
+        evals[11] += x_double_identity * domain_sep * wire(p, Wire::Q_ELLIPTIC) * q_is_double;
     }
 
     // Contribution 11 point doubling, y-coordinate check:
@@ -354,78 +361,16 @@ fn accumulate_elliptic_relation(
     {
         let x1_sqr_mul_3 = (x_1.double() + x_1) * x_1;
         let y_double_identity = x1_sqr_mul_3 * (x_1 - x_3) - y_1.double() * (y_1 + y_3);
-        evals[11] += y_double_identity * domain_sep * wire(p, Wire::Q_ELLIPTIC) * q_is_double;
+        evals[12] += y_double_identity * domain_sep * wire(p, Wire::Q_ELLIPTIC) * q_is_double;
     }
 }
 
-fn accumulate_auxillary_relation(
+fn accumulate_memory_relation(
     p: &[Fr; NUMBER_OF_ENTITIES],
     rp: &RelationParametersChallenges,
     evals: &mut [Fr; NUMBER_OF_SUBRELATIONS],
     domain_sep: Fr,
 ) {
-    // Contribution 12
-    // Non native field arithmetic gate 2
-    // deg 4
-    //             _                                                                               _
-    //            /   _                   _                               _       14                \
-    // q_2 . q_4 |   (w_1 . w_2) + (w_1 . w_2) + (w_1 . w_4 + w_2 . w_3 - w_3) . 2    - w_3 - w_4   |
-    //            \_                                                                               _/
-    //
-    let mut limb_subproduct = wire(p, Wire::W_L) * wire(p, Wire::W_R_SHIFT)
-        + wire(p, Wire::W_L_SHIFT) * wire(p, Wire::W_R);
-    let mut non_native_field_gate_2 = wire(p, Wire::W_L) * wire(p, Wire::W_4)
-        + wire(p, Wire::W_R) * wire(p, Wire::W_O)
-        - wire(p, Wire::W_O_SHIFT);
-    non_native_field_gate_2 *= LIMB_SIZE;
-    non_native_field_gate_2 -= wire(p, Wire::W_4_SHIFT);
-    non_native_field_gate_2 += limb_subproduct;
-    non_native_field_gate_2 *= wire(p, Wire::Q_4);
-
-    limb_subproduct *= LIMB_SIZE;
-    limb_subproduct += wire(p, Wire::W_L_SHIFT) * wire(p, Wire::W_R_SHIFT);
-    let mut non_native_field_gate_1 = limb_subproduct;
-    non_native_field_gate_1 -= wire(p, Wire::W_O) + wire(p, Wire::W_4);
-    non_native_field_gate_1 *= wire(p, Wire::Q_O);
-
-    let mut non_native_field_gate_3 = limb_subproduct;
-    non_native_field_gate_3 += wire(p, Wire::W_4);
-    non_native_field_gate_3 -= wire(p, Wire::W_O_SHIFT) + wire(p, Wire::W_4_SHIFT);
-    non_native_field_gate_3 *= wire(p, Wire::Q_M);
-
-    let mut non_native_field_identity =
-        non_native_field_gate_1 + non_native_field_gate_2 + non_native_field_gate_3;
-    non_native_field_identity *= wire(p, Wire::Q_R);
-
-    // ((((w2' * 2^14 + w1') * 2^14 + w3) * 2^14 + w2) * 2^14 + w1 - w4) * qm
-    // deg 2
-    let mut limb_accumulator_1 = wire(p, Wire::W_R_SHIFT) * SUBLIMB_SHIFT;
-    limb_accumulator_1 += wire(p, Wire::W_L_SHIFT);
-    limb_accumulator_1 *= SUBLIMB_SHIFT;
-    limb_accumulator_1 += wire(p, Wire::W_O);
-    limb_accumulator_1 *= SUBLIMB_SHIFT;
-    limb_accumulator_1 += wire(p, Wire::W_R);
-    limb_accumulator_1 *= SUBLIMB_SHIFT;
-    limb_accumulator_1 += wire(p, Wire::W_L);
-    limb_accumulator_1 -= wire(p, Wire::W_4);
-    limb_accumulator_1 *= wire(p, Wire::Q_4);
-
-    // ((((w3' * 2^14 + w2') * 2^14 + w1') * 2^14 + w4) * 2^14 + w3 - w4') * qm
-    // deg 2
-    let mut limb_accumulator_2 = wire(p, Wire::W_O_SHIFT) * SUBLIMB_SHIFT;
-    limb_accumulator_2 += wire(p, Wire::W_R_SHIFT);
-    limb_accumulator_2 *= SUBLIMB_SHIFT;
-    limb_accumulator_2 += wire(p, Wire::W_L_SHIFT);
-    limb_accumulator_2 *= SUBLIMB_SHIFT;
-    limb_accumulator_2 += wire(p, Wire::W_4);
-    limb_accumulator_2 *= SUBLIMB_SHIFT;
-    limb_accumulator_2 += wire(p, Wire::W_O);
-    limb_accumulator_2 -= wire(p, Wire::W_4_SHIFT);
-    limb_accumulator_2 *= wire(p, Wire::Q_M);
-
-    let mut limb_accumulator_identity = limb_accumulator_1 + limb_accumulator_2;
-    limb_accumulator_identity *= wire(p, Wire::Q_O); //  deg 3
-
     // MEMORY
     //
     // A RAM memory record contains a tuple of the following fields:
@@ -489,20 +434,20 @@ fn accumulate_auxillary_relation(
     let index_delta = wire(p, Wire::W_L_SHIFT) - wire(p, Wire::W_L);
     let record_delta = wire(p, Wire::W_4_SHIFT) - wire(p, Wire::W_4);
 
-    let index_is_monotonically_increasing = index_delta.square() - index_delta; // deg 2
+    let index_is_monotonically_increasing = index_delta * (index_delta - Fr::ONE); // deg 2
 
     let adjacent_values_match_if_adjacent_indices_match =
         (index_delta * MINUS_ONE + Fr::ONE) * record_delta; // deg 2
 
-    evals[13] = adjacent_values_match_if_adjacent_indices_match
+    evals[14] = adjacent_values_match_if_adjacent_indices_match
         * wire(p, Wire::Q_L)
         * wire(p, Wire::Q_R)
-        * wire(p, Wire::Q_AUX)
+        * wire(p, Wire::Q_MEMORY)
         * domain_sep; // deg 5
-    evals[14] = index_is_monotonically_increasing
+    evals[15] = index_is_monotonically_increasing
         * wire(p, Wire::Q_L)
         * wire(p, Wire::Q_R)
-        * wire(p, Wire::Q_AUX)
+        * wire(p, Wire::Q_MEMORY)
         * domain_sep; // deg 5
 
     let rom_consistency_check_identity =
@@ -512,7 +457,7 @@ fn accumulate_auxillary_relation(
     // Contributions 15, 16 and 17
     // RAM Consistency Check
     //
-    // The 'access' type of the record is extracted with the expression `w_4 - ap.partial_record_check`
+    // The 'access' type of the record is extracted with the expression `w_4 - partial_record_check`
     // (i.e. for an honest Prover `w1 * eta + w2 * eta^2 + w3 * eta^3 - w4 = access`.
     // This is validated by requiring `access` to be boolean
     //
@@ -528,8 +473,10 @@ fn accumulate_auxillary_relation(
     // with a WRITE operation.
     //
     let access_type = wire(p, Wire::W_4) - partial_record_check; // will be 0 or 1 for honest Prover; deg 1 or 4
-    let access_check = access_type.square() - access_type; // check value is 0 or 1; deg 2 or 8
+    let access_check = access_type * (access_type - Fr::ONE); // check value is 0 or 1; deg 2 or 8
 
+    // reverse order we could re-use `partial_record_check`  1 -  ((w3' * eta + w2') * eta + w1') * eta
+    // deg 1 or 4
     let mut next_gate_access_type = wire(p, Wire::W_O_SHIFT) * rp.eta_three;
     next_gate_access_type += wire(p, Wire::W_R_SHIFT) * rp.eta_two;
     next_gate_access_type += wire(p, Wire::W_L_SHIFT) * rp.eta;
@@ -549,20 +496,20 @@ fn accumulate_auxillary_relation(
     let next_gate_access_type_is_boolean = next_gate_access_type.square() - next_gate_access_type;
 
     // Putting it all together...
-    evals[15] = adjacent_values_match_if_adjacent_indices_match_and_next_access_is_a_read_operation
-        * wire(p, Wire::Q_ARITH)
-        * wire(p, Wire::Q_AUX)
+    evals[16] = adjacent_values_match_if_adjacent_indices_match_and_next_access_is_a_read_operation
+        * wire(p, Wire::Q_O)
+        * wire(p, Wire::Q_MEMORY)
         * domain_sep; // deg 5 or 8
-    evals[16] = index_is_monotonically_increasing
-        * wire(p, Wire::Q_ARITH)
-        * wire(p, Wire::Q_AUX)
+    evals[17] = index_is_monotonically_increasing
+        * wire(p, Wire::Q_O)
+        * wire(p, Wire::Q_MEMORY)
         * domain_sep; // deg 4
-    evals[17] = next_gate_access_type_is_boolean
-        * wire(p, Wire::Q_ARITH)
-        * wire(p, Wire::Q_AUX)
+    evals[18] = next_gate_access_type_is_boolean
+        * wire(p, Wire::Q_O)
+        * wire(p, Wire::Q_MEMORY)
         * domain_sep; // deg 4 or 6
 
-    let ram_consistency_check_identity = access_check * wire(p, Wire::Q_ARITH); // deg 3 or 9
+    let ram_consistency_check_identity = access_check * wire(p, Wire::Q_O); // deg 3 or 9
 
     //
     // RAM Timestamp Consistency Check
@@ -590,10 +537,84 @@ fn accumulate_auxillary_relation(
     memory_identity += ram_consistency_check_identity; // deg 3 or 9
 
     // (deg 3 or 9) + (deg 4) + (deg 3)
-    let mut auxiliary_identity =
-        memory_identity + non_native_field_identity + limb_accumulator_identity;
-    auxiliary_identity *= wire(p, Wire::Q_AUX) * domain_sep; // deg 4 or 10
-    evals[12] = auxiliary_identity;
+    memory_identity *= wire(p, Wire::Q_MEMORY) * domain_sep; // deg 4 or 10
+    evals[13] = memory_identity;
+}
+
+fn accumulate_nnf_relation(
+    p: &[Fr; NUMBER_OF_ENTITIES],
+    evals: &mut [Fr; NUMBER_OF_SUBRELATIONS],
+    domain_sep: Fr,
+) {
+    /*
+     * Contribution 12
+     * Non native field arithmetic gate 2
+     * deg 4
+     *
+     *             _                                                                               _
+     *            /   _                   _                               _       14                \
+     * q_2 . q_4 |   (w_1 . w_2) + (w_1 . w_2) + (w_1 . w_4 + w_2 . w_3 - w_3) . 2    - w_3 - w_4   |
+     *            \_                                                                               _/
+     *
+     *
+     */
+    let mut limb_subproduct = wire(p, Wire::W_L) * wire(p, Wire::W_R_SHIFT)
+        + wire(p, Wire::W_L_SHIFT) * wire(p, Wire::W_R);
+    let mut non_native_field_gate_2 = wire(p, Wire::W_L) * wire(p, Wire::W_4)
+        + wire(p, Wire::W_R) * wire(p, Wire::W_O)
+        - wire(p, Wire::W_O_SHIFT);
+    non_native_field_gate_2 *= LIMB_SIZE;
+    non_native_field_gate_2 -= wire(p, Wire::W_4_SHIFT);
+    non_native_field_gate_2 += limb_subproduct;
+    non_native_field_gate_2 *= wire(p, Wire::Q_4);
+
+    limb_subproduct *= LIMB_SIZE;
+    limb_subproduct += wire(p, Wire::W_L_SHIFT) * wire(p, Wire::W_R_SHIFT);
+    let mut non_native_field_gate_1 = limb_subproduct;
+    non_native_field_gate_1 -= wire(p, Wire::W_O) + wire(p, Wire::W_4); // !!!
+    non_native_field_gate_1 *= wire(p, Wire::Q_O);
+
+    let mut non_native_field_gate_3 = limb_subproduct;
+    non_native_field_gate_3 += wire(p, Wire::W_4);
+    non_native_field_gate_3 -= wire(p, Wire::W_O_SHIFT) + wire(p, Wire::W_4_SHIFT);
+    non_native_field_gate_3 *= wire(p, Wire::Q_M);
+
+    let mut non_native_field_identity =
+        non_native_field_gate_1 + non_native_field_gate_2 + non_native_field_gate_3;
+    non_native_field_identity *= wire(p, Wire::Q_R);
+
+    // ((((w2' * 2^14 + w1') * 2^14 + w3) * 2^14 + w2) * 2^14 + w1 - w4) * qm
+    // deg 2
+    let mut limb_accumulator_1 = wire(p, Wire::W_R_SHIFT) * SUBLIMB_SHIFT;
+    limb_accumulator_1 += wire(p, Wire::W_L_SHIFT);
+    limb_accumulator_1 *= SUBLIMB_SHIFT;
+    limb_accumulator_1 += wire(p, Wire::W_O);
+    limb_accumulator_1 *= SUBLIMB_SHIFT;
+    limb_accumulator_1 += wire(p, Wire::W_R);
+    limb_accumulator_1 *= SUBLIMB_SHIFT;
+    limb_accumulator_1 += wire(p, Wire::W_L);
+    limb_accumulator_1 -= wire(p, Wire::W_4);
+    limb_accumulator_1 *= wire(p, Wire::Q_4);
+
+    // ((((w3' * 2^14 + w2') * 2^14 + w1') * 2^14 + w4) * 2^14 + w3 - w4') * qm
+    // deg 2
+    let mut limb_accumulator_2 = wire(p, Wire::W_O_SHIFT) * SUBLIMB_SHIFT;
+    limb_accumulator_2 += wire(p, Wire::W_R_SHIFT);
+    limb_accumulator_2 *= SUBLIMB_SHIFT;
+    limb_accumulator_2 += wire(p, Wire::W_L_SHIFT);
+    limb_accumulator_2 *= SUBLIMB_SHIFT;
+    limb_accumulator_2 += wire(p, Wire::W_4);
+    limb_accumulator_2 *= SUBLIMB_SHIFT;
+    limb_accumulator_2 += wire(p, Wire::W_O);
+    limb_accumulator_2 -= wire(p, Wire::W_4_SHIFT);
+    limb_accumulator_2 *= wire(p, Wire::Q_M);
+
+    let mut limb_accumulator_identity = limb_accumulator_1 + limb_accumulator_2;
+    limb_accumulator_identity *= wire(p, Wire::Q_O); //  deg 3
+
+    let mut nnf_identity = non_native_field_identity + limb_accumulator_identity;
+    nnf_identity *= wire(p, Wire::Q_NNF) * domain_sep;
+    evals[19] = nnf_identity;
 }
 
 fn accumulate_poseidon_external_relation(
@@ -627,13 +648,13 @@ fn accumulate_poseidon_external_relation(
     let v3 = t2 + v4; // u_1 + 3u_2 + 5u_3 + 7u_4
 
     let q_pos_by_scaling = wire(p, Wire::Q_POSEIDON2_EXTERNAL) * domain_sep;
-    evals[18] += q_pos_by_scaling * (v1 - wire(p, Wire::W_L_SHIFT));
+    evals[20] += q_pos_by_scaling * (v1 - wire(p, Wire::W_L_SHIFT));
 
-    evals[19] += q_pos_by_scaling * (v2 - wire(p, Wire::W_R_SHIFT));
+    evals[21] += q_pos_by_scaling * (v2 - wire(p, Wire::W_R_SHIFT));
 
-    evals[20] += q_pos_by_scaling * (v3 - wire(p, Wire::W_O_SHIFT));
+    evals[22] += q_pos_by_scaling * (v3 - wire(p, Wire::W_O_SHIFT));
 
-    evals[21] += q_pos_by_scaling * (v4 - wire(p, Wire::W_4_SHIFT));
+    evals[23] += q_pos_by_scaling * (v4 - wire(p, Wire::W_4_SHIFT));
 }
 
 fn accumulate_poseidon_internal_relation(
@@ -641,6 +662,12 @@ fn accumulate_poseidon_internal_relation(
     evals: &mut [Fr; NUMBER_OF_SUBRELATIONS],
     domain_sep: Fr,
 ) {
+    const INTERNAL_MATRIX_DIAGONAL: [Fr; 4] = [
+        MontFp!("7626475329478847982857743246276194948757851985510858890691733676098590062311"),
+        MontFp!("5498568565063849786384470689962419967523752476452646391422913716315471115275"),
+        MontFp!("148936322117705719734052984176402258788283488576388928671173547788498414613"),
+        MontFp!("15456385653678559339152734484033356164266089951521103188900320352052358038155"),
+    ];
     // add round constants
     let s1 = wire(p, Wire::W_L) + wire(p, Wire::Q_L);
 
@@ -655,27 +682,22 @@ fn accumulate_poseidon_internal_relation(
 
     let q_pos_by_scaling = wire(p, Wire::Q_POSEIDON2_INTERNAL) * domain_sep;
 
-    let v1 = u1
-        * MontFp!("7626475329478847982857743246276194948757851985510858890691733676098590062311")
-        + u_sum;
-    evals[22] += q_pos_by_scaling * (v1 - wire(p, Wire::W_L_SHIFT));
+    let v1 = u1 * INTERNAL_MATRIX_DIAGONAL[0] + u_sum;
+    evals[24] += q_pos_by_scaling * (v1 - wire(p, Wire::W_L_SHIFT));
 
-    let v2 = u2
-        * MontFp!("5498568565063849786384470689962419967523752476452646391422913716315471115275")
-        + u_sum;
-    evals[23] += q_pos_by_scaling * (v2 - wire(p, Wire::W_R_SHIFT));
+    let v2 = u2 * INTERNAL_MATRIX_DIAGONAL[1] + u_sum;
+    evals[25] += q_pos_by_scaling * (v2 - wire(p, Wire::W_R_SHIFT));
 
-    let v3 = u3
-        * MontFp!("148936322117705719734052984176402258788283488576388928671173547788498414613")
-        + u_sum;
-    evals[24] += q_pos_by_scaling * (v3 - wire(p, Wire::W_O_SHIFT));
+    let v3 = u3 * INTERNAL_MATRIX_DIAGONAL[2] + u_sum;
+    evals[26] += q_pos_by_scaling * (v3 - wire(p, Wire::W_O_SHIFT));
 
-    let v4 = u4
-        * MontFp!("15456385653678559339152734484033356164266089951521103188900320352052358038155")
-        + u_sum;
-    evals[25] += q_pos_by_scaling * (v4 - wire(p, Wire::W_4_SHIFT));
+    let v4 = u4 * INTERNAL_MATRIX_DIAGONAL[3] + u_sum;
+    evals[27] += q_pos_by_scaling * (v4 - wire(p, Wire::W_4_SHIFT));
 }
 
+// Batch subrelation evaluations using precomputed powers of alpha.
+// First subrelation is implicitly scaled by 1, subsequent ones
+// use powers from the subrelation_challenges array.
 fn scale_and_batch_subrelations(
     evaluations: &[Fr; NUMBER_OF_SUBRELATIONS],
     subrelation_challenges: &[Fr; NUMBER_OF_ALPHAS],
