@@ -13,12 +13,12 @@ fi
 N=$1
 PADDING=$2
 
-if ! [[ "$N" =~ ^[0-9]+$ ]] || [ "$N" -le 0 ]; then
+if ! [[ "${N}" =~ ^[0-9]+$ ]] || [ "${N}" -le 0 ]; then
   echo "Error: number_of_public_inputs must be a positive integer"
   exit 1
 fi
 
-if ! [[ "$PADDING" =~ ^[0-9]+$ ]]; then
+if ! [[ "${PADDING}" =~ ^[0-9]+$ ]]; then
   echo "Error: padding must be a non-negative integer"
   exit 1
 fi
@@ -29,9 +29,9 @@ PROJECT_NAME="hello_test_${N}_pad_${PADDING}"
 # Clean existing project (if any)
 ########################################
 
-if [ -d "$PROJECT_NAME" ]; then
-  echo "Removing existing project directory: $PROJECT_NAME"
-  rm -rf "$PROJECT_NAME"
+if [ -d "${PROJECT_NAME}" ]; then
+  echo "Removing existing project directory: ${PROJECT_NAME}"
+  rm -rf "${PROJECT_NAME}"
 fi
 
 ########################################
@@ -42,10 +42,10 @@ fi
   noirup -v "${NOIR_VERSION}"
   bbup -v "${BB_VERSION}"
 
-  echo "Creating Noir project: $PROJECT_NAME"
-  nargo new "$PROJECT_NAME"
+  echo "Creating Noir project: ${PROJECT_NAME}"
+  nargo new "${PROJECT_NAME}"
 
-  cd "$PROJECT_NAME"
+  cd "${PROJECT_NAME}"
 
   echo "Running nargo check"
   nargo check
@@ -54,31 +54,31 @@ fi
   # Generate src/main.nr
   ########################################
 
-  echo "Generating src/main.nr with $N public input(s) and padding=$PADDING"
+  echo "Generating src/main.nr with ${N} public input(s) and padding=${PADDING}"
 
   # Function arguments
   ARGS="x: u64"
-  for i in $(seq 1 "$N"); do
-    ARGS+=", y$i: pub u64"
+  for i in $(seq 1 "${N}"); do
+    ARGS+=", y${i}: pub u64"
   done
 
   # Normal asserts
   ASSERTS=""
-  for i in $(seq 1 "$N"); do
-    ASSERTS+="    assert(x != y$i);\n"
+  for i in $(seq 1 "${N}"); do
+    ASSERTS+="    assert(x != y${i});\n"
   done
 
   # Test arguments
   TEST_ARGS="0"
-  for i in $(seq 1 "$N"); do
-    TEST_ARGS+=", $i"
+  for i in $(seq 1 "${N}"); do
+    TEST_ARGS+=", ${i}"
   done
 
   # Generate main.nr with loop for padding
   cat <<EOF > src/main.nr
-global PAD_FACTOR: u32 = $PADDING;
-fn main($ARGS) {
-$(printf "$ASSERTS")
+global PAD_FACTOR: u32 = ${PADDING};
+fn main(${ARGS}) {
+$(printf "${ASSERTS}")
 
     let mut val = x;
 
@@ -91,10 +91,10 @@ $(printf "$ASSERTS")
 
 #[test]
 fn test_main() {
-    main($TEST_ARGS);
+    main(${TEST_ARGS});
 
     // Uncomment to make test fail
-    // main(0$(for i in $(seq 1 "$N"); do printf ", 0"; done));
+    // main(0$(for i in $(seq 1 "${N}"); do printf ", 0"; done));
 }
 EOF
 
@@ -106,12 +106,12 @@ EOF
 
   {
     echo "x = \"0\""
-    for i in $(seq 1 "$N"); do
-      echo "y$i = \"$i\""
+    for i in $(seq 1 "${N}"); do
+      echo "y${i} = \"${i}\""
     done
   } > Prover.toml
 
-  echo "Project '$PROJECT_NAME' setup complete."
+  echo "Project '${PROJECT_NAME}' setup complete."
 
   ########################################
   # Execute and generate contracts
