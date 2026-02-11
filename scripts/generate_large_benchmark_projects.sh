@@ -125,7 +125,7 @@ EOF
   mkdir -p "${CONTRACTS_DIR}"
 
   for flavor in zk plain; do
-    case "$flavor" in
+    case "${flavor}" in
       zk)
         bb_target=evm
         verifier_prefix=ZKVerifier
@@ -139,14 +139,20 @@ EOF
     mkdir -p "${ARTIFACTS_DIR}/${flavor}"
 
     bb prove \
-      -t "$bb_target" \
+      -t "${bb_target}" \
       -b "./target/${PROJECT_NAME}.json" \
       -w "./target/${PROJECT_NAME}.gz" \
       -o ./target \
       --write_vk
+    
+    bb verify \
+      -p ./target/proof \
+      -k ./target/vk \
+      -i ./target/public_inputs \
+      -t "${bb_target}"
 
     bb write_solidity_verifier \
-      -t "$bb_target" \
+      -t "${bb_target}" \
       -k ./target/vk \
       -o "${CONTRACTS_DIR}/${verifier_prefix}_${N}_pad_${PADDING}.sol"
 
@@ -158,4 +164,4 @@ EOF
 
 echo
 echo "All done."
-echo "Project '$PROJECT_NAME' is ready."
+echo "Project '${PROJECT_NAME}' is ready."
