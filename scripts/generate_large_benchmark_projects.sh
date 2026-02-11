@@ -138,12 +138,16 @@ EOF
 
     mkdir -p "${ARTIFACTS_DIR}/${flavor}"
 
+    bb write_vk \
+      -t "$bb_target" \
+      -b "./target/${PROJECT_NAME}.json" \
+      -o ./target
+
     bb prove \
       -t "${bb_target}" \
       -b "./target/${PROJECT_NAME}.json" \
       -w "./target/${PROJECT_NAME}.gz" \
-      -o ./target \
-      --write_vk
+      -o ./target
     
     bb verify \
       -p ./target/proof \
