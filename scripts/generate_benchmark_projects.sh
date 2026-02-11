@@ -138,7 +138,7 @@ EOF
     mkdir -p "${ARTIFACTS_DIR}/${flavor}"
 
     bb write_vk \
-      -t "$bb_target" \
+      -t "${bb_target}" \
       -b "./target/${PROJECT_NAME}.json" \
       -o ./target
 
