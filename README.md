@@ -40,7 +40,7 @@ Please, ensure that you are using the latest version of Noir and follow the [off
 
 If you wish to generate a zero-knowledge proof, you will need to use `-t evm` to instruct `bb` of the fact. Alternatively, use `-t evm-no-zk` to specify that you would like `bb` to use the non zero-knowledge (plain) version of UltraHonk for proof generation. Please note that in both cases, Keccak256 is going to be used as the hash function. Finally, add the the `write_vk` subcommand to instruct `bb` to also generate the verification key for you.
 
-> **Worked Example:** Suppose that our Noir project name is `hello_world` and that we want to generate a ZK proof. Further, suppose that the bytecode file and witness file are found in the `target` directory. We would also like the generated artifacts from `bb` to be placed inside the `target` directory. Then, the command we want to issue is:
+> **Worked Example:** Suppose that our Noir project name is `hello_world` and that we want to generate a ZK proof. Further, suppose that the bytecode file and witness file are found in the `target` directory. We would also like the generated artifacts from `bb` to be placed inside the `target` directory. Then, the appropriate command to issue is:
 - `bb prove -t evm -b "./target/hello_world.json" -w "./target/hello_world.gz" -o ./target --write_vk`
 
 ## Convert `proof`, `vk`, and `pubs` into zkVerify-compatible format
