@@ -63,16 +63,25 @@ ZKV_PROOF_HEX_FILE_PATH="${OUTPUT_DIR_PATH}/zkv_proof.hex"
 ZKV_VK_HEX_FILE_PATH="${OUTPUT_DIR_PATH}/zkv_vk.hex"
 ZKV_PUBS_HEX_FILE_PATH="${OUTPUT_DIR_PATH}/zkv_pubs.hex"
 
-# Convert proof to hexadecimal format
-{
-  if [ -f "$PROOF_FILE_PATH" ]; then
-    PROOF_BYTES=$(xxd -p -c 256 "$PROOF_FILE_PATH" | tr -d '\n')
-    printf '`{\n    "%s:" "0x%s"\n}`\n' "$PROOF_TYPE" "$PROOF_BYTES" > "$ZKV_PROOF_HEX_FILE_PATH"
-    echo "✅ 'proof' hex file generated at ${ZKV_PROOF_HEX_FILE_PATH}."
-  else
-    echo "❌ Error: Proof file '$PROOF_FILE_PATH' not found. Skipping." >&2
-  fi
-}
+# Get bb version and format it (e.g., 3.0.3 -> V3_0)
+BB_VERSION_FULL=$(bb --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+# Extract major and minor, then join with underscore
+BB_VERSION_KEY=$(echo "$BB_VERSION_FULL" | awk -F. '{print "V" $1 "_" $2}')
+
+# Convert proof to valid JSON
+if [ -f "${PROOF_FILE_PATH}" ]; then
+    # Read bytes and remove newlines
+    PROOF_BYTES=$(xxd -p -c 1000000 "${PROOF_FILE_PATH}" | tr -d '\n')
+    
+    printf '{\n  "%s": {\n    "%s": "0x%s"\n  }\n}\n' \
+        "${BB_VERSION_KEY}" \
+        "${PROOF_TYPE}" \
+        "${PROOF_BYTES}" > "${ZKV_PROOF_HEX_FILE_PATH}"
+
+    echo "✅ Generated ${ZKV_PROOF_HEX_FILE_PATH} with version key ${BB_VERSION_KEY}"
+else
+    echo "❌ Error: Proof file not found." >&2
+fi
 
 # Convert vk to hexadecimal format
 {
