@@ -100,22 +100,49 @@ impl IntoBEBytes32 for u64 {
     }
 }
 
-pub(crate) fn read_u64_from_evm_word_by_splitting(data: &mut &[u8]) -> Result<u64, ()> {
-    let chunk = data.split_off(..EVM_WORD_SIZE).ok_or(())?;
-    let value = read_u256(chunk)?;
-    if value > U256::new([u64::MAX, 0, 0, 0]) {
+#[inline(always)]
+fn parse_u64_evm_word(chunk: &EVMWord) -> Result<u64, ()> {
+    let upper = u64::from_be_bytes(
+        chunk[0..8]
+            .try_into()
+            .expect("EVMWords have at least 8 bytes"),
+    ) | u64::from_be_bytes(
+        chunk[8..16]
+            .try_into()
+            .expect("EVMWords have at least 16 bytes"),
+    ) | u64::from_be_bytes(
+        chunk[16..24]
+            .try_into()
+            .expect("EVMWords have at least 24 bytes"),
+    );
+
+    if upper != 0 {
         return Err(());
     }
-    Ok(value.0[0])
+
+    Ok(u64::from_be_bytes(
+        chunk[24..32]
+            .try_into()
+            .expect("EVMWords always have 32 bytes"),
+    ))
 }
 
 pub(crate) fn read_u64_from_evm_word(data: &[u8]) -> Result<u64, ()> {
-    let chunk = data.get(..EVM_WORD_SIZE).ok_or(())?;
-    let value = read_u256(chunk)?;
-    if value > U256::new([u64::MAX, 0, 0, 0]) {
-        return Err(());
-    }
-    Ok(value.0[0])
+    let chunk: &EVMWord = data
+        .get(..EVM_WORD_SIZE)
+        .ok_or(())?
+        .try_into()
+        .expect("Conversion should succeed at this point");
+    parse_u64_evm_word(chunk)
+}
+
+pub(crate) fn read_u64_from_evm_word_by_splitting(data: &mut &[u8]) -> Result<u64, ()> {
+    let chunk: &EVMWord = data
+        .split_off(..EVM_WORD_SIZE)
+        .ok_or(())?
+        .try_into()
+        .expect("Conversion should succeed at this point");
+    parse_u64_evm_word(chunk)
 }
 
 pub(crate) fn read_u256(bytes: &[u8]) -> Result<U256, ()> {
