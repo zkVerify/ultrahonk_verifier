@@ -637,7 +637,10 @@ mod should {
 
     #[rstest]
     fn extract_log_circuit_size_from_valid_vk(valid_vk: [u8; VK_SIZE]) {
-        assert!(VerificationKey::<()>::extract_log_circuit_size(&valid_vk[..]).is_ok());
+        assert_eq!(
+            VerificationKey::<()>::extract_log_circuit_size(&valid_vk[..]),
+            Ok(0x0c)
+        );
     }
 
     mod reject {

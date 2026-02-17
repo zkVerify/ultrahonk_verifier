@@ -92,9 +92,6 @@ $(printf "${ASSERTS}")
 #[test]
 fn test_main() {
     main(${TEST_ARGS});
-
-    // Uncomment to make test fail
-    // main(0$(for i in $(seq 1 "${N}"); do printf ", 0"; done));
 }
 EOF
 
