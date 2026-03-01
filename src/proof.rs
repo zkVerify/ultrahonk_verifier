@@ -70,6 +70,8 @@ impl ProofType {
     ///
     /// Since the proof length is a linear function of `log_n` for both ZK and Plain
     /// proofs, this computes the inverse to recover `log_n`.
+    /// It is important to note that this does not guarantee that the derived `log_n`
+    /// value matches the actual value of `log_n` in the vk.
     pub fn log_n(&self) -> Result<u64, ProofError> {
         let byte_len = match self {
             ProofType::ZK(b) | ProofType::Plain(b) => b.len(),
