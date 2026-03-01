@@ -123,22 +123,6 @@ pub enum ProofType {
     ZK(Box<[u8]>),
 }
 
-impl ProofType {
-    /// Derives `log_n` from the proof byte length.
-    ///
-    /// Since the proof length is a linear function of `log_n` for both ZK and Plain
-    /// proofs, this computes the inverse to recover `log_n`.
-    /// It is important to note that this does not guarantee that the derived `log_n`
-    /// value matches the actual value of `log_n` in the vk.
-    pub fn log_n(&self) -> Result<u64, ProofError> {
-        let (variant, byte_len) = match self {
-            ProofType::ZK(b) => (ProofVariant::ZK, b.len()),
-            ProofType::Plain(b) => (ProofVariant::Plain, b.len()),
-        };
-        variant.log_n_from_byte_len(byte_len)
-    }
-}
-
 // Trait defining shared constants with differing values per type.
 pub(crate) trait ProofSpec {
     const SHIFTED_COMMITMENTS_START: usize;
@@ -2279,33 +2263,6 @@ mod log_n_derivation {
             }
         }
 
-        #[rstest]
-        fn derive_log_n_for_a_valid_zk_proof_type() {
-            for log_n in 1..=CONST_PROOF_SIZE_LOG_N as u64 {
-                let byte_len = ZKProof::<()>::calculate_proof_byte_len(log_n);
-                let proof = ProofType::ZK(vec![0u8; byte_len].into_boxed_slice());
-                let derived = proof.log_n();
-                assert_eq!(
-                    derived,
-                    Ok(log_n),
-                    "ProofType::ZK log_n failed for log_n={log_n}"
-                );
-            }
-        }
-
-        #[rstest]
-        fn derive_log_n_for_a_valid_plain_proof_type() {
-            for log_n in 1..=CONST_PROOF_SIZE_LOG_N as u64 {
-                let byte_len = PlainProof::<()>::calculate_proof_byte_len(log_n);
-                let proof = ProofType::Plain(vec![0u8; byte_len].into_boxed_slice());
-                let derived = proof.log_n().unwrap();
-                assert_eq!(
-                    derived, log_n,
-                    "ProofType::Plain log_n failed for log_n={log_n}"
-                );
-            }
-        }
-
         mod reject {
             use super::*;
 
@@ -2338,14 +2295,11 @@ mod log_n_derivation {
             }
 
             #[rstest]
-            fn a_prooftype_with_non_aligned_byte_length() {
+            fn a_proof_variant_with_non_aligned_byte_length() {
                 const LOG_N: u64 = 25;
-                // A byte length that falls between two valid log_n values
                 let invalid_length = ZKProof::<()>::calculate_proof_byte_len(LOG_N) + 1;
-                // ProofType with non-aligned byte length
-                let proof = ProofType::ZK(vec![0u8; invalid_length].into_boxed_slice());
                 assert_eq!(
-                    proof.log_n(),
+                    ProofVariant::ZK.log_n_from_byte_len(invalid_length),
                     Err(ProofError::OtherError {
                         message: format!(
                             "Proof byte length {invalid_length} is not a multiple of EVM word size"
@@ -2355,11 +2309,9 @@ mod log_n_derivation {
             }
 
             #[rstest]
-            fn a_prooftype_containing_an_empty_proof() {
-                // ProofType containing an empty proof
-                let proof = ProofType::ZK(vec![].into_boxed_slice());
+            fn a_proof_variant_with_empty_byte_length() {
                 assert_eq!(
-                    proof.log_n(),
+                    ProofVariant::ZK.log_n_from_byte_len(0),
                     Err(ProofError::OtherError {
                         message: format!("Cannot derive log_n from proof word length 0"),
                     })
