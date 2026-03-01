@@ -66,7 +66,7 @@ ZKV_PUBS_HEX_FILE_PATH="${OUTPUT_DIR_PATH}/zkv_pubs.hex"
 # Get bb version and format it (e.g., 3.0.3 -> V3_0)
 BB_VERSION_FULL=$(bb --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
 # Extract major and minor, then join with underscore
-BB_VERSION_KEY=$(echo "$BB_VERSION_FULL" | awk -F. '{print "V" $1 "_" $2}')
+BB_VERSION_KEY=$(echo "${BB_VERSION_FULL}" | awk -F. '{print "V" $1 "_" $2}')
 
 # Convert proof to valid JSON
 if [ -f "${PROOF_FILE_PATH}" ]; then
@@ -85,21 +85,21 @@ fi
 
 # Convert vk to hexadecimal format
 {
-  if [ -f "$VK_FILE_PATH" ]; then
-    printf "\"0x%s\"\n" "$(xxd -p -c 0 "$VK_FILE_PATH")" > "$ZKV_VK_HEX_FILE_PATH"
+  if [ -f "${VK_FILE_PATH}" ]; then
+    printf "\"0x%s\"\n" "$(xxd -p -c 0 "${VK_FILE_PATH}")" > "${ZKV_VK_HEX_FILE_PATH}"
     echo "✅ 'vk' hex file generated at ${ZKV_VK_HEX_FILE_PATH}."
   else
-    echo "❌ Error: Verification key file '$VK_FILE_PATH' not found. Skipping." >&2
+    echo "❌ Error: Verification key file '${VK_FILE_PATH}' not found. Skipping." >&2
   fi
 }
 
 # Convert public inputs to hexadecimal format
 {
-  if [ -f "$PUBS_FILE_PATH" ]; then
-    xxd -p -c 32 "$PUBS_FILE_PATH" | sed 's/.*/"0x&"/' | paste -sd, - | sed 's/.*/[&]/' > "$ZKV_PUBS_HEX_FILE_PATH"
+  if [ -f "${PUBS_FILE_PATH}" ]; then
+    xxd -p -c 32 "${PUBS_FILE_PATH}" | sed 's/.*/"0x&"/' | paste -sd, - | sed 's/.*/[&]/' > "${ZKV_PUBS_HEX_FILE_PATH}"
     echo "✅ 'pubs' hex file generated at ${ZKV_PUBS_HEX_FILE_PATH}."
   else
-    echo "❌ Error: Public inputs file '$PUBS_FILE_PATH' not found. Skipping." >&2
+    echo "❌ Error: Public inputs file '${PUBS_FILE_PATH}' not found. Skipping." >&2
   fi
 }
 ```
