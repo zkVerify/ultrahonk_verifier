@@ -90,7 +90,6 @@ impl ProofType {
         let (slope, word_len_at_1) = match self {
             ProofType::ZK(_) => {
                 let slope = proof_word_len_slope(ZK_BATCHED_RELATION_PARTIAL_LENGTH);
-                // ZKProof::calculate_proof_word_len(1), expanded inline:
                 let at_1 = NUMBER_OF_WITNESS_ENTITIES_ZK * NUM_ELEMENTS_COMM
                     + NUM_ELEMENTS_COMM * 3 // Libra concat, grand sum, quotient comms + Gemini masking
                     + ZK_BATCHED_RELATION_PARTIAL_LENGTH * NUM_ELEMENTS_FR // sumcheck univariates (log_n=1)
@@ -104,7 +103,6 @@ impl ProofType {
             }
             ProofType::Plain(_) => {
                 let slope = proof_word_len_slope(BATCHED_RELATION_PARTIAL_LENGTH);
-                // PlainProof::calculate_proof_word_len(1), expanded inline:
                 let at_1 = NUMBER_OF_WITNESS_ENTITIES * NUM_ELEMENTS_COMM
                     + BATCHED_RELATION_PARTIAL_LENGTH * NUM_ELEMENTS_FR // sumcheck univariates (log_n=1)
                     + NUMBER_OF_ENTITIES * NUM_ELEMENTS_FR // sumcheck evaluations
