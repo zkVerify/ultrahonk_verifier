@@ -58,7 +58,7 @@ use constants::{SUBGROUP_GENERATOR, SUBGROUP_GENERATOR_INVERSE};
 use errors::VerifyError;
 
 pub use constants::{PUB_SIZE, VK_SIZE};
-pub use proof::ProofType;
+pub use proof::{ProofType, ProofVariant};
 pub use types::*;
 
 /// A single public input.

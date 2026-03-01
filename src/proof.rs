@@ -59,6 +59,64 @@ pub enum ProofError {
     OtherError { message: String },
 }
 
+/// Proof-type discriminant without the associated proof bytes.
+///
+/// Used to derive `log_n` from a proof byte length when the proof bytes
+/// themselves are not needed.
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum ProofVariant {
+    Plain,
+    ZK,
+}
+
+impl ProofVariant {
+    /// Derives `log_n` from the proof byte length.
+    ///
+    /// Since the proof length is a linear function of `log_n` for both ZK and Plain
+    /// proofs, this computes the inverse to recover `log_n`.
+    /// It is important to note that this does not guarantee that the derived `log_n`
+    /// value matches the actual value of `log_n` in the vk.
+    pub fn log_n_from_byte_len(&self, byte_len: usize) -> Result<u64, ProofError> {
+        if byte_len & (EVM_WORD_SIZE - 1) != 0 {
+            return Err(ProofError::OtherError {
+                message: format!("Proof byte length {byte_len} is not a multiple of EVM word size"),
+            });
+        }
+
+        let word_len = byte_len / EVM_WORD_SIZE;
+
+        // Compute slope and word_len_at_1 for each variant using the same constants
+        // as the corresponding calculate_proof_word_len functions.
+        let (slope, word_len_at_1) = match self {
+            ProofVariant::ZK => {
+                let slope = proof_word_len_slope(ZK_BATCHED_RELATION_PARTIAL_LENGTH);
+                let at_1 = NUMBER_OF_WITNESS_ENTITIES_ZK * NUM_ELEMENTS_COMM
+                    + NUM_ELEMENTS_COMM * 3 // Libra concat, grand sum, quotient comms + Gemini masking
+                    + ZK_BATCHED_RELATION_PARTIAL_LENGTH * NUM_ELEMENTS_FR // sumcheck univariates (log_n=1)
+                    + NUMBER_OF_ENTITIES_ZK * NUM_ELEMENTS_FR // sumcheck evaluations
+                    + NUM_ELEMENTS_FR * 2 // Libra sum, claimed eval
+                    + NUM_ELEMENTS_FR // Gemini a evaluations (log_n=1)
+                    + NUM_LIBRA_EVALUATIONS * NUM_ELEMENTS_FR // libra evaluations
+                    + NUM_ELEMENTS_COMM * 2 // Shplonk Q and KZG W
+                    + PAIRING_POINTS_SIZE;
+                (slope, at_1)
+            }
+            ProofVariant::Plain => {
+                let slope = proof_word_len_slope(BATCHED_RELATION_PARTIAL_LENGTH);
+                let at_1 = NUMBER_OF_WITNESS_ENTITIES * NUM_ELEMENTS_COMM
+                    + BATCHED_RELATION_PARTIAL_LENGTH * NUM_ELEMENTS_FR // sumcheck univariates (log_n=1)
+                    + NUMBER_OF_ENTITIES * NUM_ELEMENTS_FR // sumcheck evaluations
+                    + NUM_ELEMENTS_FR // Gemini evaluations (log_n=1)
+                    + NUM_ELEMENTS_COMM * 2 // Shplonk Q and KZG W
+                    + PAIRING_POINTS_SIZE;
+                (slope, at_1)
+            }
+        };
+
+        derive_log_n(word_len, slope, word_len_at_1)
+    }
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub enum ProofType {
     Plain(Box<[u8]>),
@@ -73,47 +131,11 @@ impl ProofType {
     /// It is important to note that this does not guarantee that the derived `log_n`
     /// value matches the actual value of `log_n` in the vk.
     pub fn log_n(&self) -> Result<u64, ProofError> {
-        let byte_len = match self {
-            ProofType::ZK(b) | ProofType::Plain(b) => b.len(),
+        let (variant, byte_len) = match self {
+            ProofType::ZK(b) => (ProofVariant::ZK, b.len()),
+            ProofType::Plain(b) => (ProofVariant::Plain, b.len()),
         };
-
-        if byte_len & (EVM_WORD_SIZE - 1) != 0 {
-            return Err(ProofError::OtherError {
-                message: format!("Proof byte length {byte_len} is not a multiple of EVM word size"),
-            });
-        }
-
-        let word_len = byte_len / EVM_WORD_SIZE;
-
-        // Compute slope and word_len_at_1 for each variant using the same constants
-        // as the corresponding calculate_proof_word_len functions.
-        let (slope, word_len_at_1) = match self {
-            ProofType::ZK(_) => {
-                let slope = proof_word_len_slope(ZK_BATCHED_RELATION_PARTIAL_LENGTH);
-                let at_1 = NUMBER_OF_WITNESS_ENTITIES_ZK * NUM_ELEMENTS_COMM
-                    + NUM_ELEMENTS_COMM * 3 // Libra concat, grand sum, quotient comms + Gemini masking
-                    + ZK_BATCHED_RELATION_PARTIAL_LENGTH * NUM_ELEMENTS_FR // sumcheck univariates (log_n=1)
-                    + NUMBER_OF_ENTITIES_ZK * NUM_ELEMENTS_FR // sumcheck evaluations
-                    + NUM_ELEMENTS_FR * 2 // Libra sum, claimed eval
-                    + NUM_ELEMENTS_FR // Gemini a evaluations (log_n=1)
-                    + NUM_LIBRA_EVALUATIONS * NUM_ELEMENTS_FR // libra evaluations
-                    + NUM_ELEMENTS_COMM * 2 // Shplonk Q and KZG W
-                    + PAIRING_POINTS_SIZE;
-                (slope, at_1)
-            }
-            ProofType::Plain(_) => {
-                let slope = proof_word_len_slope(BATCHED_RELATION_PARTIAL_LENGTH);
-                let at_1 = NUMBER_OF_WITNESS_ENTITIES * NUM_ELEMENTS_COMM
-                    + BATCHED_RELATION_PARTIAL_LENGTH * NUM_ELEMENTS_FR // sumcheck univariates (log_n=1)
-                    + NUMBER_OF_ENTITIES * NUM_ELEMENTS_FR // sumcheck evaluations
-                    + NUM_ELEMENTS_FR // Gemini evaluations (log_n=1)
-                    + NUM_ELEMENTS_COMM * 2 // Shplonk Q and KZG W
-                    + PAIRING_POINTS_SIZE;
-                (slope, at_1)
-            }
-        };
-
-        derive_log_n(word_len, slope, word_len_at_1)
+        variant.log_n_from_byte_len(byte_len)
     }
 }
 
@@ -2227,6 +2249,32 @@ mod log_n_derivation {
                     derived,
                     Ok(log_n),
                     "Plain byte-len roundtrip failed for log_n={log_n}"
+                );
+            }
+        }
+
+        #[rstest]
+        fn derive_log_n_for_a_valid_zk_proof_variant() {
+            for log_n in 1..=CONST_PROOF_SIZE_LOG_N as u64 {
+                let byte_len = ZKProof::<()>::calculate_proof_byte_len(log_n);
+                let derived = ProofVariant::ZK.log_n_from_byte_len(byte_len);
+                assert_eq!(
+                    derived,
+                    Ok(log_n),
+                    "ProofVariant::ZK log_n_from_byte_len failed for log_n={log_n}"
+                );
+            }
+        }
+
+        #[rstest]
+        fn derive_log_n_for_a_valid_plain_proof_variant() {
+            for log_n in 1..=CONST_PROOF_SIZE_LOG_N as u64 {
+                let byte_len = PlainProof::<()>::calculate_proof_byte_len(log_n);
+                let derived = ProofVariant::Plain.log_n_from_byte_len(byte_len);
+                assert_eq!(
+                    derived,
+                    Ok(log_n),
+                    "ProofVariant::Plain log_n_from_byte_len failed for log_n={log_n}"
                 );
             }
         }
