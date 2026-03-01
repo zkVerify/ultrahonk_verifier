@@ -61,8 +61,8 @@ pub enum ProofError {
 
 /// Proof-type discriminant without the associated proof bytes.
 ///
-/// Used to derive `log_n` from a proof byte length when the proof bytes
-/// themselves are not needed.
+/// Used to derive `log_n` from a proof byte length when the actual
+/// proof bytes themselves are not needed.
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum ProofVariant {
     Plain,
