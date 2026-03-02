@@ -184,7 +184,7 @@ fn derive_log_n(
 ) -> Result<u64, ProofError> {
     let offset = word_len_at_1 - slope;
 
-    if proof_word_len <= offset || (proof_word_len - offset) % slope != 0 {
+    if proof_word_len <= offset || !(proof_word_len - offset).is_multiple_of(slope) {
         return Err(ProofError::OtherError {
             message: format!("Cannot derive log_n from proof word length {proof_word_len}"),
         });
