@@ -2132,12 +2132,11 @@ mod should {
 #[cfg(test)]
 mod log_n_derivation {
     use super::*;
-    use rstest::rstest;
 
     mod should {
         use super::*;
 
-        #[rstest]
+        #[test]
         fn derive_log_n_for_a_valid_zk_proof_variant() {
             for log_n in 1..=CONST_PROOF_SIZE_LOG_N as u64 {
                 let byte_len = ZKProof::<()>::calculate_proof_byte_len(log_n);
@@ -2150,7 +2149,7 @@ mod log_n_derivation {
             }
         }
 
-        #[rstest]
+        #[test]
         fn derive_log_n_for_a_valid_plain_proof_variant() {
             for log_n in 1..=CONST_PROOF_SIZE_LOG_N as u64 {
                 let byte_len = PlainProof::<()>::calculate_proof_byte_len(log_n);
@@ -2166,7 +2165,7 @@ mod log_n_derivation {
         mod reject {
             use super::*;
 
-            #[rstest]
+            #[test]
             fn a_proof_variant_with_non_aligned_byte_length() {
                 const LOG_N: u64 = 25;
                 let invalid_length = ZKProof::<()>::calculate_proof_byte_len(LOG_N) + 1;
@@ -2180,7 +2179,7 @@ mod log_n_derivation {
                 );
             }
 
-            #[rstest]
+            #[test]
             fn a_proof_variant_with_empty_byte_length() {
                 assert_eq!(
                     ProofVariant::ZK.log_n_from_byte_len(0),
