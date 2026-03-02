@@ -195,7 +195,7 @@ fn derive_log_n(
 
 /// Computes the per-`log_n` slope in the proof word-length formula.
 ///
-/// Both `ZKProof` and `PlainProof` share the same slope structure:
+/// Both `ZK` and `Plain` share the same slope structure:
 ///   `BATCHED_RELATION_PARTIAL_LENGTH * NUM_ELEMENTS_FR` (sumcheck univariates)
 ///   + `NUM_ELEMENTS_FR` (Gemini evaluations)
 ///   + `NUM_ELEMENTS_COMM` (Gemini fold commitments)
@@ -412,30 +412,6 @@ impl<H: CurveHooks> ZKProof<H> {
     // Calculate proof length in bytes based on log_n.
     pub(crate) fn calculate_proof_byte_len(log_n: u64) -> usize {
         Self::calculate_proof_word_len(log_n) * EVM_WORD_SIZE
-    }
-
-    /// Derives `log_n` from a proof length in EVM words.
-    ///
-    /// This is the inverse of [`Self::calculate_proof_word_len`]. Returns an error
-    /// if the given word length does not correspond to a valid `log_n` value.
-    pub fn log_n_from_proof_word_len(proof_word_len: usize) -> Result<u64, ProofError> {
-        let slope = proof_word_len_slope(<Self as ProofSpec>::BATCHED_RELATION_PARTIAL_LENGTH);
-        derive_log_n(proof_word_len, slope, Self::calculate_proof_word_len(1))
-    }
-
-    /// Derives `log_n` from a proof length in bytes.
-    ///
-    /// This is the inverse of [`Self::calculate_proof_byte_len`]. Returns an error
-    /// if the given byte length does not correspond to a valid `log_n` value.
-    pub fn log_n_from_proof_byte_len(proof_byte_len: usize) -> Result<u64, ProofError> {
-        if proof_byte_len & (EVM_WORD_SIZE - 1) != 0 {
-            return Err(ProofError::OtherError {
-                message: format!(
-                    "Proof byte length {proof_byte_len} is not a multiple of EVM word size"
-                ),
-            });
-        }
-        Self::log_n_from_proof_word_len(proof_byte_len / EVM_WORD_SIZE)
     }
 
     // Constructs a `ZKProof` from a byte slice and a required log_n parameter.
@@ -770,30 +746,6 @@ impl<H: CurveHooks> PlainProof<H> {
     // Calculate proof length in bytes based on log_n.
     pub(crate) fn calculate_proof_byte_len(log_n: u64) -> usize {
         Self::calculate_proof_word_len(log_n) * EVM_WORD_SIZE
-    }
-
-    /// Derives `log_n` from a proof length in EVM words.
-    ///
-    /// This is the inverse of [`Self::calculate_proof_word_len`]. Returns an error
-    /// if the given word length does not correspond to a valid `log_n` value.
-    pub fn log_n_from_proof_word_len(proof_word_len: usize) -> Result<u64, ProofError> {
-        let slope = proof_word_len_slope(<Self as ProofSpec>::BATCHED_RELATION_PARTIAL_LENGTH);
-        derive_log_n(proof_word_len, slope, Self::calculate_proof_word_len(1))
-    }
-
-    /// Derives `log_n` from a proof length in bytes.
-    ///
-    /// This is the inverse of [`Self::calculate_proof_byte_len`]. Returns an error
-    /// if the given byte length does not correspond to a valid `log_n` value.
-    pub fn log_n_from_proof_byte_len(proof_byte_len: usize) -> Result<u64, ProofError> {
-        if proof_byte_len & (EVM_WORD_SIZE - 1) != 0 {
-            return Err(ProofError::OtherError {
-                message: alloc::format!(
-                    "Proof byte length {proof_byte_len} is not a multiple of EVM word size"
-                ),
-            });
-        }
-        Self::log_n_from_proof_word_len(proof_byte_len / EVM_WORD_SIZE)
     }
 
     // Constructs a `PlainProof` from a byte slice and a required log_n parameter.
@@ -2186,58 +2138,6 @@ mod log_n_derivation {
         use super::*;
 
         #[rstest]
-        fn derive_log_n_for_zk_proofs_of_valid_word_length() {
-            for log_n in 1..=CONST_PROOF_SIZE_LOG_N as u64 {
-                let word_len = ZKProof::<()>::calculate_proof_word_len(log_n);
-                let derived = ZKProof::<()>::log_n_from_proof_word_len(word_len);
-                assert_eq!(
-                    derived,
-                    Ok(log_n),
-                    "ZK word-len roundtrip failed for log_n={log_n}"
-                );
-            }
-        }
-
-        #[rstest]
-        fn derive_log_n_for_plain_proofs_of_valid_word_length() {
-            for log_n in 1..=CONST_PROOF_SIZE_LOG_N as u64 {
-                let word_len = PlainProof::<()>::calculate_proof_word_len(log_n);
-                let derived = PlainProof::<()>::log_n_from_proof_word_len(word_len);
-                assert_eq!(
-                    derived,
-                    Ok(log_n),
-                    "Plain word-len roundtrip failed for log_n={log_n}"
-                );
-            }
-        }
-
-        #[rstest]
-        fn derive_log_n_for_zk_proofs_of_valid_byte_length() {
-            for log_n in 1..=CONST_PROOF_SIZE_LOG_N as u64 {
-                let byte_len = ZKProof::<()>::calculate_proof_byte_len(log_n);
-                let derived = ZKProof::<()>::log_n_from_proof_byte_len(byte_len);
-                assert_eq!(
-                    derived,
-                    Ok(log_n),
-                    "ZK byte-len roundtrip failed for log_n={log_n}"
-                );
-            }
-        }
-
-        #[rstest]
-        fn derive_log_n_for_plain_proofs_of_valid_byte_length() {
-            for log_n in 1..=CONST_PROOF_SIZE_LOG_N as u64 {
-                let byte_len = PlainProof::<()>::calculate_proof_byte_len(log_n);
-                let derived = PlainProof::<()>::log_n_from_proof_byte_len(byte_len);
-                assert_eq!(
-                    derived,
-                    Ok(log_n),
-                    "Plain byte-len roundtrip failed for log_n={log_n}"
-                );
-            }
-        }
-
-        #[rstest]
         fn derive_log_n_for_a_valid_zk_proof_variant() {
             for log_n in 1..=CONST_PROOF_SIZE_LOG_N as u64 {
                 let byte_len = ZKProof::<()>::calculate_proof_byte_len(log_n);
@@ -2265,34 +2165,6 @@ mod log_n_derivation {
 
         mod reject {
             use super::*;
-
-            #[rstest]
-            fn a_zk_proof_with_non_aligned_byte_length() {
-                const LOG_N: u64 = 25;
-                let invalid_length = ZKProof::<()>::calculate_proof_byte_len(LOG_N) + 1;
-                assert_eq!(
-                    ZKProof::<()>::log_n_from_proof_byte_len(invalid_length),
-                    Err(ProofError::OtherError {
-                        message: format!(
-                            "Proof byte length {invalid_length} is not a multiple of EVM word size"
-                        )
-                    })
-                );
-            }
-
-            #[rstest]
-            fn a_plain_proof_with_non_aligned_byte_length() {
-                const LOG_N: u64 = 25;
-                let invalid_length = PlainProof::<()>::calculate_proof_byte_len(LOG_N) + 1;
-                assert_eq!(
-                    PlainProof::<()>::log_n_from_proof_byte_len(invalid_length),
-                    Err(ProofError::OtherError {
-                        message: format!(
-                            "Proof byte length {invalid_length} is not a multiple of EVM word size"
-                        )
-                    })
-                );
-            }
 
             #[rstest]
             fn a_proof_variant_with_non_aligned_byte_length() {
