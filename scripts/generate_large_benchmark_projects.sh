@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 
-NOIR_VERSION="1.0.0-beta.17"
-BB_VERSION="3.0.3"
+# bb must be the v5.0.0 *release* (or later): every 5.0.0 nightly still ships the pre-fix
+# SmallSubgroupIPA. Set NARGO / BB to use specific binaries instead of noirup / bbup.
+NOIR_VERSION="1.0.0-beta.22"
+BB_VERSION="5.0.0"
 
 set -e
 
@@ -39,8 +41,10 @@ fi
 ########################################
 
 (
-  noirup -v "${NOIR_VERSION}"
-  bbup -v "${BB_VERSION}"
+  if [ -z "${NARGO:-}" ]; then noirup -v "${NOIR_VERSION}"; fi
+  if [ -z "${BB:-}" ]; then bbup -v "${BB_VERSION}"; fi
+  nargo() { if [ -n "${NARGO:-}" ]; then "${NARGO}" "$@"; else command nargo "$@"; fi; }
+  bb() { if [ -n "${BB:-}" ]; then "${BB}" "$@"; else command bb "$@"; fi; }
 
   echo "Creating Noir project: ${PROJECT_NAME}"
   nargo new "${PROJECT_NAME}"
