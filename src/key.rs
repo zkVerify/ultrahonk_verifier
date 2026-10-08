@@ -146,6 +146,42 @@ impl VkCommitmentField {
     }
 }
 
+/// Number of commitments in a verification key.
+pub(crate) const NUM_VK_COMMITMENTS: usize = 28;
+
+/// The order in which bb v5.0.0 serializes (and hashes) the verification key commitments: its
+/// `PrecomputedEntities` layout (`flavor/generated/ultra_flavor_generated.hpp`).
+const VK_COMMITMENT_ORDER: [VkCommitmentField; NUM_VK_COMMITMENTS] = [
+    VkCommitmentField::S_1,
+    VkCommitmentField::S_2,
+    VkCommitmentField::S_3,
+    VkCommitmentField::S_4,
+    VkCommitmentField::ID_1,
+    VkCommitmentField::ID_2,
+    VkCommitmentField::ID_3,
+    VkCommitmentField::ID_4,
+    VkCommitmentField::Lagrange_First,
+    VkCommitmentField::Lagrange_Last,
+    VkCommitmentField::Q_LOOKUP,
+    VkCommitmentField::T_1,
+    VkCommitmentField::T_2,
+    VkCommitmentField::T_3,
+    VkCommitmentField::T_4,
+    VkCommitmentField::Q_M,
+    VkCommitmentField::Q_R,
+    VkCommitmentField::Q_O,
+    VkCommitmentField::Q_C,
+    VkCommitmentField::Q_L,
+    VkCommitmentField::Q_4,
+    VkCommitmentField::Q_ARITH,
+    VkCommitmentField::Q_DELTARANGE,
+    VkCommitmentField::Q_ELLIPTIC,
+    VkCommitmentField::Q_MEMORY,
+    VkCommitmentField::Q_NNF,
+    VkCommitmentField::Q_POSEIDON2EXTERNAL,
+    VkCommitmentField::Q_POSEIDON2INTERNAL,
+];
+
 #[derive(PartialEq, Eq, Debug)]
 pub struct VerificationKey<H: CurveHooks> {
     // Misc Params
@@ -228,230 +264,20 @@ impl<H: CurveHooks> TryFrom<&[u8]> for VerificationKey<H> {
             _ => Err(VerificationKeyError::ParsingError)?,
         };
 
-        let q_m = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
-            VerificationKeyError::GroupConversionError {
-                conv_error: ConversionError {
-                    group: e,
-                    field: Some(VkCommitmentField::Q_M.into()),
-                },
-            }
-        })?;
-        let q_c = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
-            VerificationKeyError::GroupConversionError {
-                conv_error: ConversionError {
-                    group: e,
-                    field: Some(VkCommitmentField::Q_C.into()),
-                },
-            }
-        })?;
-        let q_l = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
-            VerificationKeyError::GroupConversionError {
-                conv_error: ConversionError {
-                    group: e,
-                    field: Some(VkCommitmentField::Q_L.into()),
-                },
-            }
-        })?;
-        let q_r = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
-            VerificationKeyError::GroupConversionError {
-                conv_error: ConversionError {
-                    group: e,
-                    field: Some(VkCommitmentField::Q_R.into()),
-                },
-            }
-        })?;
-        let q_o = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
-            VerificationKeyError::GroupConversionError {
-                conv_error: ConversionError {
-                    group: e,
-                    field: Some(VkCommitmentField::Q_O.into()),
-                },
-            }
-        })?;
-        let q_4 = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
-            VerificationKeyError::GroupConversionError {
-                conv_error: ConversionError {
-                    group: e,
-                    field: Some(VkCommitmentField::Q_4.into()),
-                },
-            }
-        })?;
-        let q_lookup = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
-            VerificationKeyError::GroupConversionError {
-                conv_error: ConversionError {
-                    group: e,
-                    field: Some(VkCommitmentField::Q_LOOKUP.into()),
-                },
-            }
-        })?;
-        let q_arith = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
-            VerificationKeyError::GroupConversionError {
-                conv_error: ConversionError {
-                    group: e,
-                    field: Some(VkCommitmentField::Q_ARITH.into()),
-                },
-            }
-        })?;
-        let q_deltarange = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
-            VerificationKeyError::GroupConversionError {
-                conv_error: ConversionError {
-                    group: e,
-                    field: Some(VkCommitmentField::Q_DELTARANGE.into()),
-                },
-            }
-        })?;
-        let q_elliptic = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
-            VerificationKeyError::GroupConversionError {
-                conv_error: ConversionError {
-                    group: e,
-                    field: Some(VkCommitmentField::Q_ELLIPTIC.into()),
-                },
-            }
-        })?;
-        let q_memory = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
-            VerificationKeyError::GroupConversionError {
-                conv_error: ConversionError {
-                    group: e,
-                    field: Some(VkCommitmentField::Q_MEMORY.into()),
-                },
-            }
-        })?;
-        let q_nnf = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
-            VerificationKeyError::GroupConversionError {
-                conv_error: ConversionError {
-                    group: e,
-                    field: Some(VkCommitmentField::Q_NNF.into()),
-                },
-            }
-        })?;
-        let q_poseidon2external = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
-            VerificationKeyError::GroupConversionError {
-                conv_error: ConversionError {
-                    group: e,
-                    field: Some(VkCommitmentField::Q_POSEIDON2EXTERNAL.into()),
-                },
-            }
-        })?;
-        let q_poseidon2internal = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
-            VerificationKeyError::GroupConversionError {
-                conv_error: ConversionError {
-                    group: e,
-                    field: Some(VkCommitmentField::Q_POSEIDON2INTERNAL.into()),
-                },
-            }
-        })?;
-        let s_1 = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
-            VerificationKeyError::GroupConversionError {
-                conv_error: ConversionError {
-                    group: e,
-                    field: Some(VkCommitmentField::S_1.into()),
-                },
-            }
-        })?;
-        let s_2 = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
-            VerificationKeyError::GroupConversionError {
-                conv_error: ConversionError {
-                    group: e,
-                    field: Some(VkCommitmentField::S_2.into()),
-                },
-            }
-        })?;
-        let s_3 = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
-            VerificationKeyError::GroupConversionError {
-                conv_error: ConversionError {
-                    group: e,
-                    field: Some(VkCommitmentField::S_3.into()),
-                },
-            }
-        })?;
-        let s_4 = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
-            VerificationKeyError::GroupConversionError {
-                conv_error: ConversionError {
-                    group: e,
-                    field: Some(VkCommitmentField::S_4.into()),
-                },
-            }
-        })?;
-        let id_1 = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
-            VerificationKeyError::GroupConversionError {
-                conv_error: ConversionError {
-                    group: e,
-                    field: Some(VkCommitmentField::ID_1.into()),
-                },
-            }
-        })?;
-        let id_2 = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
-            VerificationKeyError::GroupConversionError {
-                conv_error: ConversionError {
-                    group: e,
-                    field: Some(VkCommitmentField::ID_2.into()),
-                },
-            }
-        })?;
-        let id_3 = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
-            VerificationKeyError::GroupConversionError {
-                conv_error: ConversionError {
-                    group: e,
-                    field: Some(VkCommitmentField::ID_3.into()),
-                },
-            }
-        })?;
-        let id_4 = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
-            VerificationKeyError::GroupConversionError {
-                conv_error: ConversionError {
-                    group: e,
-                    field: Some(VkCommitmentField::ID_4.into()),
-                },
-            }
-        })?;
-        let t_1 = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
-            VerificationKeyError::GroupConversionError {
-                conv_error: ConversionError {
-                    group: e,
-                    field: Some(VkCommitmentField::T_1.into()),
-                },
-            }
-        })?;
-        let t_2 = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
-            VerificationKeyError::GroupConversionError {
-                conv_error: ConversionError {
-                    group: e,
-                    field: Some(VkCommitmentField::T_2.into()),
-                },
-            }
-        })?;
-        let t_3 = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
-            VerificationKeyError::GroupConversionError {
-                conv_error: ConversionError {
-                    group: e,
-                    field: Some(VkCommitmentField::T_3.into()),
-                },
-            }
-        })?;
-        let t_4 = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
-            VerificationKeyError::GroupConversionError {
-                conv_error: ConversionError {
-                    group: e,
-                    field: Some(VkCommitmentField::T_4.into()),
-                },
-            }
-        })?;
-        let lagrange_first = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
-            VerificationKeyError::GroupConversionError {
-                conv_error: ConversionError {
-                    group: e,
-                    field: Some(VkCommitmentField::Lagrange_First.into()),
-                },
-            }
-        })?;
-        let lagrange_last = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
-            VerificationKeyError::GroupConversionError {
-                conv_error: ConversionError {
-                    group: e,
-                    field: Some(VkCommitmentField::Lagrange_Last.into()),
-                },
-            }
-        })?;
+        let mut commitments = [G1::<H>::default(); NUM_VK_COMMITMENTS];
+        for (commitment, field) in commitments.iter_mut().zip(VK_COMMITMENT_ORDER) {
+            *commitment = read_g1_by_splitting::<H>(&mut raw_vk).map_err(|e| {
+                VerificationKeyError::GroupConversionError {
+                    conv_error: ConversionError {
+                        group: e,
+                        field: Some(field.into()),
+                    },
+                }
+            })?;
+        }
+        // Destructured in `VK_COMMITMENT_ORDER`.
+        let [s_1, s_2, s_3, s_4, id_1, id_2, id_3, id_4, lagrange_first, lagrange_last, q_lookup, t_1, t_2, t_3, t_4, q_m, q_r, q_o, q_c, q_l, q_4, q_arith, q_deltarange, q_elliptic, q_memory, q_nnf, q_poseidon2external, q_poseidon2internal] =
+            commitments;
 
         Ok(Self {
             log_circuit_size,
@@ -490,70 +316,53 @@ impl<H: CurveHooks> TryFrom<&[u8]> for VerificationKey<H> {
 }
 
 impl<H: CurveHooks> VerificationKey<H> {
-    /// Computes the hash of the verification key using Keccak256.
+    /// The commitments in serialization order (`VK_COMMITMENT_ORDER`).
+    pub(crate) fn commitments(&self) -> [&G1<H>; NUM_VK_COMMITMENTS] {
+        [
+            &self.s_1,
+            &self.s_2,
+            &self.s_3,
+            &self.s_4,
+            &self.id_1,
+            &self.id_2,
+            &self.id_3,
+            &self.id_4,
+            &self.lagrange_first,
+            &self.lagrange_last,
+            &self.q_lookup,
+            &self.t_1,
+            &self.t_2,
+            &self.t_3,
+            &self.t_4,
+            &self.q_m,
+            &self.q_r,
+            &self.q_o,
+            &self.q_c,
+            &self.q_l,
+            &self.q_4,
+            &self.q_arith,
+            &self.q_deltarange,
+            &self.q_elliptic,
+            &self.q_memory,
+            &self.q_nnf,
+            &self.q_poseidon2external,
+            &self.q_poseidon2internal,
+        ]
+    }
+
+    /// Computes the hash of the verification key using Keccak256, over the fields in
+    /// serialization order (bb's `NativeVerificationKey_::to_field_elements`).
     pub fn compute_vk_hash(&self) -> EVMWord {
-        Keccak256::new()
+        let mut hasher = Keccak256::new()
             .chain(U256::from(self.log_circuit_size).into_be_bytes32())
             .chain(U256::from(self.combined_input_size).into_be_bytes32())
-            .chain(U256::from(self.pub_inputs_offset).into_be_bytes32())
-            .chain(self.q_m.x.into_be_bytes32())
-            .chain(self.q_m.y.into_be_bytes32())
-            .chain(self.q_c.x.into_be_bytes32())
-            .chain(self.q_c.y.into_be_bytes32())
-            .chain(self.q_l.x.into_be_bytes32())
-            .chain(self.q_l.y.into_be_bytes32())
-            .chain(self.q_r.x.into_be_bytes32())
-            .chain(self.q_r.y.into_be_bytes32())
-            .chain(self.q_o.x.into_be_bytes32())
-            .chain(self.q_o.y.into_be_bytes32())
-            .chain(self.q_4.x.into_be_bytes32())
-            .chain(self.q_4.y.into_be_bytes32())
-            .chain(self.q_lookup.x.into_be_bytes32())
-            .chain(self.q_lookup.y.into_be_bytes32())
-            .chain(self.q_arith.x.into_be_bytes32())
-            .chain(self.q_arith.y.into_be_bytes32())
-            .chain(self.q_deltarange.x.into_be_bytes32())
-            .chain(self.q_deltarange.y.into_be_bytes32())
-            .chain(self.q_elliptic.x.into_be_bytes32())
-            .chain(self.q_elliptic.y.into_be_bytes32())
-            .chain(self.q_memory.x.into_be_bytes32())
-            .chain(self.q_memory.y.into_be_bytes32())
-            .chain(self.q_nnf.x.into_be_bytes32())
-            .chain(self.q_nnf.y.into_be_bytes32())
-            .chain(self.q_poseidon2external.x.into_be_bytes32())
-            .chain(self.q_poseidon2external.y.into_be_bytes32())
-            .chain(self.q_poseidon2internal.x.into_be_bytes32())
-            .chain(self.q_poseidon2internal.y.into_be_bytes32())
-            .chain(self.s_1.x.into_be_bytes32())
-            .chain(self.s_1.y.into_be_bytes32())
-            .chain(self.s_2.x.into_be_bytes32())
-            .chain(self.s_2.y.into_be_bytes32())
-            .chain(self.s_3.x.into_be_bytes32())
-            .chain(self.s_3.y.into_be_bytes32())
-            .chain(self.s_4.x.into_be_bytes32())
-            .chain(self.s_4.y.into_be_bytes32())
-            .chain(self.id_1.x.into_be_bytes32())
-            .chain(self.id_1.y.into_be_bytes32())
-            .chain(self.id_2.x.into_be_bytes32())
-            .chain(self.id_2.y.into_be_bytes32())
-            .chain(self.id_3.x.into_be_bytes32())
-            .chain(self.id_3.y.into_be_bytes32())
-            .chain(self.id_4.x.into_be_bytes32())
-            .chain(self.id_4.y.into_be_bytes32())
-            .chain(self.t_1.x.into_be_bytes32())
-            .chain(self.t_1.y.into_be_bytes32())
-            .chain(self.t_2.x.into_be_bytes32())
-            .chain(self.t_2.y.into_be_bytes32())
-            .chain(self.t_3.x.into_be_bytes32())
-            .chain(self.t_3.y.into_be_bytes32())
-            .chain(self.t_4.x.into_be_bytes32())
-            .chain(self.t_4.y.into_be_bytes32())
-            .chain(self.lagrange_first.x.into_be_bytes32())
-            .chain(self.lagrange_first.y.into_be_bytes32())
-            .chain(self.lagrange_last.x.into_be_bytes32())
-            .chain(self.lagrange_last.y.into_be_bytes32())
-            .finalize()
-            .into()
+            .chain(U256::from(self.pub_inputs_offset).into_be_bytes32());
+        for commitment in self.commitments() {
+            hasher = hasher
+                .chain(commitment.x.into_be_bytes32())
+                .chain(commitment.y.into_be_bytes32());
+        }
+        hasher.finalize().into()
     }
 }
 
@@ -568,64 +377,64 @@ mod should {
         hex_literal::hex!(
             "
             000000000000000000000000000000000000000000000000000000000000000c
-            0000000000000000000000000000000000000000000000000000000000000011
-            0000000000000000000000000000000000000000000000000000000000000001
-            142bd66bdb7a2bc125c78e040da5a5cbe6f296ee1a11b55dce82f38413640a64
-            0d1415082e63c88eaa34836fe60428f70dee92853dc8a5d19d0bf85b0fa95ad4
-            2deae537974aa5697c77ce4f20f0fd5a3a264861cd51216bd8c56683467cd704
-            068627460599c3db714496966bf5f4374fb6087ba1179c7a8ed5c59a1015e784
-            06681df238df2a0f864a67847d46222c9aee090f36d34df5c2aab80f85a218f2
-            18e37167fd19d013b9c1b8da3c671ec025fe40eebc5d11d2d55e4ac8adccae27
-            177c7a07701c29d13dc4669f3d97f847e96e4bcefe3f9cf39c6f73896b06e821
-            2d31ea12ba12ee2338f1a638b192ffc9b995fd687c23cf6fe4a49a8e4f4c5aba
-            2d623ef9f6f62903ac68b01fa7f3faaa5a881854d8b0a3fb6597416a145754e3
-            20b75671e0dd20da52b442fa3ce1643a24c7ac8e6059e6db24a7e1bfc51be2ac
-            07ea8dd8b4d3fd18e2edafe7a56dfd287d677b48528aeba6bdb01913c3236ff8
-            2826602478d64dc4e23f777f35827a35ea2716bc853ad38b76968342e932d84b
-            0c4032c3079594eb75a8449d3d5ce8bc3661650d53f9b24d923d8f404cb0bbc9
-            1084d709650356d40f0158fd6da81f54eb5fe796a0ca89441369b7c24301f851
-            3057f9cfd5edb0e7c2c72a3c00da41d4c7c7b6d01c518c7ea0b38257198a9523
-            027eb0839ef4980d6a98575cedc65ee5700a7148f647b842154c13fa145167b7
-            1775fbd3ba5e43163b9a8bc08ae2fdbd8e9dc005befcd8cd631818993e143702
-            1d8011ee756abfa19e409fcb2e19a72238c07631bdde06678d3bce4455d2086f
-            09c706e73a00d84450fb0eae1d72783faba96bc3990b1eaa86226b3574e5c43f
-            276d401f1c0f9a2668fcae74683a84de1084739f9b1f547ec36638d7b5a1ecd9
-            12b12523f7d04a83276f3537c64334419e05b13fc20dedd7ff81c5677d3286ce
-            2e741be4fe42cc1155a526829445f3fda95e243c4e602d1c13a77a2472f082da
-            16a1350662e14b4ce4e8e364439d0abba02dc62a5526834f93c6db848d56dcb0
-            0563b1f480cad9069296d71489889503dda143f0b2e746ed0b6e85782c26040e
-            20e1bb3056279dc342f6c756379f231d5f472088e4d88b5517e40b2a0133f401
-            23ee36ecb11b62789eb4da763de77062d23ce01e2c8d1a5a6b3bd0ec93b42e77
-            0d1611c856951969fdda50b3205d5aa4486b632519d18424d0e92f60a31671d9
-            0ce97ee59d45d76230c0b534ea958de4c47e2f4c94aa3cadd7cd42e719521e0f
-            20c3e9857d73168eb049a6954dc31925100f44ca6398ee5652af680e254a4fc3
-            0be4d7b7685a137af9634d95d97f6024ba3216202ee80fc5fccac6b5cf2e4582
-            17e8098747feaf6d1854b8f18b6cb27185a672f5f5f16c2d0d6e7789a8d6ae00
-            0be3a351f7b48a0266a64c4eb69c19bbd4064ee848538cd46be7f549bb19fa05
-            2234971cd4054b723b6dca8ef55e4c62d67459e24f49c3326d2bfe01486af77a
-            0e96a04cc899f1e6aecc74fc7409cce5bd5318cd1bb72d1735d0cdb199cd179a
-            2c1a60dd4bc15efd19338957640268374683cc8417ae895b99f3215f597e7c48
-            1102b6dd02b49e3ea8f160d2e0ac2b9db8285906c17ad250a1bfa97f1731a183
-            13d9a8f63fda3aafaf71dd2eca25b293627bede4427bb7d9484fd637ec9c3339
-            0a08d0e381b054e808a8a780038559f35c06b650aa54cd26caac1f3f317ad73a
-            07ccc476d535a06f9f7388b04387bf331db992875edc3658257a7c25651f395c
-            00651fb2654053aedf8c01651ca7e5c11988ef1c0d084df3a8988bd89d930f83
-            0c133f1122a6aa216331840ab987b2f15217d3ee50ec9f9702abeb71b79e9645
-            2ff1de9d5413b8ccf0a625d78323e3c0f0beedb8abd96cda2f25a7f615ace981
-            16de4faf175d977b285160405a07f4a6503eaf75a2445d0be75cb81b1fb244af
-            226e2bc5a7f92698bd1ecfbcf1259a054128400368d40f11b37956404b1b6668
-            099e3bd5a0a00ab7fe18040105b9b395b5d8b7b4a63b05df652b0d10ef146d26
-            0015b8d2515d76e2ccec99dcd194592129af3a637f5a622a32440f860d1e2a7f
-            1b917517920bad3d8bc01c9595092a222b888108dc25d1aa450e0b4bc212c37e
-            305e8992b148eedb22e6e992077a84482141c7ebe42000a1d58ccb74381f6d19
-            061f64497996e8915722501e9e367938ed8da2375186b518c7345c60b1134b2d
-            1b84d38339321f405ebaf6a2f830842ad3d7cb59792e11c0d2691f317fd50e6e
-            043d063b130adfb37342af45d0155a28edd1a7e46c840d9c943fdf45521c64ce
-            261522c4089330646aff96736194949330952ae74c573d1686d9cb4a00733854
-            0000000000000000000000000000000000000000000000000000000000000001
-            0000000000000000000000000000000000000000000000000000000000000002
-            06a032e44c27b0ce9ed4d186a2debd4bfe72be9bc894b742744cf102a554d06f
-            053396ef4f905183ad76960162ff0d8c34d25b6126660c8385d13a63d2078399
+            0000000000000000000000000000000000000000000000000000000000000009
+            0000000000000000000000000000000000000000000000000000000000000005
+            0414711f1cb55d881e23e078ce820ce640bcfbfc4644eb7718a56535f9511fc4
+            1d0bc1f88c9cb4ad37775ef5eea8aa0b9a32d1998fd2f86737597bbafb06161c
+            15686104e91efc39e0f37272d54c3772fb171a24a687e96d263752570968033a
+            0bbce21ca5b94c0925594e08f6b01e8c8412ebfe30e2c6b4047c0408761031cc
+            0be06a73bbea0b41d22304f020bac4861d2ad3301d310510c761f434b525060a
+            0d376870fa808ad56ea98166ad8baaab62e0ce668aff659a9341041864d6c307
+            03ad000571c1b673d280328478635be79f12ac8b9954e5cabb7d350febe13143
+            17f4042e114f2b6cc9057700fa2709145c78869fd45793d55a5ce11e5b402bbe
+            297ead4ae40c447b2dfd806ea011bfcd3cb09ae9556a8ca71b44b31674f5ac8b
+            00b5221fecb8f67f09106a8155b71b35d3968b15ac0b55f8bc6cec22c623d409
+            160f5210d06caa11422cc6d9370f1dfe15b28456c7a863170ae0c89676565fc8
+            1a93b2aead73beded273bdd7ce1918e0c0d7e87093247ce56e9857eacbe4d86a
+            22d0904dbb053ab7d20ef438f8f05181247b28b5aa8ced9fe9e146543254a30f
+            0a9b5901c901ad03416445384dc3b06bedbfd7baf379731ba48155394b8f8cc9
+            12f1996d8e833b56aabff586aab06e4dbeac4eae9bba858a737f9d72ab9790f5
+            26db9ef0b3e5a7b24569a264b52077cd7ad54481e664749d0f693fa55017e906
+            2a56ce41f6b0be13b9c26747621b821eee81b23a887f299049b14c11e98460d6
+            1aa98f2de3ddda547d8f6de4e725ded5827d6338c78656c0d12ca1aea6ef2c7c
+            0e3269dce2a0d7d04509815f2936918597897bde9676b07c5964fab16041f771
+            258f13a1982eac087393039c9b4194bc1731bfb5c642300bfcf6a10c90055b28
+            0000000000000000000000000000000000000000000000000000000000000000
+            0000000000000000000000000000000000000000000000000000000000000000
+            0000000000000000000000000000000000000000000000000000000000000000
+            0000000000000000000000000000000000000000000000000000000000000000
+            0000000000000000000000000000000000000000000000000000000000000000
+            0000000000000000000000000000000000000000000000000000000000000000
+            0000000000000000000000000000000000000000000000000000000000000000
+            0000000000000000000000000000000000000000000000000000000000000000
+            0000000000000000000000000000000000000000000000000000000000000000
+            0000000000000000000000000000000000000000000000000000000000000000
+            08ea0feb6baf144cb2844977cf618ac2d39ece0a0deb455a597c40db2e69ea3a
+            2579e763559dc4218b0b169e0c60b80d5f035d1a8cccfff124f42d6714e6d2fd
+            0000000000000000000000000000000000000000000000000000000000000000
+            0000000000000000000000000000000000000000000000000000000000000000
+            0000000000000000000000000000000000000000000000000000000000000000
+            0000000000000000000000000000000000000000000000000000000000000000
+            08ea0feb6baf144cb2844977cf618ac2d39ece0a0deb455a597c40db2e69ea3a
+            2579e763559dc4218b0b169e0c60b80d5f035d1a8cccfff124f42d6714e6d2fd
+            2b69b9140825b800760ed06999df4fd873995457c9bb4e69f7ebb5ad5860eac9
+            2cb789eee777ca9f4ab166b04535b6132196132403e5f82d81ca35ddc26a2029
+            0000000000000000000000000000000000000000000000000000000000000000
+            0000000000000000000000000000000000000000000000000000000000000000
+            254fcb7e9dd43e5265f3b34b0d696bb4df208618fdd7cc2e61cbbcb59bb999ad
+            1a7a99d140c7416fddcdeea7b6b485a83c011060f607a6267a75d0004546732b
+            0000000000000000000000000000000000000000000000000000000000000000
+            0000000000000000000000000000000000000000000000000000000000000000
+            0000000000000000000000000000000000000000000000000000000000000000
+            0000000000000000000000000000000000000000000000000000000000000000
+            0000000000000000000000000000000000000000000000000000000000000000
+            0000000000000000000000000000000000000000000000000000000000000000
+            0000000000000000000000000000000000000000000000000000000000000000
+            0000000000000000000000000000000000000000000000000000000000000000
+            0000000000000000000000000000000000000000000000000000000000000000
+            0000000000000000000000000000000000000000000000000000000000000000
+            0000000000000000000000000000000000000000000000000000000000000000
+            0000000000000000000000000000000000000000000000000000000000000000
             "
         )
     }
@@ -713,21 +522,8 @@ mod should {
 
         #[rstest]
         fn a_vk_with_a_point_not_on_curve_for_any_commitment_field(valid_vk: [u8; VK_SIZE]) {
+            // bb v5.0.0 serialization order (`PrecomputedEntities`).
             let commitment_fields = [
-                VkCommitmentField::Q_M,
-                VkCommitmentField::Q_C,
-                VkCommitmentField::Q_L,
-                VkCommitmentField::Q_R,
-                VkCommitmentField::Q_O,
-                VkCommitmentField::Q_4,
-                VkCommitmentField::Q_LOOKUP,
-                VkCommitmentField::Q_ARITH,
-                VkCommitmentField::Q_DELTARANGE,
-                VkCommitmentField::Q_ELLIPTIC,
-                VkCommitmentField::Q_MEMORY,
-                VkCommitmentField::Q_NNF,
-                VkCommitmentField::Q_POSEIDON2EXTERNAL,
-                VkCommitmentField::Q_POSEIDON2INTERNAL,
                 VkCommitmentField::S_1,
                 VkCommitmentField::S_2,
                 VkCommitmentField::S_3,
@@ -736,12 +532,26 @@ mod should {
                 VkCommitmentField::ID_2,
                 VkCommitmentField::ID_3,
                 VkCommitmentField::ID_4,
+                VkCommitmentField::Lagrange_First,
+                VkCommitmentField::Lagrange_Last,
+                VkCommitmentField::Q_LOOKUP,
                 VkCommitmentField::T_1,
                 VkCommitmentField::T_2,
                 VkCommitmentField::T_3,
                 VkCommitmentField::T_4,
-                VkCommitmentField::Lagrange_First,
-                VkCommitmentField::Lagrange_Last,
+                VkCommitmentField::Q_M,
+                VkCommitmentField::Q_R,
+                VkCommitmentField::Q_O,
+                VkCommitmentField::Q_C,
+                VkCommitmentField::Q_L,
+                VkCommitmentField::Q_4,
+                VkCommitmentField::Q_ARITH,
+                VkCommitmentField::Q_DELTARANGE,
+                VkCommitmentField::Q_ELLIPTIC,
+                VkCommitmentField::Q_MEMORY,
+                VkCommitmentField::Q_NNF,
+                VkCommitmentField::Q_POSEIDON2EXTERNAL,
+                VkCommitmentField::Q_POSEIDON2INTERNAL,
             ];
             const OFFSET: usize = 3 * EVM_WORD_SIZE;
             for (i, cm) in commitment_fields.iter().enumerate() {

@@ -20,11 +20,10 @@ use crate::{
         PERMUTATION_ARGUMENT_VALUE_SEPARATOR,
     },
     proof::{CommonProofData, ZKProof},
-    utils::IntoBEBytes32,
+    utils::{G1Coordinates, IntoBEBytes32},
     EVMWord, ParsedProof, Pubs,
 };
 use ark_bn254_ext::{CurveHooks, Fr};
-use ark_ec::AffineRepr;
 use ark_ff::{AdditiveGroup, Field, PrimeField};
 use sha3::{Digest, Keccak256};
 
@@ -212,22 +211,14 @@ impl CommonTranscriptData for Transcript {
 #[derive(Debug)]
 pub(crate) struct RelationParametersChallenges {
     pub(crate) eta: Fr,
-    pub(crate) eta_two: Fr,
-    pub(crate) eta_three: Fr,
     pub(crate) beta: Fr,
     pub(crate) gamma: Fr,
 }
 
 impl RelationParametersChallenges {
     // Constructor
-    pub(crate) fn new(eta: Fr, eta_two: Fr, eta_three: Fr, beta: Fr, gamma: Fr) -> Self {
-        RelationParametersChallenges {
-            eta,
-            eta_two,
-            eta_three,
-            beta,
-            gamma,
-        }
+    pub(crate) fn new(eta: Fr, beta: Fr, gamma: Fr) -> Self {
+        RelationParametersChallenges { eta, beta, gamma }
     }
 
     // Compute the public input delta
@@ -326,14 +317,14 @@ fn split_challenge(challenge: Fr) -> (Fr, Fr) {
     (lower, upper)
 }
 
-// Generate the relation parameters challenges: eta, eta_two, eta_three, beta, gamma
+// Generate the relation parameters challenges: eta, beta, gamma
 fn generate_relation_parameters_challenges<H: CurveHooks>(
     parsed_proof: &ParsedProof<H>,
     public_inputs: &Pubs,
     vk_hash: &EVMWord,
 ) -> (RelationParametersChallenges, Fr) {
     // Round 0
-    let [eta, eta_two, eta_three, previous_challenge] =
+    let [eta, previous_challenge] =
         generate_eta_challenge::<H>(parsed_proof, public_inputs, vk_hash);
 
     // Round 1
@@ -341,7 +332,7 @@ fn generate_relation_parameters_challenges<H: CurveHooks>(
         generate_beta_and_gamma_challenges(previous_challenge, parsed_proof);
 
     (
-        RelationParametersChallenges::new(eta, eta_two, eta_three, beta, gamma),
+        RelationParametersChallenges::new(eta, beta, gamma),
         next_previous_challenge,
     )
 }
@@ -351,7 +342,7 @@ fn generate_eta_challenge<H: CurveHooks>(
     parsed_proof: &ParsedProof<H>,
     public_inputs: &Pubs,
     vk_hash: &EVMWord,
-) -> [Fr; 4] {
+) -> [Fr; 2] {
     let mut round0 = Keccak256::new().chain_update(vk_hash);
 
     for word in public_inputs
@@ -364,80 +355,28 @@ fn generate_eta_challenge<H: CurveHooks>(
     // For ZK flavors: hash the gemini masking poly commitment (sent right after public inputs)
     if let ParsedProof::ZK(zkp) = parsed_proof {
         round0 = round0
-            .chain_update(
-                zkp.gemini_masking_poly
-                    .x()
-                    .expect("Coordinate should be set")
-                    .into_be_bytes32(),
-            )
-            .chain_update(
-                zkp.gemini_masking_poly
-                    .y()
-                    .expect("Coordinate should be set")
-                    .into_be_bytes32(),
-            );
+            .chain_update(zkp.gemini_masking_poly.x_be_bytes32())
+            .chain_update(zkp.gemini_masking_poly.y_be_bytes32());
     };
 
     // Create the first challenge
     // Note: w4 is added to the challenge later on
     let hash: EVMWord = round0
-        .chain_update(
-            parsed_proof
-                .w1()
-                .x()
-                .expect("Coordinate should be set")
-                .into_be_bytes32(),
-        )
-        .chain_update(
-            parsed_proof
-                .w1()
-                .y()
-                .expect("Coordinate should be set")
-                .into_be_bytes32(),
-        )
-        .chain_update(
-            parsed_proof
-                .w2()
-                .x()
-                .expect("Coordinate should be set")
-                .into_be_bytes32(),
-        )
-        .chain_update(
-            parsed_proof
-                .w2()
-                .y()
-                .expect("Coordinate should be set")
-                .into_be_bytes32(),
-        )
-        .chain_update(
-            parsed_proof
-                .w3()
-                .x()
-                .expect("Coordinate should be set")
-                .into_be_bytes32(),
-        )
-        .chain_update(
-            parsed_proof
-                .w3()
-                .y()
-                .expect("Coordinate should be set")
-                .into_be_bytes32(),
-        )
+        .chain_update(parsed_proof.w1().x_be_bytes32())
+        .chain_update(parsed_proof.w1().y_be_bytes32())
+        .chain_update(parsed_proof.w2().x_be_bytes32())
+        .chain_update(parsed_proof.w2().y_be_bytes32())
+        .chain_update(parsed_proof.w3().x_be_bytes32())
+        .chain_update(parsed_proof.w3().y_be_bytes32())
         .finalize()
         .into();
 
-    let mut previous_challenge = Fr::from_be_bytes_mod_order(&hash);
+    let previous_challenge = Fr::from_be_bytes_mod_order(&hash);
 
-    let (eta, eta_two) = split_challenge(previous_challenge);
+    // Since bb v5.0.0 only eta is drawn; its powers are computed where they are used.
+    let (eta, _) = split_challenge(previous_challenge);
 
-    let hash: EVMWord = Keccak256::new()
-        .chain_update(previous_challenge.into_be_bytes32())
-        .finalize()
-        .into();
-    previous_challenge = Fr::from_be_bytes_mod_order(&hash);
-    let (eta_three, _) = split_challenge(previous_challenge);
-
-    [eta, eta_two, eta_three, previous_challenge]
+    [eta, previous_challenge]
 }
 
 // Generate beta and gamma challenges
@@ -447,48 +386,12 @@ fn generate_beta_and_gamma_challenges<H: CurveHooks>(
 ) -> [Fr; 3] {
     let round1: EVMWord = Keccak256::new()
         .chain_update(previous_challenge.into_be_bytes32())
-        .chain_update(
-            parsed_proof
-                .lookup_read_counts()
-                .x()
-                .expect("Coordinate should be set")
-                .into_be_bytes32(),
-        )
-        .chain_update(
-            parsed_proof
-                .lookup_read_counts()
-                .y()
-                .expect("Coordinate should be set")
-                .into_be_bytes32(),
-        )
-        .chain_update(
-            parsed_proof
-                .lookup_read_tags()
-                .x()
-                .expect("Coordinate should be set")
-                .into_be_bytes32(),
-        )
-        .chain_update(
-            parsed_proof
-                .lookup_read_tags()
-                .y()
-                .expect("Coordinate should be set")
-                .into_be_bytes32(),
-        )
-        .chain_update(
-            parsed_proof
-                .w4()
-                .x()
-                .expect("Coordinate should be set")
-                .into_be_bytes32(),
-        )
-        .chain_update(
-            parsed_proof
-                .w4()
-                .y()
-                .expect("Coordinate should be set")
-                .into_be_bytes32(),
-        )
+        .chain_update(parsed_proof.lookup_read_counts().x_be_bytes32())
+        .chain_update(parsed_proof.lookup_read_counts().y_be_bytes32())
+        .chain_update(parsed_proof.lookup_read_tags().x_be_bytes32())
+        .chain_update(parsed_proof.lookup_read_tags().y_be_bytes32())
+        .chain_update(parsed_proof.w4().x_be_bytes32())
+        .chain_update(parsed_proof.w4().y_be_bytes32())
         .finalize()
         .into();
 
@@ -508,34 +411,10 @@ fn generate_alpha_challenges<H: CurveHooks>(
     // Generate the original sumcheck alpha 0 by hashing zPerm and zLookup
     let alpha0: EVMWord = Keccak256::new()
         .chain_update(previous_challenge.into_be_bytes32())
-        .chain_update(
-            parsed_proof
-                .lookup_inverses()
-                .x()
-                .expect("Coordinate should be set")
-                .into_be_bytes32(),
-        )
-        .chain_update(
-            parsed_proof
-                .lookup_inverses()
-                .y()
-                .expect("Coordinate should be set")
-                .into_be_bytes32(),
-        )
-        .chain_update(
-            parsed_proof
-                .z_perm()
-                .x()
-                .expect("Coordinate should be set")
-                .into_be_bytes32(),
-        )
-        .chain_update(
-            parsed_proof
-                .z_perm()
-                .y()
-                .expect("Coordinate should be set")
-                .into_be_bytes32(),
-        )
+        .chain_update(parsed_proof.lookup_inverses().x_be_bytes32())
+        .chain_update(parsed_proof.lookup_inverses().y_be_bytes32())
+        .chain_update(parsed_proof.z_perm().x_be_bytes32())
+        .chain_update(parsed_proof.z_perm().y_be_bytes32())
         .finalize()
         .into();
 
@@ -580,18 +459,8 @@ fn generate_libra_challenge<H: CurveHooks>(
 ) -> (Fr, Fr) {
     let hash: EVMWord = Keccak256::new()
         .chain_update(previous_challenge.into_be_bytes32())
-        .chain_update(
-            zk_proof.libra_commitments[0]
-                .x()
-                .expect("Coordinate should be set")
-                .into_be_bytes32(),
-        )
-        .chain_update(
-            zk_proof.libra_commitments[0]
-                .y()
-                .expect("Coordinate should be set")
-                .into_be_bytes32(),
-        )
+        .chain_update(zk_proof.libra_commitments[0].x_be_bytes32())
+        .chain_update(zk_proof.libra_commitments[0].y_be_bytes32())
         .chain_update(zk_proof.libra_sum.into_be_bytes32())
         .finalize()
         .into();
@@ -649,31 +518,11 @@ fn generate_rho_challenge<H: CurveHooks>(
     if let ParsedProof::ZK(zk_proof) = parsed_proof {
         hasher.update(zk_proof.libra_evaluation.into_be_bytes32());
 
-        hasher.update(
-            zk_proof.libra_commitments[1]
-                .x()
-                .expect("Coordinate should be set")
-                .into_be_bytes32(),
-        );
-        hasher.update(
-            zk_proof.libra_commitments[1]
-                .y()
-                .expect("Coordinate should be set")
-                .into_be_bytes32(),
-        );
+        hasher.update(zk_proof.libra_commitments[1].x_be_bytes32());
+        hasher.update(zk_proof.libra_commitments[1].y_be_bytes32());
 
-        hasher.update(
-            zk_proof.libra_commitments[2]
-                .x()
-                .expect("Coordinate should be set")
-                .into_be_bytes32(),
-        );
-        hasher.update(
-            zk_proof.libra_commitments[2]
-                .y()
-                .expect("Coordinate should be set")
-                .into_be_bytes32(),
-        );
+        hasher.update(zk_proof.libra_commitments[2].x_be_bytes32());
+        hasher.update(zk_proof.libra_commitments[2].y_be_bytes32());
     }
 
     let hash: EVMWord = hasher.finalize().into();
@@ -694,18 +543,8 @@ fn generate_gemini_r_challenge<H: CurveHooks>(
     hasher.update(previous_challenge.into_be_bytes32());
 
     for i in 0..(log_n as usize - 1) {
-        hasher.update(
-            parsed_proof.gemini_fold_comms()[i]
-                .x()
-                .expect("Coordinate should be set")
-                .into_be_bytes32(),
-        );
-        hasher.update(
-            parsed_proof.gemini_fold_comms()[i]
-                .y()
-                .expect("Coordinate should be set")
-                .into_be_bytes32(),
-        );
+        hasher.update(parsed_proof.gemini_fold_comms()[i].x_be_bytes32());
+        hasher.update(parsed_proof.gemini_fold_comms()[i].y_be_bytes32());
     }
 
     let hash: EVMWord = hasher.finalize().into();
@@ -753,20 +592,8 @@ fn generate_shplonk_z_challenge<H: CurveHooks>(
 ) -> (Fr, Fr) {
     let hash: EVMWord = Keccak256::new()
         .chain_update(previous_challenge.into_be_bytes32())
-        .chain_update(
-            parsed_proof
-                .shplonk_q()
-                .x()
-                .expect("Coordinate should be set")
-                .into_be_bytes32(),
-        )
-        .chain_update(
-            parsed_proof
-                .shplonk_q()
-                .y()
-                .expect("Coordinate should be set")
-                .into_be_bytes32(),
-        )
+        .chain_update(parsed_proof.shplonk_q().x_be_bytes32())
+        .chain_update(parsed_proof.shplonk_q().y_be_bytes32())
         .finalize()
         .into();
 
