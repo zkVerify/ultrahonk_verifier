@@ -5,8 +5,9 @@
 # for every n in [min_log_n, max_log_n], with NUM_PUBS public inputs (the runtime maximum).
 #
 # The circuit is padded with `acc = acc * x + 1` steps (one gate each). The padding is calibrated
-# with `bb gates`, then the circuit's log_n is read back from the written vk, so every fixture is
-# known to have exactly the requested size. Every proof is checked with `bb verify`.
+# with `bb gates`, then the circuit's log_n is read back from the written vk of each flavor, so
+# every fixture is known to have exactly the requested size. Every proof is checked with
+# `bb verify`.
 #
 # bb must be the v5.0.0 *release* (or later): every 5.0.0 nightly still ships the pre-fix
 # SmallSubgroupIPA. Set NARGO / BB to use specific binaries instead of the ones on PATH.
@@ -49,6 +50,11 @@ write_circuit() {
   } > "${WORK_DIR}/fixture/src/main.nr"
 }
 
+# Prints the log_n recorded in the vk file $1.
+vk_log_n() {
+  echo $((16#$(xxd -p -l 32 "$1" | tr -d '\n')))
+}
+
 # Prints the log_n of the circuit padded by $1 gates, as recorded in its vk.
 log_n_for_padding() {
   write_circuit "$1"
@@ -56,7 +62,7 @@ log_n_for_padding() {
     cd "${WORK_DIR}/fixture"
     "${NARGO}" compile > /dev/null
     "${BB}" write_vk -t evm -b target/fixture.json -o target/calib > /dev/null 2>&1
-    echo $((16#$(xxd -p -l 32 target/calib/vk | tr -d '\n')))
+    vk_log_n target/calib/vk
   )
 }
 
@@ -105,6 +111,12 @@ for log_n in $(seq "${MIN_LOG_N}" "${MAX_LOG_N}"); do
       dest="${OUT_DIR}/${flavor}/log_${log_n}"
       mkdir -p "${dest}" target/out
       "${BB}" write_vk -t "${target}" -b target/fixture.json -o target/out > /dev/null 2>&1
+      # The padding is calibrated on the zk vk; check this flavor landed on the same size.
+      flavor_log_n=$(vk_log_n target/out/vk)
+      if [ "${flavor_log_n}" -ne "${log_n}" ]; then
+        echo "  ${flavor}: vk has log_n ${flavor_log_n}, expected ${log_n}"
+        exit 1
+      fi
       "${BB}" prove -t "${target}" -b target/fixture.json -w target/fixture.gz \
         -k target/out/vk -o target/out > /dev/null 2>&1
       "${BB}" verify -t "${target}" -p target/out/proof -k target/out/vk \
