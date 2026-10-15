@@ -231,9 +231,12 @@ impl RelationParametersChallenges {
         let mut numerator = Fr::ONE;
         let mut denominator = Fr::ONE;
 
+        // `offset` comes from the vk, so add in Fr rather than u64, where it could overflow. The
+        // Solidity verifier adds in uint256, which cannot overflow for a u64 offset.
+        let offset = Fr::from(offset);
         let mut numerator_acc =
-            self.gamma + (self.beta * Fr::from(PERMUTATION_ARGUMENT_VALUE_SEPARATOR + offset));
-        let mut denominator_acc = self.gamma - self.beta * Fr::from(offset + 1);
+            self.gamma + self.beta * (Fr::from(PERMUTATION_ARGUMENT_VALUE_SEPARATOR) + offset);
+        let mut denominator_acc = self.gamma - self.beta * (offset + Fr::ONE);
 
         for word in public_inputs.iter().chain(pairing_point_object) {
             let elem = Fr::from_be_bytes_mod_order(word);
@@ -601,4 +604,49 @@ fn generate_shplonk_z_challenge<H: CurveHooks>(
     let (shplonk_z, _) = split_challenge(next_previous_challenge);
 
     (shplonk_z, next_previous_challenge)
+}
+
+#[cfg(test)]
+mod should {
+    use super::*;
+
+    #[test]
+    fn compute_public_input_delta_without_overflow_for_any_offset() {
+        let challenges =
+            RelationParametersChallenges::new(Fr::from(3u64), Fr::from(5u64), Fr::from(7u64));
+        let public_inputs = [[0u8; 32]; 1];
+        let pairing_point_object = [[0u8; 32]; PAIRING_POINTS_SIZE];
+
+        for offset in [
+            0,
+            1,
+            u64::MAX - (1 << 28),
+            u64::MAX - (1 << 28) + 1,
+            u64::MAX,
+        ] {
+            // Reference: the offset sums done in u128, as Solidity does them in uint256.
+            let beta = challenges.beta;
+            let gamma = challenges.gamma;
+            let mut numerator_acc = gamma
+                + beta * Fr::from(PERMUTATION_ARGUMENT_VALUE_SEPARATOR as u128 + offset as u128);
+            let mut denominator_acc = gamma - beta * Fr::from(offset as u128 + 1);
+            let (mut numerator, mut denominator) = (Fr::ONE, Fr::ONE);
+            for _ in 0..(public_inputs.len() + PAIRING_POINTS_SIZE) {
+                numerator *= numerator_acc;
+                denominator *= denominator_acc;
+                numerator_acc += beta;
+                denominator_acc -= beta;
+            }
+
+            assert_eq!(
+                challenges.compute_public_input_delta(
+                    &public_inputs,
+                    &pairing_point_object,
+                    offset
+                ),
+                numerator / denominator,
+                "offset {offset}"
+            );
+        }
+    }
 }
