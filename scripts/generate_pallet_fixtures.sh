@@ -50,6 +50,17 @@ write_circuit() {
   } > "${WORK_DIR}/fixture/src/main.nr"
 }
 
+# Runs bb quietly; on failure prints the command and bb's output, then fails.
+run_bb() {
+  local log
+  log=$(mktemp -p "${WORK_DIR}")
+  if ! "${BB}" "$@" > "${log}" 2>&1; then
+    echo "bb $* failed:" >&2
+    cat "${log}" >&2
+    return 1
+  fi
+}
+
 # Prints the log_n recorded in the vk file $1.
 vk_log_n() {
   echo $((16#$(xxd -p -l 32 "$1" | tr -d '\n')))
@@ -61,7 +72,7 @@ log_n_for_padding() {
   (
     cd "${WORK_DIR}/fixture"
     "${NARGO}" compile > /dev/null
-    "${BB}" write_vk -t evm -b target/fixture.json -o target/calib > /dev/null 2>&1
+    run_bb write_vk -t evm -b target/fixture.json -o target/calib
     vk_log_n target/calib/vk
   )
 }
@@ -112,17 +123,20 @@ for log_n in $(seq "${MIN_LOG_N}" "${MAX_LOG_N}"); do
       esac
       dest="${OUT_DIR}/${flavor}/log_${log_n}"
       mkdir -p "${dest}" target/out
-      "${BB}" write_vk -t "${target}" -b target/fixture.json -o target/out > /dev/null 2>&1
+      run_bb write_vk -t "${target}" -b target/fixture.json -o target/out
       # The padding is calibrated on the zk vk; check this flavor landed on the same size.
       flavor_log_n=$(vk_log_n target/out/vk)
       if [ "${flavor_log_n}" -ne "${log_n}" ]; then
         echo "  ${flavor}: vk has log_n ${flavor_log_n}, expected ${log_n}"
         exit 1
       fi
-      "${BB}" prove -t "${target}" -b target/fixture.json -w target/fixture.gz \
-        -k target/out/vk -o target/out > /dev/null 2>&1
-      "${BB}" verify -t "${target}" -p target/out/proof -k target/out/vk \
-        -i target/out/public_inputs > /dev/null 2>&1
+      run_bb prove -t "${target}" -b target/fixture.json -w target/fixture.gz \
+        -k target/out/vk -o target/out
+      if ! run_bb verify -t "${target}" -p target/out/proof -k target/out/vk \
+        -i target/out/public_inputs; then
+        echo "  ${flavor}: bb verify rejected the log_n ${log_n} proof" >&2
+        exit 1
+      fi
       cp target/out/vk "${dest}/vk"
       cp target/out/proof "${dest}/proof"
       cp target/out/public_inputs "${dest}/pubs"
