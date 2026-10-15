@@ -456,10 +456,7 @@ mod should {
         use ark_bn254::Fr;
         use ark_ff::{Field, PrimeField};
 
-        use crate::{
-            constants::{EVM_WORD_SIZE, GROUP_ELEMENT_SIZE},
-            errors::CommitmentField,
-        };
+        use crate::constants::{EVM_WORD_SIZE, GROUP_ELEMENT_SIZE};
 
         use super::*;
 
@@ -522,39 +519,8 @@ mod should {
 
         #[rstest]
         fn a_vk_with_a_point_not_on_curve_for_any_commitment_field(valid_vk: [u8; VK_SIZE]) {
-            // bb v5.0.0 serialization order (`PrecomputedEntities`).
-            let commitment_fields = [
-                VkCommitmentField::S_1,
-                VkCommitmentField::S_2,
-                VkCommitmentField::S_3,
-                VkCommitmentField::S_4,
-                VkCommitmentField::ID_1,
-                VkCommitmentField::ID_2,
-                VkCommitmentField::ID_3,
-                VkCommitmentField::ID_4,
-                VkCommitmentField::Lagrange_First,
-                VkCommitmentField::Lagrange_Last,
-                VkCommitmentField::Q_LOOKUP,
-                VkCommitmentField::T_1,
-                VkCommitmentField::T_2,
-                VkCommitmentField::T_3,
-                VkCommitmentField::T_4,
-                VkCommitmentField::Q_M,
-                VkCommitmentField::Q_R,
-                VkCommitmentField::Q_O,
-                VkCommitmentField::Q_C,
-                VkCommitmentField::Q_L,
-                VkCommitmentField::Q_4,
-                VkCommitmentField::Q_ARITH,
-                VkCommitmentField::Q_DELTARANGE,
-                VkCommitmentField::Q_ELLIPTIC,
-                VkCommitmentField::Q_MEMORY,
-                VkCommitmentField::Q_NNF,
-                VkCommitmentField::Q_POSEIDON2EXTERNAL,
-                VkCommitmentField::Q_POSEIDON2INTERNAL,
-            ];
             const OFFSET: usize = 3 * EVM_WORD_SIZE;
-            for (i, cm) in commitment_fields.iter().enumerate() {
+            for (i, cm) in VK_COMMITMENT_ORDER.into_iter().enumerate() {
                 let mut invalid_vk = [0u8; VK_SIZE];
                 invalid_vk.copy_from_slice(&valid_vk);
                 // Please note that (0, 0) is treated as the point at infinity
@@ -566,9 +532,7 @@ mod should {
                     VerificationKeyError::GroupConversionError {
                         conv_error: ConversionError {
                             group: GroupError::NotOnCurve,
-                            field: Some(<CommitmentField as From<VkCommitmentField>>::from(
-                                cm.clone()
-                            )),
+                            field: Some(cm.into()),
                         }
                     }
                 );
