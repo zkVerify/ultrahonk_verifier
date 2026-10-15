@@ -249,7 +249,8 @@ fn verify_sumcheck<H: CurveHooks>(
         let mut evaluation = Fr::ONE;
         let challenges = tp.sumcheck_u_challenges();
 
-        for &c in &challenges[2..log_circuit_size] {
+        // Empty when log_circuit_size < 3, as in the Solidity loop; slicing [2..1] would panic.
+        for &c in challenges.iter().take(log_circuit_size).skip(2) {
             evaluation *= Fr::ONE - c;
         }
 
