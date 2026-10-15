@@ -54,6 +54,8 @@ pub enum ProofError {
     ShpleminiPairingCheckFailed,
     #[snafu(display("Consistency check failed. Cause: {message}"))]
     ConsistencyCheckFailed { message: &'static str },
+    #[snafu(display("Denominator is not invertible: {message}"))]
+    NonInvertibleDenominator { message: &'static str },
     #[snafu(display("Field element is not canonical (>= r)"))]
     FieldElementExceedsModulus,
     #[snafu(display("Pairing point limb {index} exceeds its maximum bit length"))]

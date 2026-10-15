@@ -309,6 +309,14 @@ fn compute_next_target_sum<H: CurveHooks>(
     Ok(target_sum)
 }
 
+// Inverts a challenge-derived denominator. These are zero only with negligible probability, but
+// an error is returned rather than panicking in runtime code.
+fn invert(value: Fr, message: &'static str) -> Result<Fr, ProofError> {
+    value
+        .inverse()
+        .ok_or(ProofError::NonInvertibleDenominator { message })
+}
+
 // Verify the shplemini part of the proof.
 fn verify_shplemini<H: CurveHooks>(
     parsed_proof: &ParsedProof<H>,
@@ -334,18 +342,17 @@ fn verify_shplemini<H: CurveHooks>(
 
     // NOTE: Can use batching here to go from 2 inversions to 1 inversion + 3 multiplications
     // but the benefit is probably not worth it.
-    let pos_inverted_denominator = (tp.shplonk_z() - powers_of_evaluation_challenge[0])
-        .inverse()
-        .expect("Inversion should work w.h.p.");
-    let neg_inverted_denominator = (tp.shplonk_z() + powers_of_evaluation_challenge[0])
-        .inverse()
-        .expect("Inversion should work w.h.p.");
+    let pos_inverted_denominator = invert(
+        tp.shplonk_z() - powers_of_evaluation_challenge[0],
+        "shplonk_z - gemini_r is not invertible",
+    )?;
+    let neg_inverted_denominator = invert(
+        tp.shplonk_z() + powers_of_evaluation_challenge[0],
+        "shplonk_z + gemini_r is not invertible",
+    )?;
 
     let unshifted_scalar = pos_inverted_denominator + tp.shplonk_nu() * neg_inverted_denominator;
-    let shifted_scalar = tp
-        .gemini_r()
-        .inverse()
-        .expect("Inversion should work w.h.p.")
+    let shifted_scalar = invert(tp.gemini_r(), "gemini_r is not invertible")?
         * (pos_inverted_denominator - tp.shplonk_nu() * neg_inverted_denominator);
 
     scalars[0] = Fr::ONE;
@@ -481,11 +488,6 @@ fn verify_shplemini<H: CurveHooks>(
     // Finalize the batch opening claim
     match (tp, parsed_proof) {
         (Transcript::ZK(zktp), ParsedProof::ZK(zk_proof)) => {
-            let invert = |value: Fr, message: &'static str| {
-                value
-                    .inverse()
-                    .ok_or(ProofError::ConsistencyCheckFailed { message })
-            };
             // Denominators 1/(z - point_i) for the five opening points {r, g*r, r, 1, r}.
             // The opening at 1 pins the SmallSubgroupIPA boundary A(1) = 0
             // (aztec-packages@58bf73a2): without it the Libra running sum's first value, and with
