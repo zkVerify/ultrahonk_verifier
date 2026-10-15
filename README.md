@@ -40,10 +40,11 @@ Please, ensure that you are using the latest version of Noir and follow the [off
 
 > **Use bb v5.0.0 (release) or later, pinned explicitly with `bbup -v 5.0.0`, together with Noir `1.0.0-beta.22` or later.** Earlier versions of bb, *including every `5.0.0-nightly`*, ship a SmallSubgroupIPA that is unsound for ZK proofs, and Noir's own bb mapping may select one of them. Proofs from those versions are rejected by this verifier: ZK ones fail the Shplemini pairing check, and any proof in the pre-5.0.0 layout fails the length check. The Noir and bb versions must be upgraded together, since a newer bb cannot read an older nargo's artifacts.
 
-If you wish to generate a zero-knowledge proof, you will need to use `-t evm` to instruct `bb` of the fact. Alternatively, use `-t evm-no-zk` to specify that you would like `bb` to use the non zero-knowledge (plain) version of UltraHonk for proof generation. Please note that in both cases, Keccak256 is going to be used as the hash function. Finally, add the the `write_vk` subcommand to instruct `bb` to also generate the verification key for you.
+If you wish to generate a zero-knowledge proof, you will need to use `-t evm` to instruct `bb` of the fact. Alternatively, use `-t evm-no-zk` to specify that you would like `bb` to use the non zero-knowledge (plain) version of UltraHonk for proof generation. Please note that in both cases, Keccak256 is going to be used as the hash function. Generate the verification key first with `bb write_vk`, then pass it to `bb prove` with `-k`, using the same `-t` target for both.
 
-> **Worked Example:** Suppose that our Noir project name is `hello_world` and that we want to generate a ZK proof along with the verification key. Further, suppose that the bytecode file and witness file are found in the `target` directory. We would also like the generated artifacts from `bb` to be placed inside the `target` directory. Then, the appropriate command to issue is:
-- `bb prove -t evm -b "./target/hello_world.json" -w "./target/hello_world.gz" -o ./target --write_vk`
+> **Worked Example:** Suppose that our Noir project name is `hello_world` and that we want to generate a ZK proof along with the verification key. Further, suppose that the bytecode file and witness file are found in the `target` directory. We would also like the generated artifacts from `bb` to be placed inside the `target` directory. Then, the appropriate commands to issue are:
+- `bb write_vk -t evm -b "./target/hello_world.json" -o ./target`
+- `bb prove -t evm -b "./target/hello_world.json" -w "./target/hello_world.gz" -k ./target/vk -o ./target`
 
 ## Convert `proof`, `vk`, and `pubs` into zkVerify-compatible format
 The binary files output by Noir are ready to use out of the box. However, for your ease of submission to `zkVerify`, below we provide a Bash script for converting them into hexadecimal files `zkv_proof.hex`, `zkv_vk.hex`, and `zkv_pubs.hex`.
