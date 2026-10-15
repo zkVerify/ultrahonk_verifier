@@ -186,7 +186,7 @@ const VK_COMMITMENT_ORDER: [VkCommitmentField; NUM_VK_COMMITMENTS] = [
 pub struct VerificationKey<H: CurveHooks> {
     // Misc Params
     pub log_circuit_size: u64,
-    pub combined_input_size: u64, // Since bb 0.86.0, this is num_public_inputs + PAIRING_OBJECT_SIZE
+    pub combined_input_size: u64, // Since bb 0.86.0, this is num_public_inputs + PAIRING_POINTS_SIZE
     pub pub_inputs_offset: u64,
     // Selectors
     pub q_m: G1<H>,

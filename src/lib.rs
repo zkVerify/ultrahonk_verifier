@@ -143,8 +143,9 @@ fn check_public_input_number<H: CurveHooks>(
     vk: &VerificationKey<H>,
     pubs: &Pubs,
 ) -> Result<(), VerifyError> {
-    // In bb 0.86.0, public inputs and the pairing point object are combined under the hood
-    // see: https://github.com/AztecProtocol/barretenberg/issues/1331
+    // Since bb 0.86.0 the vk counts the pairing point object (PAIRING_POINTS_SIZE = 8 limbs in
+    // bb v5.0.0) together with the public inputs.
+    // See: https://github.com/AztecProtocol/barretenberg/issues/1331
     let expected = vk
         .combined_input_size
         .checked_sub(PAIRING_POINTS_SIZE as u64)
