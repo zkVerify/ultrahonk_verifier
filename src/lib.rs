@@ -401,34 +401,9 @@ fn verify_shplemini<H: CurveHooks>(
     }
 
     // VK commitments, in the same (bb v5.0.0) order as the sumcheck evaluations.
-    commitments[1 + offset] = vk.s_1;
-    commitments[2 + offset] = vk.s_2;
-    commitments[3 + offset] = vk.s_3;
-    commitments[4 + offset] = vk.s_4;
-    commitments[5 + offset] = vk.id_1;
-    commitments[6 + offset] = vk.id_2;
-    commitments[7 + offset] = vk.id_3;
-    commitments[8 + offset] = vk.id_4;
-    commitments[9 + offset] = vk.lagrange_first;
-    commitments[10 + offset] = vk.lagrange_last;
-    commitments[11 + offset] = vk.q_lookup;
-    commitments[12 + offset] = vk.t_1;
-    commitments[13 + offset] = vk.t_2;
-    commitments[14 + offset] = vk.t_3;
-    commitments[15 + offset] = vk.t_4;
-    commitments[16 + offset] = vk.q_m;
-    commitments[17 + offset] = vk.q_r;
-    commitments[18 + offset] = vk.q_o;
-    commitments[19 + offset] = vk.q_c;
-    commitments[20 + offset] = vk.q_l;
-    commitments[21 + offset] = vk.q_4;
-    commitments[22 + offset] = vk.q_arith;
-    commitments[23 + offset] = vk.q_deltarange;
-    commitments[24 + offset] = vk.q_elliptic;
-    commitments[25 + offset] = vk.q_memory;
-    commitments[26 + offset] = vk.q_nnf;
-    commitments[27 + offset] = vk.q_poseidon2external;
-    commitments[28 + offset] = vk.q_poseidon2internal;
+    for (i, commitment) in vk.commitments().into_iter().enumerate() {
+        commitments[1 + offset + i] = *commitment;
+    }
 
     // Accumulate proof points
     commitments[29 + offset] = *parsed_proof.w1();
