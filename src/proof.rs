@@ -232,6 +232,11 @@ fn read_fr_array<const N: usize>(data: &mut &[u8], len: usize) -> Result<[Fr; N]
     Ok(out)
 }
 
+// Utility function for parsing exactly N field elements into an array.
+fn read_full_fr_array<const N: usize>(data: &mut &[u8]) -> Result<[Fr; N], ProofError> {
+    read_fr_array(data, N)
+}
+
 // Bit lengths of the pairing point limbs: even indices are low limbs (< 2^136), odd indices
 // are high limbs (< 2^120). Matches bb v5.0.0's `loadProof`.
 const PAIRING_POINT_LO_LIMB_BITS: usize = 136;
@@ -576,7 +581,7 @@ impl<H: CurveHooks> ZKProof<H> {
         }
 
         // Sumcheck evaluations (includes gemini_masking_poly eval at index 0 for ZK flavors)
-        let sumcheck_evaluations = read_fr_array(&mut proof_bytes, usize::MAX)?;
+        let sumcheck_evaluations = read_full_fr_array(&mut proof_bytes)?;
 
         let libra_evaluation = read_fr(&mut proof_bytes)?;
 
@@ -615,7 +620,7 @@ impl<H: CurveHooks> ZKProof<H> {
         // Read gemini a evaluations
         let gemini_a_evaluations = read_fr_array(&mut proof_bytes, log_n as usize)?;
 
-        let libra_poly_evals = read_fr_array(&mut proof_bytes, usize::MAX)?;
+        let libra_poly_evals = read_full_fr_array(&mut proof_bytes)?;
 
         // Shplonk
         let shplonk_q = read_g1_by_splitting::<H>(&mut proof_bytes).map_err(|e| {
@@ -875,7 +880,7 @@ impl<H: CurveHooks> PlainProof<H> {
         }
 
         // Sumcheck evaluations
-        let sumcheck_evaluations = read_fr_array(&mut proof_bytes, usize::MAX)?;
+        let sumcheck_evaluations = read_full_fr_array(&mut proof_bytes)?;
 
         // Gemini
         // Read gemini fold univariates
