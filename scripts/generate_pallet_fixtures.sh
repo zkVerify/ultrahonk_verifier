@@ -94,7 +94,9 @@ for log_n in $(seq "${MIN_LOG_N}" "${MAX_LOG_N}"); do
       fi
       padding=$(( padding / 2 ))
     else
-      padding=$(( padding + (1 << (log_n - 3)) ))
+      # Step by 1/8 of the domain, at least 1 (a negative shift would wrap for log_n < 3).
+      step=$(( log_n >= 3 ? 1 << (log_n - 3) : 1 ))
+      padding=$(( padding + step ))
     fi
     actual=$(log_n_for_padding "${padding}")
   done
