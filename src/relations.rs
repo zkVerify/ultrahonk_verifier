@@ -25,20 +25,7 @@ const GRUMPKIN_CURVE_B_PARAMETER_NEGATED: Fr = MontFp!("17");
 
 /// Enum for wires.
 pub enum Wire {
-    Q_M,
-    Q_C,
-    Q_L,
-    Q_R,
-    Q_O,
-    Q_4,
-    Q_LOOKUP,
-    Q_ARITH,
-    Q_RANGE,
-    Q_ELLIPTIC,
-    Q_MEMORY,
-    Q_NNF,
-    Q_POSEIDON2_EXTERNAL,
-    Q_POSEIDON2_INTERNAL,
+    // Precomputed entities, in bb v5.0.0's `PrecomputedEntities` order.
     SIGMA_1,
     SIGMA_2,
     SIGMA_3,
@@ -47,12 +34,26 @@ pub enum Wire {
     ID_2,
     ID_3,
     ID_4,
+    LAGRANGE_FIRST,
+    LAGRANGE_LAST,
+    Q_LOOKUP,
     TABLE_1,
     TABLE_2,
     TABLE_3,
     TABLE_4,
-    LAGRANGE_FIRST,
-    LAGRANGE_LAST,
+    Q_M,
+    Q_R,
+    Q_O,
+    Q_C,
+    Q_L,
+    Q_4,
+    Q_ARITH,
+    Q_RANGE,
+    Q_ELLIPTIC,
+    Q_MEMORY,
+    Q_NNF,
+    Q_POSEIDON2_EXTERNAL,
+    Q_POSEIDON2_INTERNAL,
     W_L,
     W_R,
     W_O,
@@ -157,7 +158,7 @@ fn accumulate_arithmetic_relation(
     accum += (q_arith - Fr::ONE) * wire(p, Wire::W_4_SHIFT);
     accum *= q_arith;
     accum *= domain_sep;
-    evals[0] = accum;
+    evals[6] = accum;
 
     // Relation 1
     let mut accum =
@@ -166,7 +167,7 @@ fn accumulate_arithmetic_relation(
     accum *= q_arith + MINUS_ONE;
     accum *= q_arith;
     accum *= domain_sep;
-    evals[1] = accum;
+    evals[7] = accum;
 }
 
 fn accumulate_permutation_relation(
@@ -198,10 +199,13 @@ fn accumulate_permutation_relation(
     acc -= (wire(p, Wire::Z_PERM_SHIFT) + (wire(p, Wire::LAGRANGE_LAST) * public_inputs_delta))
         * grand_product_denominator;
     acc *= domain_sep;
-    evals[2] = acc;
+    evals[0] = acc;
 
     // Contribution 3
-    evals[3] = (wire(p, Wire::LAGRANGE_LAST) * wire(p, Wire::Z_PERM_SHIFT)) * domain_sep;
+    evals[1] = (wire(p, Wire::LAGRANGE_LAST) * wire(p, Wire::Z_PERM_SHIFT)) * domain_sep;
+
+    // Contribution 4: z_perm initialization check (lagrange_first * z_perm = 0)
+    evals[2] = (wire(p, Wire::LAGRANGE_FIRST) * wire(p, Wire::Z_PERM)) * domain_sep;
 }
 
 fn accumulate_log_derivative_lookup_relation(
@@ -210,46 +214,51 @@ fn accumulate_log_derivative_lookup_relation(
     evals: &mut [Fr; NUMBER_OF_SUBRELATIONS],
     domain_sep: Fr,
 ) {
-    // Calculate the write term (the table accumulation)
-    let write_term = wire(p, Wire::TABLE_1)
-        + rp_challenges.gamma
-        + (wire(p, Wire::TABLE_2) * rp_challenges.eta)
-        + (wire(p, Wire::TABLE_3) * rp_challenges.eta_two)
-        + (wire(p, Wire::TABLE_4) * rp_challenges.eta_three);
+    let beta_sqr = rp_challenges.beta.square();
+    let beta_cube = beta_sqr * rp_challenges.beta;
 
-    // Calculate the write term
+    // Calculate the write term (the table accumulation)
+    // table_term = table_1 + γ + table_2 * β + table_3 * β² + table_4 * β³
+    let table_term = wire(p, Wire::TABLE_1)
+        + rp_challenges.gamma
+        + (wire(p, Wire::TABLE_2) * rp_challenges.beta)
+        + (wire(p, Wire::TABLE_3) * beta_sqr)
+        + (wire(p, Wire::TABLE_4) * beta_cube);
+
+    // Calculate the read term
+    // lookup_term = derived_entry_1 + γ + derived_entry_2 * β + derived_entry_3 * β² + q_index * β³
     let derived_entry_1 =
         wire(p, Wire::W_L) + rp_challenges.gamma + (wire(p, Wire::Q_R) * wire(p, Wire::W_L_SHIFT));
     let derived_entry_2 = wire(p, Wire::W_R) + wire(p, Wire::Q_M) * wire(p, Wire::W_R_SHIFT);
     let derived_entry_3 = wire(p, Wire::W_O) + wire(p, Wire::Q_C) * wire(p, Wire::W_O_SHIFT);
 
-    let read_term = derived_entry_1
-        + derived_entry_2 * rp_challenges.eta
-        + derived_entry_3 * rp_challenges.eta_two
-        + wire(p, Wire::Q_O) * rp_challenges.eta_three;
+    let lookup_term = derived_entry_1
+        + derived_entry_2 * rp_challenges.beta
+        + derived_entry_3 * beta_sqr
+        + wire(p, Wire::Q_O) * beta_cube;
 
-    let read_inverse = wire(p, Wire::LOOKUP_INVERSES) * write_term;
-    let write_inverse = wire(p, Wire::LOOKUP_INVERSES) * read_term;
+    let lookup_inverse = wire(p, Wire::LOOKUP_INVERSES) * table_term;
+    let table_inverse = wire(p, Wire::LOOKUP_INVERSES) * lookup_term;
 
     let inverse_exists_xor = wire(p, Wire::LOOKUP_READ_TAGS) + wire(p, Wire::Q_LOOKUP)
         - (wire(p, Wire::LOOKUP_READ_TAGS) * wire(p, Wire::Q_LOOKUP));
 
     // Inverse calculated correctly relation
     let mut accumulator_none =
-        read_term * write_term * wire(p, Wire::LOOKUP_INVERSES) - inverse_exists_xor;
+        lookup_term * table_term * wire(p, Wire::LOOKUP_INVERSES) - inverse_exists_xor;
     accumulator_none *= domain_sep;
 
     // Inverse
-    let accumulator_one =
-        wire(p, Wire::Q_LOOKUP) * read_inverse - wire(p, Wire::LOOKUP_READ_COUNTS) * write_inverse;
+    let accumulator_one = wire(p, Wire::Q_LOOKUP) * lookup_inverse
+        - wire(p, Wire::LOOKUP_READ_COUNTS) * table_inverse;
 
     let read_tag = wire(p, Wire::LOOKUP_READ_TAGS);
 
     let read_tag_boolean_relation = read_tag * read_tag - read_tag;
 
-    evals[4] = accumulator_none;
-    evals[5] = accumulator_one;
-    evals[6] = read_tag_boolean_relation * domain_sep;
+    evals[3] = accumulator_none;
+    evals[4] = accumulator_one;
+    evals[5] = read_tag_boolean_relation * domain_sep;
 }
 
 fn accumulate_delta_range_relation(
@@ -270,7 +279,7 @@ fn accumulate_delta_range_relation(
     acc *= delta_1 + MINUS_THREE;
     acc *= wire(p, Wire::Q_RANGE);
     acc *= domain_sep;
-    evals[7] = acc;
+    evals[8] = acc;
 
     // Contribution 7
     let mut acc = delta_2;
@@ -279,7 +288,7 @@ fn accumulate_delta_range_relation(
     acc *= delta_2 + MINUS_THREE;
     acc *= wire(p, Wire::Q_RANGE);
     acc *= domain_sep;
-    evals[8] = acc;
+    evals[9] = acc;
 
     // Contribution 8
     let mut acc = delta_3;
@@ -288,7 +297,7 @@ fn accumulate_delta_range_relation(
     acc *= delta_3 + MINUS_THREE;
     acc *= wire(p, Wire::Q_RANGE);
     acc *= domain_sep;
-    evals[9] = acc;
+    evals[10] = acc;
 
     // Contribution 9
     let mut acc = delta_4;
@@ -297,7 +306,7 @@ fn accumulate_delta_range_relation(
     acc *= delta_4 + MINUS_THREE;
     acc *= wire(p, Wire::Q_RANGE);
     acc *= domain_sep;
-    evals[10] = acc;
+    evals[11] = acc;
 }
 
 fn accumulate_elliptic_relation(
@@ -330,7 +339,7 @@ fn accumulate_elliptic_relation(
         x_add_identity *= x_diff * x_diff;
         x_add_identity += y1y2 + y1y2 - y2_sqr - y1_sqr; // x_add_identity = x_add_identity - y2_sqr - y1_sqr + y1y2 + y1y2;
 
-        evals[11] =
+        evals[12] =
             x_add_identity * partial_eval * wire(p, Wire::Q_ELLIPTIC) * (Fr::ONE - q_is_double);
     }
 
@@ -340,7 +349,7 @@ fn accumulate_elliptic_relation(
         let y1_plus_y3 = y_1 + y_3;
         let y_diff = y_2 * q_sign - y_1;
         let y_add_identity = y1_plus_y3 * x_diff + (x_3 - x_1) * y_diff;
-        evals[12] =
+        evals[13] =
             y_add_identity * domain_sep * wire(p, Wire::Q_ELLIPTIC) * (Fr::ONE - q_is_double);
     }
 
@@ -353,7 +362,7 @@ fn accumulate_elliptic_relation(
         let x1_pow_4_mul_9 = x_pow_4 * MontFp!("9");
         let x_double_identity = (x_3 + x_1.double()) * y1_sqr_mul_4 - x1_pow_4_mul_9;
 
-        evals[11] += x_double_identity * domain_sep * wire(p, Wire::Q_ELLIPTIC) * q_is_double;
+        evals[12] += x_double_identity * domain_sep * wire(p, Wire::Q_ELLIPTIC) * q_is_double;
     }
 
     // Contribution 11 point doubling, y-coordinate check:
@@ -361,7 +370,7 @@ fn accumulate_elliptic_relation(
     {
         let x1_sqr_mul_3 = (x_1.double() + x_1) * x_1;
         let y_double_identity = x1_sqr_mul_3 * (x_1 - x_3) - y_1.double() * (y_1 + y_3);
-        evals[12] += y_double_identity * domain_sep * wire(p, Wire::Q_ELLIPTIC) * q_is_double;
+        evals[13] += y_double_identity * domain_sep * wire(p, Wire::Q_ELLIPTIC) * q_is_double;
     }
 }
 
@@ -371,6 +380,9 @@ fn accumulate_memory_relation(
     evals: &mut [Fr; NUMBER_OF_SUBRELATIONS],
     domain_sep: Fr,
 ) {
+    // Compute eta powers locally (only eta is drawn since bb v5.0.0)
+    let eta_two = rp.eta.square();
+    let eta_three = eta_two * rp.eta;
     // MEMORY
     //
     // A RAM memory record contains a tuple of the following fields:
@@ -409,8 +421,8 @@ fn accumulate_memory_relation(
     //
     // For ROM gates, qc = 0
     //
-    let mut memory_record_check = wire(p, Wire::W_O) * rp.eta_three;
-    memory_record_check += wire(p, Wire::W_R) * rp.eta_two;
+    let mut memory_record_check = wire(p, Wire::W_O) * eta_three;
+    memory_record_check += wire(p, Wire::W_R) * eta_two;
     memory_record_check += wire(p, Wire::W_L) * rp.eta;
     memory_record_check += wire(p, Wire::Q_C);
     let partial_record_check = memory_record_check; // used in RAM consistency check; deg 1 or 4
@@ -439,12 +451,12 @@ fn accumulate_memory_relation(
     let adjacent_values_match_if_adjacent_indices_match =
         (index_delta * MINUS_ONE + Fr::ONE) * record_delta; // deg 2
 
-    evals[14] = adjacent_values_match_if_adjacent_indices_match
+    evals[15] = adjacent_values_match_if_adjacent_indices_match
         * wire(p, Wire::Q_L)
         * wire(p, Wire::Q_R)
         * wire(p, Wire::Q_MEMORY)
         * domain_sep; // deg 5
-    evals[15] = index_is_monotonically_increasing
+    evals[16] = index_is_monotonically_increasing
         * wire(p, Wire::Q_L)
         * wire(p, Wire::Q_R)
         * wire(p, Wire::Q_MEMORY)
@@ -477,8 +489,8 @@ fn accumulate_memory_relation(
 
     // reverse order we could re-use `partial_record_check`  1 -  ((w3' * eta + w2') * eta + w1') * eta
     // deg 1 or 4
-    let mut next_gate_access_type = wire(p, Wire::W_O_SHIFT) * rp.eta_three;
-    next_gate_access_type += wire(p, Wire::W_R_SHIFT) * rp.eta_two;
+    let mut next_gate_access_type = wire(p, Wire::W_O_SHIFT) * eta_three;
+    next_gate_access_type += wire(p, Wire::W_R_SHIFT) * eta_two;
     next_gate_access_type += wire(p, Wire::W_L_SHIFT) * rp.eta;
     next_gate_access_type = wire(p, Wire::W_4_SHIFT) - next_gate_access_type;
 
@@ -496,15 +508,15 @@ fn accumulate_memory_relation(
     let next_gate_access_type_is_boolean = next_gate_access_type.square() - next_gate_access_type;
 
     // Putting it all together...
-    evals[16] = adjacent_values_match_if_adjacent_indices_match_and_next_access_is_a_read_operation
+    evals[17] = adjacent_values_match_if_adjacent_indices_match_and_next_access_is_a_read_operation
         * wire(p, Wire::Q_O)
         * wire(p, Wire::Q_MEMORY)
         * domain_sep; // deg 5 or 8
-    evals[17] = index_is_monotonically_increasing
+    evals[18] = index_is_monotonically_increasing
         * wire(p, Wire::Q_O)
         * wire(p, Wire::Q_MEMORY)
         * domain_sep; // deg 4
-    evals[18] = next_gate_access_type_is_boolean
+    evals[19] = next_gate_access_type_is_boolean
         * wire(p, Wire::Q_O)
         * wire(p, Wire::Q_MEMORY)
         * domain_sep; // deg 4 or 6
@@ -538,7 +550,7 @@ fn accumulate_memory_relation(
 
     // (deg 3 or 9) + (deg 4) + (deg 3)
     memory_identity *= wire(p, Wire::Q_MEMORY) * domain_sep; // deg 4 or 10
-    evals[13] = memory_identity;
+    evals[14] = memory_identity;
 }
 
 fn accumulate_nnf_relation(
@@ -614,7 +626,7 @@ fn accumulate_nnf_relation(
 
     let mut nnf_identity = non_native_field_identity + limb_accumulator_identity;
     nnf_identity *= wire(p, Wire::Q_NNF) * domain_sep;
-    evals[19] = nnf_identity;
+    evals[20] = nnf_identity;
 }
 
 fn accumulate_poseidon_external_relation(
@@ -648,13 +660,13 @@ fn accumulate_poseidon_external_relation(
     let v3 = t2 + v4; // u_1 + 3u_2 + 5u_3 + 7u_4
 
     let q_pos_by_scaling = wire(p, Wire::Q_POSEIDON2_EXTERNAL) * domain_sep;
-    evals[20] += q_pos_by_scaling * (v1 - wire(p, Wire::W_L_SHIFT));
+    evals[21] += q_pos_by_scaling * (v1 - wire(p, Wire::W_L_SHIFT));
 
-    evals[21] += q_pos_by_scaling * (v2 - wire(p, Wire::W_R_SHIFT));
+    evals[22] += q_pos_by_scaling * (v2 - wire(p, Wire::W_R_SHIFT));
 
-    evals[22] += q_pos_by_scaling * (v3 - wire(p, Wire::W_O_SHIFT));
+    evals[23] += q_pos_by_scaling * (v3 - wire(p, Wire::W_O_SHIFT));
 
-    evals[23] += q_pos_by_scaling * (v4 - wire(p, Wire::W_4_SHIFT));
+    evals[24] += q_pos_by_scaling * (v4 - wire(p, Wire::W_4_SHIFT));
 }
 
 fn accumulate_poseidon_internal_relation(
@@ -683,16 +695,16 @@ fn accumulate_poseidon_internal_relation(
     let q_pos_by_scaling = wire(p, Wire::Q_POSEIDON2_INTERNAL) * domain_sep;
 
     let v1 = u1 * INTERNAL_MATRIX_DIAGONAL[0] + u_sum;
-    evals[24] += q_pos_by_scaling * (v1 - wire(p, Wire::W_L_SHIFT));
+    evals[25] += q_pos_by_scaling * (v1 - wire(p, Wire::W_L_SHIFT));
 
     let v2 = u2 * INTERNAL_MATRIX_DIAGONAL[1] + u_sum;
-    evals[25] += q_pos_by_scaling * (v2 - wire(p, Wire::W_R_SHIFT));
+    evals[26] += q_pos_by_scaling * (v2 - wire(p, Wire::W_R_SHIFT));
 
     let v3 = u3 * INTERNAL_MATRIX_DIAGONAL[2] + u_sum;
-    evals[26] += q_pos_by_scaling * (v3 - wire(p, Wire::W_O_SHIFT));
+    evals[27] += q_pos_by_scaling * (v3 - wire(p, Wire::W_O_SHIFT));
 
     let v4 = u4 * INTERNAL_MATRIX_DIAGONAL[3] + u_sum;
-    evals[27] += q_pos_by_scaling * (v4 - wire(p, Wire::W_4_SHIFT));
+    evals[28] += q_pos_by_scaling * (v4 - wire(p, Wire::W_4_SHIFT));
 }
 
 // Batch subrelation evaluations using precomputed powers of alpha.

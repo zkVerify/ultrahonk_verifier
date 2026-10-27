@@ -1,5 +1,5 @@
 [package]
-version = "0.1.0"
+version = "0.4.0"
 name = "ultrahonk-no-std"
 authors = ["Horizen Labs <admin@horizenlabs.io>"]
 repository = "https://github.com/zkVerify/ultrahonk_verifier"

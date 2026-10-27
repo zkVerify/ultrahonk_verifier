@@ -38,7 +38,10 @@ use crate::{
 };
 use alloc::{format, string::String};
 use ark_bn254_ext::CurveHooks;
-use ark_ec::AffineRepr;
+use ark_ec::{
+    short_weierstrass::{Affine, SWCurveConfig},
+    AffineRepr,
+};
 use ark_ff::{AdditiveGroup, PrimeField};
 
 pub(crate) trait IntoFq {
@@ -149,6 +152,23 @@ pub(crate) fn read_u256(bytes: &[u8]) -> Result<U256, ()> {
     <&EVMWord>::try_from(bytes)
         .map_err(|_| ())
         .map(IntoU256::into_u256)
+}
+
+/// Big-endian coordinates of a G1 point as hashed into the transcript. The point at infinity has
+/// no affine coordinates in arkworks; it is encoded as (0, 0), as the Solidity verifier does.
+pub(crate) trait G1Coordinates {
+    fn x_be_bytes32(&self) -> EVMWord;
+    fn y_be_bytes32(&self) -> EVMWord;
+}
+
+impl<P: SWCurveConfig<BaseField = Fq>> G1Coordinates for Affine<P> {
+    fn x_be_bytes32(&self) -> EVMWord {
+        self.x().map(|x| x.into_be_bytes32()).unwrap_or_default()
+    }
+
+    fn y_be_bytes32(&self) -> EVMWord {
+        self.y().map(|y| y.into_be_bytes32()).unwrap_or_default()
+    }
 }
 
 // Parse point in G1.

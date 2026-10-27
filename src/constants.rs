@@ -17,8 +17,8 @@
 use ark_bn254::Fr;
 use ark_ff::MontFp;
 
-pub const CONST_PROOF_SIZE_LOG_N: usize = 28;
-pub const NUMBER_OF_SUBRELATIONS: usize = 28;
+pub const CONST_PROOF_SIZE_LOG_N: usize = 25;
+pub const NUMBER_OF_SUBRELATIONS: usize = 29;
 pub const BATCHED_RELATION_PARTIAL_LENGTH: usize = 8; // for Plain case (i.e., non-ZK)
 pub const ZK_BATCHED_RELATION_PARTIAL_LENGTH: usize = 9; // for ZK case
 pub const NUMBER_OF_ENTITIES: usize = 41;
@@ -40,6 +40,11 @@ pub const NUM_LIBRA_COMMITMENTS: usize = 3;
 pub const NUM_LIBRA_EVALUATIONS: usize = 4;
 pub const LIBRA_UNIVARIATES_LENGTH: usize = 9;
 
+// SmallSubgroupIPA opening claims. The fifth claim pins the boundary A(1) = 0 of the Libra
+// running sum (aztec-packages@58bf73a2, bb v5.0.0); without it `libra_evaluation` is free.
+pub const NUM_SMALL_IPA_OPENING_CLAIMS: usize = 5;
+pub const SMALL_IPA_BOUNDARY_OPENING_IDX: usize = 3;
+
 // Scalar size (in bytes)
 pub const FIELD_ELEMENT_SIZE: usize = 32;
 // G1 Point Size (in bytes)
@@ -47,7 +52,7 @@ pub const GROUP_ELEMENT_SIZE: usize = 64;
 // EVM words are 32 bytes long
 pub const EVM_WORD_SIZE: usize = 32;
 // Number of entries in the Pairing Point Object array
-pub const PAIRING_POINTS_SIZE: usize = 16;
+pub const PAIRING_POINTS_SIZE: usize = 8;
 
 pub const NUM_ELEMENTS_COMM: usize = 2; // U256 elements for curve points
 pub const NUM_ELEMENTS_FR: usize = 1; // U256 elements for field elements

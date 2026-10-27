@@ -36,13 +36,14 @@ use crate::{
     commitment::{compute_fold_pos_evaluations, compute_squares},
     constants::{
         CONST_PROOF_SIZE_LOG_N, LIBRA_UNIVARIATES_LENGTH, NUMBER_OF_ENTITIES, NUMBER_TO_BE_SHIFTED,
-        NUM_LIBRA_COMMITMENTS, NUM_LIBRA_EVALUATIONS, NUM_MASKING_POLYNOMIALS, PAIRING_POINTS_SIZE,
+        NUM_LIBRA_COMMITMENTS, NUM_LIBRA_EVALUATIONS, NUM_MASKING_POLYNOMIALS,
+        NUM_SMALL_IPA_OPENING_CLAIMS, PAIRING_POINTS_SIZE, SMALL_IPA_BOUNDARY_OPENING_IDX,
         SUBGROUP_SIZE,
     },
     key::VerificationKey,
     proof::{
-        convert_pairing_points_to_g1, generate_recursion_separator, CommonProofData, ParsedProof,
-        PlainProof, ProofError, ZKProof,
+        are_pairing_points_default, convert_pairing_points_to_g1, generate_recursion_separator,
+        CommonProofData, ParsedProof, PlainProof, ProofError, ZKProof,
     },
     relations::accumulate_relation_evaluations,
     srs::{SRS_G2, SRS_G2_VK},
@@ -77,6 +78,7 @@ pub fn verify<H: CurveHooks + Default>(
     // Perform preliminary checks on inputs
     check_proof_byte_len::<H>(proof, vk.log_circuit_size)?;
     check_public_input_number(&vk, pubs)?;
+    check_public_inputs_canonical(pubs)?;
 
     // Parse proof
     let proof = match proof {
@@ -141,19 +143,41 @@ fn check_public_input_number<H: CurveHooks>(
     vk: &VerificationKey<H>,
     pubs: &Pubs,
 ) -> Result<(), VerifyError> {
-    // In bb 0.86.0, public inputs and the pairing point object are combined under the hood
-    // see: https://github.com/AztecProtocol/barretenberg/issues/1331
-    if vk.combined_input_size - PAIRING_POINTS_SIZE as u64 != pubs.len() as u64 {
+    // Since bb 0.86.0 the vk counts the pairing point object (PAIRING_POINTS_SIZE = 8 limbs in
+    // bb v5.0.0) together with the public inputs.
+    // See: https://github.com/AztecProtocol/barretenberg/issues/1331
+    let expected = vk
+        .combined_input_size
+        .checked_sub(PAIRING_POINTS_SIZE as u64)
+        .ok_or(VerifyError::KeyError)?;
+    if expected != pubs.len() as u64 {
         Err(VerifyError::PublicInputError {
             message: format!(
                 "Provided public inputs length does not match value in vk. Expected: {}; Got: {}",
-                vk.combined_input_size - PAIRING_POINTS_SIZE as u64,
+                expected,
                 pubs.len()
             ),
         })
     } else {
         Ok(())
     }
+}
+
+// Checks that every public input is a canonical field element (< r). They are bound as raw
+// bytes into the transcript, so accepting `v + r` would give one field element several valid
+// encodings (bb v5.0.0 `ValueGeFieldOrder`).
+fn check_public_inputs_canonical(pubs: &Pubs) -> Result<(), VerifyError> {
+    for (index, public_input) in pubs.iter().enumerate() {
+        let value = utils::read_u256(public_input).map_err(|_| VerifyError::PublicInputError {
+            message: format!("Unable to read public input {index}"),
+        })?;
+        if Fr::from_bigint(value).is_none() {
+            return Err(VerifyError::PublicInputError {
+                message: format!("Public input {index} is not a canonical field element"),
+            });
+        }
+    }
+    Ok(())
 }
 
 // Verify the sumcheck part of the proof.
@@ -222,11 +246,13 @@ fn verify_sumcheck<H: CurveHooks>(
     );
 
     if let ParsedProof::ZK(zk_proof) = parsed_proof {
+        // Row-disabling polynomial: 1 - ∏_{i≥2}(1 - u_i) (bb v5.0.0)
         let mut evaluation = Fr::ONE;
         let challenges = tp.sumcheck_u_challenges();
 
-        for &c in &challenges[2..log_circuit_size] {
-            evaluation *= c;
+        // Empty when log_circuit_size < 3, as in the Solidity loop; slicing [2..1] would panic.
+        for &c in challenges.iter().take(log_circuit_size).skip(2) {
+            evaluation *= Fr::ONE - c;
         }
 
         // This will always be the case
@@ -284,6 +310,14 @@ fn compute_next_target_sum<H: CurveHooks>(
     Ok(target_sum)
 }
 
+// Inverts a challenge-derived denominator. These are zero only with negligible probability, but
+// an error is returned rather than panicking in runtime code.
+fn invert(value: Fr, message: &'static str) -> Result<Fr, ProofError> {
+    value
+        .inverse()
+        .ok_or(ProofError::NonInvertibleDenominator { message })
+}
+
 // Verify the shplemini part of the proof.
 fn verify_shplemini<H: CurveHooks>(
     parsed_proof: &ParsedProof<H>,
@@ -309,18 +343,17 @@ fn verify_shplemini<H: CurveHooks>(
 
     // NOTE: Can use batching here to go from 2 inversions to 1 inversion + 3 multiplications
     // but the benefit is probably not worth it.
-    let pos_inverted_denominator = (tp.shplonk_z() - powers_of_evaluation_challenge[0])
-        .inverse()
-        .expect("Inversion should work w.h.p.");
-    let neg_inverted_denominator = (tp.shplonk_z() + powers_of_evaluation_challenge[0])
-        .inverse()
-        .expect("Inversion should work w.h.p.");
+    let pos_inverted_denominator = invert(
+        tp.shplonk_z() - powers_of_evaluation_challenge[0],
+        "shplonk_z - gemini_r is not invertible",
+    )?;
+    let neg_inverted_denominator = invert(
+        tp.shplonk_z() + powers_of_evaluation_challenge[0],
+        "shplonk_z + gemini_r is not invertible",
+    )?;
 
     let unshifted_scalar = pos_inverted_denominator + tp.shplonk_nu() * neg_inverted_denominator;
-    let shifted_scalar = tp
-        .gemini_r()
-        .inverse()
-        .expect("Inversion should work w.h.p.")
+    let shifted_scalar = invert(tp.gemini_r(), "gemini_r is not invertible")?
         * (pos_inverted_denominator - tp.shplonk_nu() * neg_inverted_denominator);
 
     scalars[0] = Fr::ONE;
@@ -375,34 +408,10 @@ fn verify_shplemini<H: CurveHooks>(
         offset = 1;
     }
 
-    commitments[1 + offset] = vk.q_m;
-    commitments[2 + offset] = vk.q_c;
-    commitments[3 + offset] = vk.q_l;
-    commitments[4 + offset] = vk.q_r;
-    commitments[5 + offset] = vk.q_o;
-    commitments[6 + offset] = vk.q_4;
-    commitments[7 + offset] = vk.q_lookup;
-    commitments[8 + offset] = vk.q_arith;
-    commitments[9 + offset] = vk.q_deltarange;
-    commitments[10 + offset] = vk.q_elliptic;
-    commitments[11 + offset] = vk.q_memory;
-    commitments[12 + offset] = vk.q_nnf;
-    commitments[13 + offset] = vk.q_poseidon2external;
-    commitments[14 + offset] = vk.q_poseidon2internal;
-    commitments[15 + offset] = vk.s_1;
-    commitments[16 + offset] = vk.s_2;
-    commitments[17 + offset] = vk.s_3;
-    commitments[18 + offset] = vk.s_4;
-    commitments[19 + offset] = vk.id_1;
-    commitments[20 + offset] = vk.id_2;
-    commitments[21 + offset] = vk.id_3;
-    commitments[22 + offset] = vk.id_4;
-    commitments[23 + offset] = vk.t_1;
-    commitments[24 + offset] = vk.t_2;
-    commitments[25 + offset] = vk.t_3;
-    commitments[26 + offset] = vk.t_4;
-    commitments[27 + offset] = vk.lagrange_first;
-    commitments[28 + offset] = vk.lagrange_last;
+    // VK commitments, in the same (bb v5.0.0) order as the sumcheck evaluations.
+    for (i, commitment) in vk.commitments().into_iter().enumerate() {
+        commitments[1 + offset + i] = *commitment;
+    }
 
     // Accumulate proof points
     commitments[29 + offset] = *parsed_proof.w1();
@@ -480,34 +489,49 @@ fn verify_shplemini<H: CurveHooks>(
     // Finalize the batch opening claim
     match (tp, parsed_proof) {
         (Transcript::ZK(zktp), ParsedProof::ZK(zk_proof)) => {
-            let mut denominators = [Fr::ZERO; NUM_LIBRA_EVALUATIONS];
-
-            denominators[0] = (zktp.shplonk_z - zktp.gemini_r)
-                .inverse()
-                .expect("shplonk_z - gemini_r should be invertible w.h.p.");
-            denominators[1] = (zktp.shplonk_z - SUBGROUP_GENERATOR * zktp.gemini_r)
-                .inverse()
-                .expect(
-                    "tp.shplonk_z - SUBGROUP_GENERATOR * tp.gemini_r should be invertible w.h.p.",
-                );
+            // Denominators 1/(z - point_i) for the five opening points {r, g*r, r, 1, r}.
+            // The opening at 1 pins the SmallSubgroupIPA boundary A(1) = 0
+            // (aztec-packages@58bf73a2): without it the Libra running sum's first value, and with
+            // it `libra_evaluation`, is unconstrained.
+            let mut denominators = [Fr::ZERO; NUM_SMALL_IPA_OPENING_CLAIMS];
+            denominators[0] = invert(
+                zktp.shplonk_z - zktp.gemini_r,
+                "shplonk_z - gemini_r is not invertible",
+            )?;
+            denominators[1] = invert(
+                zktp.shplonk_z - SUBGROUP_GENERATOR * zktp.gemini_r,
+                "shplonk_z - SUBGROUP_GENERATOR * gemini_r is not invertible",
+            )?;
             denominators[2] = denominators[0];
-            denominators[3] = denominators[0];
+            denominators[SMALL_IPA_BOUNDARY_OPENING_IDX] =
+                invert(zktp.shplonk_z - Fr::ONE, "shplonk_z - 1 is not invertible")?;
+            denominators[NUM_SMALL_IPA_OPENING_CLAIMS - 1] = denominators[0];
 
-            let mut batching_scalars = [Fr::ZERO; NUM_LIBRA_EVALUATIONS];
-
-            // Artifact of interleaving, see TODO(https://github.com/AztecProtocol/barretenberg/issues/1293): Decouple Gemini from Interleaving
-            batching_challenge *= zktp.shplonk_nu.square();
-
-            for i in 0..NUM_LIBRA_EVALUATIONS {
-                let scaling_factor = denominators[i] * batching_challenge;
+            let mut batching_scalars = [Fr::ZERO; NUM_SMALL_IPA_OPENING_CLAIMS];
+            for (i, denominator) in denominators.iter().enumerate() {
+                let scaling_factor = *denominator * batching_challenge;
                 batching_scalars[i] = -scaling_factor;
                 batching_challenge *= zktp.shplonk_nu;
-                constant_term_accumulator += scaling_factor * zk_proof.libra_poly_evals[i];
+                // The boundary claim's value is hard-coded to 0: it adds nothing to the constant
+                // term, and the claims after it read the Libra evaluation one slot back.
+                match i.cmp(&SMALL_IPA_BOUNDARY_OPENING_IDX) {
+                    core::cmp::Ordering::Less => {
+                        constant_term_accumulator += scaling_factor * zk_proof.libra_poly_evals[i];
+                    }
+                    core::cmp::Ordering::Equal => {}
+                    core::cmp::Ordering::Greater => {
+                        constant_term_accumulator +=
+                            scaling_factor * zk_proof.libra_poly_evals[i - 1];
+                    }
+                }
             }
 
+            // Group per-claim batching scalars by commitment: [G], [A] (three openings), [Q].
             scalars[boundary] = batching_scalars[0];
-            scalars[boundary + 1] = batching_scalars[1] + batching_scalars[2];
-            scalars[boundary + 2] = batching_scalars[3];
+            scalars[boundary + 1] = batching_scalars[1]
+                + batching_scalars[2]
+                + batching_scalars[SMALL_IPA_BOUNDARY_OPENING_IDX];
+            scalars[boundary + 2] = batching_scalars[NUM_SMALL_IPA_OPENING_CLAIMS - 1];
 
             for i in 0..NUM_LIBRA_COMMITMENTS {
                 commitments[boundary] = zk_proof.libra_commitments[i];
@@ -550,15 +574,20 @@ fn verify_shplemini<H: CurveHooks>(
         .into_affine();
     let p_1 = -quotient_commitment;
 
-    // Aggregate pairing points
-    let (p_0_other, p_1_other) = convert_pairing_points_to_g1(parsed_proof.pairing_point_object())?;
-    let recursion_separator = generate_recursion_separator(&p_0, &p_1, &p_0_other, &p_1_other);
+    // Aggregate pairing points (skipped if default: no recursive verification occurred)
+    let pairing_point_object = parsed_proof.pairing_point_object();
+    let (p_0, p_1) = if are_pairing_points_default(pairing_point_object) {
+        (p_0, p_1)
+    } else {
+        let (p_0_other, p_1_other) = convert_pairing_points_to_g1(pairing_point_object)?;
+        let recursion_separator = generate_recursion_separator(&p_0, &p_1, &p_0_other, &p_1_other);
+        (
+            (p_0 * recursion_separator + p_0_other).into_affine(),
+            (p_1 * recursion_separator + p_1_other).into_affine(),
+        )
+    };
 
-    // accumulate with aggregate points in proof
-    let g1_points = [
-        G1Prepared::from(p_0 * recursion_separator + p_0_other),
-        G1Prepared::from(p_1 * recursion_separator + p_1_other),
-    ];
+    let g1_points = [G1Prepared::from(p_0), G1Prepared::from(p_1)];
 
     let g2_points = [
         G2Prepared::from(read_g2::<H>(&SRS_G2).expect("Parsing the SRS point should always work")),
